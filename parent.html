@@ -1,0 +1,323 @@
+<!doctype html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>HOOP STUDY 保護者画面</title>
+<meta name="theme-color" content="#0f1424">
+<meta name="robots" content="noindex">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="HOOP 管理">
+<link rel="apple-touch-icon" href="icons/icon-180.png">
+<link rel="icon" href="icons/icon-192.png">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=M+PLUS+Rounded+1c:wght@500;700;800&display=swap" rel="stylesheet">
+<style>
+:root {
+  --bg: #f4f5f8; --card: #ffffff; --line: #e3e6ee; --text: #1b2030; --sub: #6b7385;
+  --accent: #e8630a; --accent-soft: #fff1e6; --good: #0f9f6e; --good-soft: #e3f7ef; --bad: #d13b3b;
+  --h0: #eceef3; --h1: #ffd9b8; --h2: #ffb172; --h3: #ff8a33; --h4: #e8630a;
+}
+@media (prefers-color-scheme: dark) {
+  :root { --bg: #0f1424; --card: #171e33; --line: #273150; --text: #eef1f8; --sub: #98a2bd;
+    --accent: #ff8a33; --accent-soft: #3a2412; --good: #2ee59d; --good-soft: #10302a; --bad: #ff6b6b;
+    --h0: #222b45; --h1: #5a3417; --h2: #8a4a17; --h3: #c2641a; --h4: #ff8a33; }
+}
+* { box-sizing: border-box; }
+body { margin: 0; background: var(--bg); color: var(--text); font-family: 'M PLUS Rounded 1c', 'Hiragino Sans', sans-serif; font-weight: 500; }
+main { max-width: 760px; margin: 0 auto; padding: calc(16px + env(safe-area-inset-top)) 16px 48px; }
+h1 { font-size: 20px; margin: 0; }
+h2 { font-size: 15px; margin: 0 0 10px; font-weight: 800; }
+.card { background: var(--card); border: 1px solid var(--line); border-radius: 16px; padding: 16px; margin-top: 12px; }
+.head { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
+.sub { color: var(--sub); font-size: 12px; }
+.kpis { display: grid; grid-template-columns: repeat(2, 1fr); gap: 10px; margin-top: 12px; }
+@media (min-width: 620px) { .kpis { grid-template-columns: repeat(4, 1fr); } }
+.kpi { background: var(--card); border: 1px solid var(--line); border-radius: 16px; padding: 14px; }
+.kpi .v { font-size: 28px; font-weight: 800; line-height: 1.1; margin-top: 4px; }
+.kpi .v small { font-size: 13px; font-weight: 700; margin-left: 2px; }
+.kpi .d { font-size: 12px; margin-top: 4px; color: var(--sub); }
+.up { color: var(--good); } .down { color: var(--bad); }
+.status { display: flex; align-items: center; gap: 10px; padding: 12px 14px; border-radius: 14px; font-size: 14px; font-weight: 700; margin-top: 12px; }
+.status.ok { background: var(--good-soft); color: var(--good); }
+.status.wait { background: var(--accent-soft); color: var(--accent); }
+.tl { list-style: none; margin: 0; padding: 0; }
+.tl li { display: flex; gap: 10px; align-items: baseline; padding: 8px 0; border-bottom: 1px solid var(--line); font-size: 14px; }
+.tl li:last-child { border-bottom: 0; }
+.tl .t { color: var(--sub); font-size: 12px; width: 42px; flex-shrink: 0; font-variant-numeric: tabular-nums; }
+.tl .p { margin-left: auto; font-weight: 800; color: var(--accent); white-space: nowrap; }
+.cal { display: grid; grid-template-columns: repeat(7, 1fr); gap: 4px; }
+.cal .dow { font-size: 11px; color: var(--sub); text-align: center; }
+.cal .c { aspect-ratio: 1; border-radius: 6px; background: var(--h0); display: grid; place-items: center; font-size: 11px; color: var(--sub); position: relative; }
+.cal .c.l1 { background: var(--h1); color: var(--text); } .cal .c.l2 { background: var(--h2); color: #2a1300; }
+.cal .c.l3 { background: var(--h3); color: #fff; } .cal .c.l4 { background: var(--h4); color: #fff; }
+.cal .c.today { outline: 2px solid var(--text); outline-offset: 1px; }
+.cal .c.future { opacity: .35; }
+.legend { display: flex; gap: 4px; align-items: center; justify-content: flex-end; font-size: 11px; color: var(--sub); margin-top: 8px; }
+.legend i { width: 12px; height: 12px; border-radius: 3px; display: inline-block; }
+.bars { display: grid; gap: 8px; }
+.bar { display: grid; grid-template-columns: 52px 1fr 48px; align-items: center; gap: 8px; font-size: 13px; }
+.bar .tr { height: 14px; background: var(--h0); border-radius: 99px; overflow: hidden; }
+.bar .tr i { display: block; height: 100%; background: var(--accent); border-radius: 99px; }
+.bar .n { text-align: right; font-variant-numeric: tabular-nums; color: var(--sub); }
+.grid2 { display: grid; gap: 12px; }
+@media (min-width: 620px) { .grid2 { grid-template-columns: 1fr 1fr; } .grid2 .card { margin-top: 0; } }
+.chips { display: flex; flex-wrap: wrap; gap: 6px; }
+.chip { padding: 5px 10px; border-radius: 99px; background: var(--accent-soft); font-size: 13px; }
+.chip b { color: var(--accent); margin-left: 4px; }
+.chk { display: flex; gap: 8px; font-size: 13px; padding: 5px 0; }
+.chk .m { width: 18px; flex-shrink: 0; }
+.prog { height: 10px; border-radius: 99px; background: var(--h0); overflow: hidden; margin: 6px 0 10px; }
+.prog i { display: block; height: 100%; background: var(--good); }
+textarea, input, select { font: inherit; font-size: 16px; color: var(--text); background: var(--bg); border: 1px solid var(--line); border-radius: 12px; padding: 10px 12px; width: 100%; }
+textarea { min-height: 80px; resize: vertical; }
+button { font: inherit; font-weight: 800; border: 0; border-radius: 12px; padding: 11px 16px; background: var(--accent); color: #fff; cursor: pointer; }
+button.ghost { background: transparent; color: var(--sub); border: 1px solid var(--line); font-weight: 700; padding: 8px 12px; }
+.row { display: flex; gap: 8px; align-items: center; margin-top: 8px; }
+.qz { font-size: 13px; }
+.qz .k { font-weight: 800; }
+.spark { display: flex; gap: 3px; align-items: flex-end; height: 34px; margin-top: 6px; }
+.spark i { flex: 1; background: var(--accent); border-radius: 3px 3px 0 0; min-height: 2px; }
+.empty { color: var(--sub); font-size: 13px; padding: 6px 0; }
+.msg { font-size: 13px; margin-top: 8px; }
+.hidden { display: none; }
+.voicecard { border: 2px solid #e0447c55; }
+.vo { background: #fff4f8; border-left: 4px solid #e0447c; border-radius: 10px; padding: 10px 12px; margin-bottom: 8px; }
+@media (prefers-color-scheme: dark) { .vo { background: #2a1422; } }
+.vo .m { font-size: 11px; color: var(--sub); display: flex; justify-content: space-between; gap: 8px; }
+.vo .q { font-size: 12px; color: var(--sub); margin-top: 2px; }
+.vo .t { font-size: 15px; line-height: 1.7; margin-top: 4px; }
+.vo button { padding: 4px 10px; font-size: 12px; }
+.goalt { width: 100%; border-collapse: collapse; font-size: 13px; margin: 6px 0 12px; }
+.goalt td, .goalt th { padding: 6px 4px; border-bottom: 1px solid var(--line); text-align: center; }
+.goalt th { color: var(--sub); font-weight: 600; }
+.btnlink { display: inline-block; padding: 11px 16px; border-radius: 12px; background: var(--accent); color: #fff; text-decoration: none; font-weight: 800; }
+</style>
+</head>
+<body>
+<main>
+  <div class="head">
+    <div><h1>🏀 HOOP STUDY</h1><div class="sub">保護者画面</div></div>
+    <button class="ghost" id="reload">↻ 更新</button>
+  </div>
+
+  <section id="login" class="card hidden">
+    <h2>保護者キーを入力</h2>
+    <p class="sub">スプレッドシートの「設定」タブにある「保護者キー」を入れてください（この端末に記憶されます）。</p>
+    <div class="row"><input id="keyin" autocomplete="off" autocapitalize="off"><button id="keygo">開く</button></div>
+    <div id="loginmsg" class="msg"></div>
+  </section>
+
+  <div id="dash" class="hidden">
+    <div id="status"></div>
+    <div class="kpis" id="kpis"></div>
+
+    <section class="card voicecard"><h2>💬 娘さんの声（要望・わからない・苦手）</h2><div id="voices"></div></section>
+
+    <section class="card"><h2>今日の様子</h2><ul class="tl" id="today"></ul></section>
+
+    <section class="card"><h2>カレンダー（直近5週・1日の合計ポイント）</h2><div class="cal" id="cal"></div>
+      <div class="legend">少 <i style="background:var(--h0)"></i><i style="background:var(--h1)"></i><i style="background:var(--h2)"></i><i style="background:var(--h3)"></i><i style="background:var(--h4)"></i> 多</div></section>
+
+    <div class="grid2" style="margin-top:12px">
+      <section class="card"><h2>教科バランス（直近14日のポイント）</h2><div class="bars" id="subjects"></div></section>
+      <section class="card"><h2>ミニゲームの正答率</h2><div id="quiz"></div></section>
+    </div>
+
+    <div class="grid2" style="margin-top:12px">
+      <section class="card"><h2>苦手リスト（まちがえた回数）</h2><div id="weak"></div></section>
+      <section class="card"><h2>試合前チェック（テスト準備）</h2><div id="test"></div></section>
+    </div>
+
+    <section class="card"><h2>📣 エールを送る</h2>
+      <p class="sub">次にアプリを開いた時、大きく表示されます。チケットを付けるとガチャが回せます。</p>
+      <textarea id="cheertext" maxlength="200" placeholder="例：部活のあとにミッション3つ、すごい！ 今日はゆっくり休んでね"></textarea>
+      <div class="row"><select id="cheertk" style="width:auto"><option value="0">チケットなし</option><option value="1" selected>チケット +1</option><option value="2">チケット +2</option><option value="3">チケット +3</option></select>
+        <button id="cheergo" style="flex:1">送る</button></div>
+      <div id="cheermsg" class="msg"></div>
+      <h2 style="margin-top:16px">送ったエール</h2><ul class="tl" id="cheers"></ul>
+    </section>
+
+    <section class="card"><h2>コレクション</h2><div id="cards" class="sub"></div></section>
+    <section class="card"><h2>管理</h2>
+      <div class="row" style="flex-wrap:wrap"><a id="sslink" class="btnlink" target="_blank" rel="noopener">📄 スプレッドシートを開く（問題の変更もここ）</a></div>
+      <p class="sub" style="margin-top:12px">娘さんのスマホを替えた・アプリを入れ直した時は、下のボタンでスマホの登録をリセットしてください。<span id="paired"></span></p>
+      <div class="row"><button class="ghost" id="unpair">スマホの登録をリセット</button><button class="ghost" id="logout">この端末の保護者キーを消す</button></div>
+    </section>
+  </div>
+</main>
+<script src="config.js"></script>
+<script src="data.js"></script>
+<script>
+(() => {
+  const CFG = window.HOOP_CONFIG || {};
+  const PK = 'hoop_parent_key';
+  const $ = (s) => document.querySelector(s);
+  const esc = (s) => String(s).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+  const todayStr = (d = new Date()) => new Intl.DateTimeFormat('sv-SE', { timeZone: 'Asia/Tokyo' }).format(d);
+  const addDays = (ds, n) => { const [y, m, d] = ds.split('-').map(Number); return new Date(Date.UTC(y, m - 1, d + n)).toISOString().slice(0, 10); };
+  const dow = (ds) => new Date(ds + 'T00:00:00Z').getUTCDay();
+  const hm = (iso) => new Intl.DateTimeFormat('ja-JP', { timeZone: 'Asia/Tokyo', hour: '2-digit', minute: '2-digit' }).format(new Date(iso));
+  const getKey = () => { try { return localStorage.getItem(PK) || ''; } catch (e) { return ''; } };
+  const setKey = (k) => { try { k ? localStorage.setItem(PK, k) : localStorage.removeItem(PK); } catch (e) { /* noop */ } };
+  const ICON = { mission: '🏀', quiz: '🎮', check: '✅', gacha: '🎰', undo: '↩️', cheer_read: '📣', test_set: '📅', goal_set: '🎯', voice: '💬', reset: '⚠️' };
+  const QNAME = { spell: 'スペル', plural: '複数形', kanji: '漢字よみ', weak: '苦手つぶし', 'qa:社会': '社会 一問一答', 'qa:理科': '理科 一問一答' };
+
+  function showLogin(msg) { $('#login').classList.remove('hidden'); $('#dash').classList.add('hidden'); $('#loginmsg').textContent = msg || ''; }
+
+  async function load() {
+    if (!CFG.GAS_URL) { showLogin('まだ記録の送信先（GAS_URL）が設定されていません。config.js を設定してください。'); return; }
+    const key = getKey();
+    if (!key) { showLogin(); return; }
+    $('#reload').textContent = '読み込み中…';
+    try {
+      const r = await fetch(CFG.GAS_URL + '?' + new URLSearchParams({ action: 'dashboard', key }));
+      const j = await r.json();
+      if (!j.ok) { setKey(''); showLogin(j.error === 'key' ? '保護者キーが違うようです。' : '読み込めませんでした。'); return; }
+      $('#login').classList.add('hidden'); $('#dash').classList.remove('hidden');
+      draw(j);
+    } catch (e) {
+      showLogin('通信できませんでした。電波を確認して「更新」を押してください。');
+    } finally { $('#reload').textContent = '↻ 更新'; }
+  }
+
+  function draw(j) {
+    const logs = j.logs || []; const st = j.state || {}; const t = todayStr();
+    const byDay = {};
+    logs.forEach((l) => { if (l.date) byDay[l.date] = (byDay[l.date] || 0) + l.points; });
+    const sumRange = (from, to) => { let s = 0; for (let d = from; d <= to; d = addDays(d, 1)) s += byDay[d] || 0; return s; };
+    const daysActive = (from, to) => { let n = 0; for (let d = from; d <= to; d = addDays(d, 1)) if ((byDay[d] || 0) > 0) n++; return n; };
+    let streak = 0; { let d = (byDay[t] || 0) > 0 ? t : addDays(t, -1); while ((byDay[d] || 0) > 0) { streak++; d = addDays(d, -1); } }
+    const w1 = sumRange(addDays(t, -6), t), w0 = sumRange(addDays(t, -13), addDays(t, -7));
+    const act7 = daysActive(addDays(t, -6), t);
+    const lastLog = logs.length ? logs[logs.length - 1] : null;
+    const rank = (st.summary && st.summary.rank) || '—';
+    const todayPts = byDay[t] || 0;
+
+    $('#status').innerHTML = todayPts > 0
+      ? `<div class="status ok">✅ 今日はもう勉強しています（${todayPts}ポイント）</div>`
+      : `<div class="status wait">⏳ 今日はまだ記録がありません${lastLog ? `（最後の記録：${esc(lastLog.date.slice(5).replace('-', '/'))} ${esc(hm(lastLog.ts))}）` : ''}</div>`;
+
+    const diff = w1 - w0;
+    $('#kpis').innerHTML = `
+      <div class="kpi"><div class="sub">連続日数</div><div class="v">${streak}<small>日</small></div><div class="d">🔥 1日1本でもOK</div></div>
+      <div class="kpi"><div class="sub">直近7日の学習日数</div><div class="v">${act7}<small>/7日</small></div><div class="d">${act7 >= 5 ? 'とても良いペース' : act7 >= 3 ? '良いペース' : 'これから'}</div></div>
+      <div class="kpi"><div class="sub">直近7日のポイント</div><div class="v">${w1}<small>P</small></div><div class="d ${diff >= 0 ? 'up' : 'down'}">前の7日より ${diff >= 0 ? '+' : ''}${diff}</div></div>
+      <div class="kpi"><div class="sub">ランク</div><div class="v" style="font-size:20px">${esc(rank)}</div><div class="d">累計 ${st.xp || 0} XP ・ 🎟️ ${st.tickets || 0}</div></div>`;
+
+    const tl = logs.filter((l) => l.date === t && l.type !== 'cheer_read');
+    $('#today').innerHTML = tl.length ? tl.slice().reverse().map((l) => {
+      let txt = l.item;
+      if (l.type === 'quiz' && l.detail) txt += `　${l.detail.ok}/${l.detail.n} 正解`;
+      if (l.type === 'gacha' && l.detail) txt = `ガチャ：${l.item}（${l.detail.rarity}）`;
+      if (l.type === 'undo') txt = `取り消し：${l.item}`;
+      return `<li><span class="t">${esc(hm(l.ts))}</span><span>${ICON[l.type] || '・'} ${esc(txt)}${l.subject ? ` <span class="sub">${esc(l.subject)}</span>` : ''}</span><span class="p">${l.points ? (l.points > 0 ? '+' : '') + l.points + 'P' : ''}</span></li>`;
+    }).join('') : '<li class="empty">まだ記録はありません</li>';
+
+    // カレンダー（月曜はじまり・5週）
+    const mondayOffset = (dow(t) + 6) % 7;
+    const start = addDays(t, -mondayOffset - 28);
+    let cal = ['月', '火', '水', '木', '金', '土', '日'].map((d) => `<div class="dow">${d}</div>`).join('');
+    for (let i = 0; i < 35; i++) {
+      const d = addDays(start, i); const p = byDay[d] || 0;
+      const lv = p <= 0 ? 0 : p < 4 ? 1 : p < 7 ? 2 : p < 12 ? 3 : 4;
+      cal += `<div class="c l${lv} ${d === t ? 'today' : ''} ${d > t ? 'future' : ''}" title="${d} ${p}P">${Number(d.slice(8))}</div>`;
+    }
+    $('#cal').innerHTML = cal;
+
+    // 教科バランス
+    const from14 = addDays(t, -13);
+    const subj = {}; SUBJECTS.forEach((s) => (subj[s] = 0));
+    logs.forEach((l) => { if (l.date >= from14 && l.subject && subj[l.subject] != null) subj[l.subject] += l.points; });
+    const mx = Math.max(1, ...Object.values(subj));
+    $('#subjects').innerHTML = SUBJECTS.map((s) => `<div class="bar"><span>${s}</span><span class="tr"><i style="width:${Math.max(0, subj[s]) / mx * 100}%"></i></span><span class="n">${subj[s]}P</span></div>`).join('');
+
+    // ミニゲーム
+    const qs = logs.filter((l) => l.type === 'quiz' && l.detail && l.detail.n);
+    $('#quiz').innerHTML = qs.length ? [...new Set(['spell', 'plural', 'kanji', 'weak', ...qs.map((q) => q.detail.kind)])].map((k) => {
+      const s = qs.filter((q) => q.detail.kind === k); if (!s.length) return '';
+      const recent = s.slice(-10);
+      const ok = recent.reduce((a, q) => a + q.detail.ok, 0), n = recent.reduce((a, q) => a + q.detail.n, 0);
+      return `<div class="qz" style="margin-bottom:12px"><span class="k">${esc(QNAME[k] || (k.startsWith('qa:') ? k.slice(3) + ' 一問一答' : k))}</span>　直近${recent.length}回の正答率 <b>${Math.round(ok / n * 100)}%</b>
+        <div class="spark">${recent.map((q) => `<i style="height:${Math.max(6, q.detail.ok / q.detail.n * 100)}%" title="${q.date} ${q.detail.ok}/${q.detail.n}"></i>`).join('')}</div></div>`;
+    }).join('') : '<div class="empty">まだプレイしていません</div>';
+
+    // 苦手
+    const weak = st.weak || {};
+    const top = (o, lim = 10) => Object.entries(o || {}).sort((a, b) => b[1] - a[1]).slice(0, lim);
+    const kanjiRead = Object.fromEntries(KANJI_WORDS.map((k) => [k[0], k[1]]));
+    const plur = Object.fromEntries(PLURAL_WORDS.map((p) => [p[0], p[1]]));
+    const block = (title, arr, fmt) => arr.length ? `<div class="sub" style="margin:8px 0 6px">${title}</div><div class="chips">${arr.map(([k, n]) => `<span class="chip">${esc(fmt(k))}<b>${n}</b></span>`).join('')}</div>` : '';
+    const wh = block('英単語スペル', top(weak.spell), (k) => k) + block('複数形', top(weak.plural), (k) => `${k}→${plur[k] || ''}`) + block('漢字の読み', top(weak.kanji), (k) => `${k}（${kanjiRead[k] || ''}）`) + block('一問一答', top(weak.qa), (k) => k);
+    $('#weak').innerHTML = wh || '<div class="empty">苦手リストは空です（まちがえた問題が自動で入ります）</div>';
+
+    // 試合前チェック
+    const T = st.test || { name: '', date: '', checks: {} };
+    const done = TEST_CHECKS.filter((c) => T.checks && T.checks[c.id]).length;
+    const left = T.date ? Math.round((Date.parse(T.date + 'T00:00:00Z') - Date.parse(t + 'T00:00:00Z')) / 86400000) : null;
+    const G = st.goals || {};
+    const gsubs = ['国語', '数学', '英語', '理科', '社会'];
+    const goalTable = gsubs.some((x) => G[x] && (G[x].goal || G[x].prev))
+      ? `<table class="goalt"><tr><th></th>${gsubs.map((x) => `<th>${x}</th>`).join('')}</tr><tr><th>前回</th>${gsubs.map((x) => `<td>${esc((G[x] || {}).prev || '—')}</td>`).join('')}</tr><tr><th>目標</th>${gsubs.map((x) => `<td><b>${esc((G[x] || {}).goal || '—')}</b></td>`).join('')}</tr></table>`
+      : '<div class="sub" style="margin:6px 0 10px">目標点はまだ未設定です（アプリの「試合前」で本人が入力）</div>';
+    $('#test').innerHTML = `<div style="font-weight:800">${esc(T.name || '未設定')} ${left != null ? `<span class="sub">（${left > 0 ? 'あと' + left + '日' : left === 0 ? '今日' : '終了'}）</span>` : '<span class="sub">（日付未設定）</span>'}</div>
+      <div class="prog"><i style="width:${done / TEST_CHECKS.length * 100}%"></i></div><div class="sub">準備度 ${done}/${TEST_CHECKS.length}</div>
+      ${goalTable}
+      ${TEST_CHECKS.map((c) => `<div class="chk"><span class="m">${T.checks && T.checks[c.id] ? '✅' : '⬜️'}</span><span><span class="sub">${esc(c.sub)}</span> ${esc(c.label)}</span></div>`).join('')}`;
+
+    // エール
+    const ch = (j.cheers || []).slice().reverse();
+    const readIds = new Set(logs.filter((l) => l.type === 'cheer_read').map((l) => l.detail && l.detail.id));
+    $('#cheers').innerHTML = ch.length ? ch.map((c) => `<li><span class="t">${esc(c.ts.slice(5, 10).replace('-', '/'))}</span><span>${esc(c.text)}${c.tickets ? ` 🎟️${c.tickets}` : ''}</span><span class="p" style="color:var(--sub);font-weight:600">${readIds.has(c.id) ? '既読' : '未読'}</span></li>`).join('') : '<li class="empty">まだ送っていません</li>';
+
+    // 声
+    const vs = (j.voices || []).slice().reverse().slice(0, 15);
+    $('#voices').innerHTML = vs.length ? vs.map((v, i) => `<div class="vo"><div class="m"><span>${esc(v.when)}　${esc(v.cat)}</span><button class="ghost" data-reply="${i}">返事を書く</button></div>${v.q ? `<div class="q">Q. ${esc(v.q)}</div>` : ''}<div class="t">${esc(v.text)}</div></div>`).join('')
+      : '<div class="empty">まだ届いていません。アプリの「💬 声」から、要望・わからないこと・苦手なことを送れます（マイクで話して入力もできます）。</div>';
+    document.querySelectorAll('[data-reply]').forEach((b) => b.addEventListener('click', () => {
+      const v = vs[Number(b.dataset.reply)];
+      $('#cheertext').value = `「${v.text.slice(0, 30)}${v.text.length > 30 ? '…' : ''}」について：`;
+      $('#cheertext').scrollIntoView({ behavior: 'smooth', block: 'center' }); $('#cheertext').focus();
+    }));
+    // 管理
+    if (j.ssUrl) $('#sslink').href = j.ssUrl;
+    $('#paired').textContent = j.paired ? '（現在：登録ずみ）' : '（現在：未登録 — 次にアプリを開いたスマホが登録されます）';
+    // コレクション
+    const cards = st.cards || {};
+    const byR = {}; CARDS.forEach((c) => { if (cards[c.id]) byR[c.r] = (byR[c.r] || 0) + 1; });
+    $('#cards').textContent = `${Object.keys(cards).length}/${CARDS.length} 種類 ・ ガチャ ${st.pulls || 0} 回 ・ ` + RARITY_ORDER.slice().reverse().map((r) => `${r} ${byR[r] || 0}`).join(' / ');
+  }
+
+  async function sendCheer() {
+    const text = $('#cheertext').value.trim();
+    if (!text) { $('#cheermsg').textContent = 'メッセージを入れてください'; return; }
+    $('#cheergo').disabled = true; $('#cheermsg').textContent = '送信中…';
+    try {
+      const r = await fetch(CFG.GAS_URL, { method: 'POST', body: JSON.stringify({ action: 'cheer', key: getKey(), text, tickets: Number($('#cheertk').value) }) });
+      const j = await r.json();
+      if (j.ok) { $('#cheertext').value = ''; $('#cheermsg').textContent = '送りました！ 次にアプリを開いた時に表示されます。'; load(); }
+      else $('#cheermsg').textContent = '送れませんでした（' + (j.error || 'error') + '）';
+    } catch (e) { $('#cheermsg').textContent = '通信できませんでした'; }
+    $('#cheergo').disabled = false;
+  }
+
+  $('#unpair').addEventListener('click', async () => {
+    if (!confirm('娘さんのスマホの登録をリセットしますか？（次にアプリを開いたスマホが新しく登録されます）')) return;
+    try {
+      const r = await fetch(CFG.GAS_URL, { method: 'POST', body: JSON.stringify({ action: 'unpair', key: getKey() }) });
+      const j = await r.json();
+      alert(j.ok ? 'リセットしました。娘さんのアプリで「⚙️設定 → もう一度つなぐ」を押してもらってください。' : '失敗しました');
+      load();
+    } catch (e) { alert('通信できませんでした'); }
+  });
+  $('#keygo').addEventListener('click', () => { setKey($('#keyin').value.trim()); load(); });
+  $('#reload').addEventListener('click', load);
+  $('#cheergo').addEventListener('click', sendCheer);
+  $('#logout').addEventListener('click', () => { if (confirm('この端末から保護者キーを消しますか？')) { setKey(''); showLogin(); } });
+  document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'visible' && getKey()) load(); });
+  load();
+})();
+</script>
+</body>
+</html>
