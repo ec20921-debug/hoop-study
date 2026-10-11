@@ -257,6 +257,7 @@
     const r = RANKS[i];
     return overlay(`<div class="lvup-title">LEVEL UP!</div><div class="lvup-rank">${r[2]}</div>
       <div class="lvup-name">${esc(r[1])} に昇格！</div>
+      ${REWARDS[r[1]] ? `<div class="reward-big">🎁 ごほうび：${esc(REWARDS[r[1]])}<br><small>この画面をおうちの人に見せてね</small></div>` : ''}
       <div class="shot-sub" style="opacity:1">${i + 1 < RANKS.length ? `次は「${esc(RANKS[i + 1][1])}」まで あと ${RANKS[i + 1][0] - S.xp} XP` : '最高ランク到達！'}</div>`, { lockMs: 1400 });
   }
 
@@ -296,9 +297,9 @@
   function header() {
     const i = rankIdx(S.xp); const r = RANKS[i]; const nx = RANKS[i + 1];
     const pct = nx ? Math.min(100, ((S.xp - r[0]) / (nx[0] - r[0])) * 100) : 100;
-    return `<div class="top"><div class="rank-badge">${r[2]}</div>
-      <div class="top-info"><div class="top-name">${esc(S.nick || 'PLAYER')} ・ Lv.${i + 1}</div><div class="top-rank">${esc(r[1])}</div>
-      <div class="xpbar"><i style="width:${pct}%"></i></div><div class="xpnum">${S.xp} XP${nx ? ` ／ 次の「${esc(nx[1])}」まで ${nx[0] - S.xp}` : ''}</div></div>
+    return `<div class="top"><div class="rank-badge" data-tab="ranks">${r[2]}</div>
+      <div class="top-info" data-tab="ranks"><div class="top-name">${esc(S.nick || 'PLAYER')} ・ Lv.${i + 1}</div><div class="top-rank">${esc(r[1])}</div>
+      <div class="xpbar"><i style="width:${pct}%"></i></div><div class="xpnum">${S.xp} XP${nx ? ` ／ 次の「${esc(nx[1])}」まで ${nx[0] - S.xp}` : ''} <span class="ranklink">ランク表 ›</span></div></div>
       <div class="top-side"><div class="tickets">🎟️ ${S.tickets}</div><button class="gear" data-tab="set" aria-label="設定">⚙️</button></div></div>`;
   }
   function viewHome() {
@@ -419,6 +420,7 @@
     return header() + `
       <div class="sec-title"><h2>プレーヤー</h2><button class="btn ghost" data-tab="home">← もどる</button></div>
       <div class="set-item"><span>選手名</span><input class="inp grow" id="nick" value="${esc(S.nick)}" maxlength="12"><button class="btn" data-act="nick">保存</button></div>
+      <div class="set-item"><span class="grow">あそびかた・ランクのしくみ</span><button class="btn ghost" data-act="howto">見る</button></div>
       <div class="set-item"><span class="grow">効果音</span><button class="btn ghost" data-act="sound">${S.sound ? '🔊 ON' : '🔇 OFF'}</button></div>
       <div class="sec-title"><h2>ミッションの編集</h2><span>自分で決めてOK</span></div>
       ${S.missions.map((m) => `<div class="set-item"><span>${m.icon || '🏀'}</span><div class="grow">${esc(m.label)}<div class="note">${esc(m.sub)}・${m.pts}P</div></div><button class="del" data-act="mdel" data-id="${esc(m.id)}">削除</button></div>`).join('')}
@@ -439,7 +441,7 @@
     el.textContent = !CFG.GAS_URL ? '' : S.syncError === 'device' ? '⚠️ 送信できていません（⚙️設定を見てね）' : q ? `送信待ち ${q} 件（電波のある所で自動送信）` : S.lastSync ? '✓ おうちに送信ずみ' : '';
   }
   function render() {
-    const v = { home: viewHome, game: viewGame, test: viewTest, voice: viewVoice, gacha: viewGacha, set: viewSet }[tab] || viewHome;
+    const v = { home: viewHome, game: viewGame, test: viewTest, voice: viewVoice, gacha: viewGacha, set: viewSet, ranks: viewRanks }[tab] || viewHome;
     $('#app').innerHTML = v();
     renderTabs();
     updateSyncLabel();
@@ -794,6 +796,7 @@
     else if (act === 'vmic') startDictation();
     else if (act === 'vsend') sendVoice();
     else if (act === 'restore') tryRestore();
+    else if (act === 'howto') tutorial();
     else if (act === 'nick') { S.nick = ($('#nick').value || '').trim().slice(0, 12); save(); toast('保存したよ'); render(); }
     else if (act === 'sound') { S.sound = !S.sound; save(); render(); sfx.tap(); }
     else if (act === 'mdel') {
@@ -816,6 +819,74 @@
     if (document.visibilityState === 'visible' && S) { if (tab !== 'voice') render(); flush(); checkCheers(); syncBank(); }
   });
   addEventListener('online', flush);
+
+
+  // ---------- ランク表・あそびかた ----------
+  function pacePerDay() {
+    const t = todayStr();
+    const days = Object.keys(S.days).filter((d) => S.days[d].pts > 0).sort();
+    if (!days.length) return 10;
+    const span = Math.min(14, diffDays(days[0], t) + 1);
+    let sum = 0;
+    for (let i = 0; i < span; i++) { const d = S.days[addDays(t, -i)]; if (d) sum += Math.max(0, d.pts); }
+    const p = sum / span;
+    return span < 3 ? Math.max(p, 10) : Math.max(p, 1);
+  }
+  function viewRanks() {
+    const i = rankIdx(S.xp); const r = RANKS[i]; const nx = RANKS[i + 1];
+    const pct = nx ? Math.min(100, ((S.xp - r[0]) / (nx[0] - r[0])) * 100) : 100;
+    const pace = pacePerDay();
+    const left = nx ? nx[0] - S.xp : 0;
+    const t = todayStr();
+    let testLine = '';
+    if (S.test.date && diffDays(t, S.test.date) > 0) {
+      const dl = diffDays(t, S.test.date);
+      const proj = rankIdx(S.xp + Math.round(pace * dl));
+      testLine = `<div class="fc-line">🏆 ${esc(S.test.name)}（${Number(S.test.date.slice(5, 7))}/${Number(S.test.date.slice(8))}）のころには<br><b class="fc-big">${RANKS[proj][2]} ${esc(RANKS[proj][1])}</b> になれそう！</div>`;
+    }
+    return `
+      <div class="sec-title"><h2>ランク表</h2><button class="btn ghost" data-tab="home">← もどる</button></div>
+      <div class="rank-now">
+        <div class="rn-e">${r[2]}</div>
+        <div class="rn-l">いまのランク ・ Lv.${i + 1}/${RANKS.length}</div>
+        <div class="rn-n">${esc(r[1])}</div>
+        <div class="xpbar" style="height:14px"><i style="width:${pct}%"></i></div>
+        <div class="rn-x">${nx ? `次の <b>${nx[2]} ${esc(nx[1])}</b> まで あと <b>${left} XP</b>（ミッションなら約${Math.ceil(left / 2)}本）` : '最高ランク！ レジェンド！'}</div>
+      </div>
+      <div class="forecast">
+        <div class="fc-line">📈 今のペース：1日 約<b>${Math.round(pace)}</b>ポイント</div>
+        ${nx ? `<div class="fc-line">→ 「${esc(nx[1])}」まで あと約 <b>${Math.max(1, Math.ceil(left / pace))}日</b></div>` : ''}
+        ${testLine}
+      </div>
+      <div class="sec-title"><h2>全${RANKS.length}ランク</h2><span>ポイントがたまると上がる</span></div>
+      <div class="ladder">${RANKS.map((x, j) => {
+        const st = j < i ? 'done' : j === i ? 'now' : 'lock';
+        const rw = REWARDS[x[1]];
+        return `<div class="rung ${st}"><span class="re">${x[2]}</span><div class="rt"><div class="rnm">${esc(x[1])}${j === i ? ' <span class="here">◀ いまここ</span>' : ''}</div>
+          <div class="rxp">${x[0]} XP${st === 'done' ? ' ・ 達成 ✓' : st === 'lock' ? ` ・ あと ${x[0] - S.xp}` : ''}</div>${rw ? `<div class="rrw">🎁 ${esc(rw)}</div>` : ''}</div></div>`;
+      }).join('')}</div>
+      <div class="sec-title"><h2>ポイントのもらい方</h2></div>
+      <div class="howto">${HOWTO_POINTS.map((h) => `<div class="hrow"><span>${h[0]}</span><span class="hl">${esc(h[1])}</span><b>${esc(h[2])}</b></div>`).join('')}</div>
+      <p class="note" style="margin-top:12px">最初の1か月は、どんどんランクが上がるよ。部活で疲れた日は「1本だけ」でOK。続けた人が一番強い！</p>`;
+  }
+  async function tutorial() {
+    const slides = [
+      { e: '🏀', t: '毎日1本、シュートを打とう', b: 'ミッションをタップするとシュートが決まる！<br>1日1本でも打てば <b>🔥連続記録</b> がのびるよ。<br>部活で疲れた日は「1本だけ」でOK。<br><br>「サボり虫（6点）」に勝つと <b>WIN</b> → ガチャチケット🎟️' },
+      { e: '⭐', t: 'ポイントでランクアップ', b: `スタートは <b>🪑 ベンチ見習い</b>。<br>ポイントがたまると<br><span class="tl-ladder">🪑 → 6️⃣ → 🏀 スタメン → ⭐ エース → ©️ キャプテン → 🏅 → 🥉 → 🥈 → 🥇 → 🇯🇵 日本代表 → ✈️ → 🌎 → 👑 レジェンド</span><br>全${RANKS.length}ランク！ 最初の1か月はどんどん上がるよ。<br>上のランクのマークをタップすると<b>ランク表</b>が見られる。` },
+      { e: '💬', t: '声とガチャ', b: 'わからないこと・苦手なところ・「アプリこうしてほしい」は <b>💬声</b> へ。マイクで話すだけで送れるよ。<br>おうちの人から返事やエールが届く📣<br><br>チケットで <b>🎰ガチャ</b>。バスケ技カード34種類を集めよう！' },
+    ];
+    for (let k = 0; k < slides.length; k++) {
+      const s = slides[k];
+      await new Promise((res) => {
+        overlay(`<div class="tut"><div class="tut-step">${k + 1} / ${slides.length}</div><div class="tut-e">${s.e}</div><div class="tut-t">${s.t}</div><div class="tut-b">${s.b}</div>
+          <button class="btn big" data-tut="next">${k + 1 < slides.length ? '次へ ▶' : 'はじめる！ 🏀'}</button></div>`, {
+          closeOnTap: false,
+          onMount: (el, close) => { el.querySelector('[data-tut]').addEventListener('click', () => { sfx.tap(); close(); res(); }); },
+        });
+      });
+    }
+    sfx.buzzer();
+  }
 
   // ---------- 起動 ----------
   async function onboarding() {
@@ -842,7 +913,7 @@
       S = fresh; // api() が端末IDを使うので先に用意（保存はまだしない）
       const j = await api({ action: 'state' });
       if (j && j.ok && j.state && j.state.v) { S = migrate(j.state); S.device = fresh.device; delete S.summary; save(); toast('前のデータを復元したよ'); }
-      else { S = fresh; save(); await onboarding(); }
+      else { S = fresh; save(); await onboarding(); await tutorial(); }
     }
     render();
     flush();

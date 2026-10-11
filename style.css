@@ -321,3 +321,41 @@ canvas.confetti { position: fixed; inset: 0; z-index: 65; pointer-events: none; 
 .vqq { font-size: 12px; color: #9fd3ff; }
 .warn { padding: 12px 14px; border-radius: 14px; background: #3a1a0a; border: 1px solid #a5531f; font-size: 13px; line-height: 1.6; margin-bottom: 10px; }
 .sec-title .btn.ghost { padding: 6px 10px; font-size: 12px; }
+
+/* ---------- v3: ランク表・あそびかた ---------- */
+.ranklink { color: var(--orange2); white-space: nowrap; }
+.rank-badge, .top-info { cursor: pointer; }
+.rank-now { text-align: center; padding: 20px 16px; border-radius: 22px; background: radial-gradient(90% 80% at 50% 0%, #3b1a07, #18223b); border: 1px solid #5a2a0c; }
+.rn-e { font-size: 64px; line-height: 1.1; }
+.rn-l { font-size: 12px; color: var(--sub); margin-top: 4px; }
+.rn-n { font-family: var(--display); font-weight: 800; font-size: 28px; margin: 2px 0 10px; }
+.rn-x { font-size: 13px; margin-top: 10px; line-height: 1.6; }
+.rn-x b { color: var(--yellow); }
+.forecast { margin-top: 10px; padding: 14px 16px; border-radius: 18px; background: var(--card); border: 1px solid var(--line); display: grid; gap: 6px; font-size: 14px; line-height: 1.6; }
+.forecast b { color: var(--yellow); }
+.fc-big { font-size: 20px; }
+.ladder { display: grid; gap: 6px; }
+.rung { display: flex; align-items: center; gap: 12px; padding: 10px 14px; border-radius: 14px; background: var(--card); border: 1px solid var(--line); }
+.rung .re { font-size: 26px; width: 34px; text-align: center; }
+.rung .rt { flex: 1; min-width: 0; }
+.rung .rnm { font-weight: 800; font-size: 15px; }
+.rung .rxp { font-size: 11px; color: var(--sub); margin-top: 2px; }
+.rung .rrw { font-size: 12px; color: var(--pink); margin-top: 3px; }
+.rung.done { opacity: .6; }
+.rung.now { background: linear-gradient(135deg, #3b1a07, #2a1306); border-color: var(--orange); box-shadow: 0 0 16px #ff7a1a55; }
+.rung.lock .re { filter: grayscale(.7); }
+.here { color: var(--orange2); font-size: 12px; }
+.howto { padding: 6px 14px; border-radius: 18px; background: var(--card); border: 1px solid var(--line); }
+.hrow { display: flex; align-items: center; gap: 10px; padding: 9px 0; border-bottom: 1px solid var(--line); font-size: 14px; }
+.hrow:last-child { border-bottom: 0; }
+.hrow .hl { flex: 1; }
+.hrow b { color: var(--yellow); }
+.reward-big { margin: 14px 0 4px; padding: 12px 16px; border-radius: 16px; background: #3a0f2a; border: 1px solid var(--pink); font-size: 18px; text-align: center; animation: pop .5s .5s both; }
+.reward-big small { font-size: 12px; color: var(--sub); }
+.tut { width: 100%; max-width: 380px; text-align: center; }
+.tut-step { font-size: 12px; color: var(--sub); }
+.tut-e { font-size: 80px; margin: 6px 0; animation: pop .5s cubic-bezier(.2,1.8,.4,1); }
+.tut-t { font-family: var(--display); font-weight: 800; font-size: 24px; margin-bottom: 12px; }
+.tut-b { font-size: 15px; line-height: 1.8; margin-bottom: 20px; text-align: left; padding: 14px 16px; border-radius: 16px; background: #0006; border: 1px solid var(--line); }
+.tut-b b { color: var(--yellow); }
+.tl-ladder { display: block; margin: 6px 0; font-size: 13px; color: #ffcf9e; }
