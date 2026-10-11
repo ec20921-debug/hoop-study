@@ -359,3 +359,17 @@ canvas.confetti { position: fixed; inset: 0; z-index: 65; pointer-events: none; 
 .tut-b { font-size: 15px; line-height: 1.8; margin-bottom: 20px; text-align: left; padding: 14px 16px; border-radius: 16px; background: #0006; border: 1px solid var(--line); }
 .tut-b b { color: var(--yellow); }
 .tl-ladder { display: block; margin: 6px 0; font-size: 13px; color: #ffcf9e; }
+
+/* ---------- v4: おこづかい ---------- */
+.money { display: block; width: 100%; text-align: left; margin: 8px 0 4px; padding: 14px 16px; border-radius: 20px; background: linear-gradient(135deg, #0f2a22, #13203a); border: 1px solid #1d6b52; }
+.mo-top { display: flex; justify-content: space-between; font-size: 13px; color: #9ff5d3; }
+.mo-rule { color: var(--sub); font-size: 12px; }
+.mo-total { font-family: var(--display); font-weight: 800; font-size: 34px; color: var(--green); margin: 4px 0 8px; line-height: 1.1; }
+.mo-total small { font-family: var(--body); font-size: 13px; color: var(--sub); }
+.mo-bar { display: flex; height: 10px; border-radius: 99px; background: var(--line); overflow: hidden; margin-bottom: 10px; }
+.mo-bar .b1 { background: #2fae86; } .mo-bar .b2 { background: var(--yellow); }
+.mo-row { display: grid; grid-template-columns: auto auto 1fr; gap: 8px; align-items: baseline; font-size: 13px; margin-top: 4px; }
+.mo-row b { font-size: 15px; } .mo-row b.plus { color: var(--yellow); }
+.mo-sub { font-size: 11px; color: var(--sub); text-align: right; }
+.mo-hint { margin-top: 8px; font-size: 13px; color: #ffcf9e; }
+.mo-hint b { color: var(--yellow); }

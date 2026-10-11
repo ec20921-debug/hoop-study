@@ -27,7 +27,7 @@
       weak: { spell: {}, plural: {}, kanji: {}, qa: {} }, best: {},
       missions: DEFAULT_MISSIONS.map((m) => ({ ...m })),
       test: { name: '後期期末テスト', date: '', checks: {} },
-      goals: {}, voices: [], voiceDays: {}, voiceWeek: '', cheerLog: [],
+      goals: {}, voices: [], voiceDays: {}, voiceWeek: '', cheerLog: [], startDate: todayStr(),
       milestones: {}, cheersSeen: [], lastCheer: null, lastSync: 0, syncError: null,
       device: rid(20), created: Date.now(), updated: Date.now(),
     };
@@ -36,6 +36,8 @@
     const f = freshState();
     for (const k in f) if (s[k] === undefined) s[k] = f[k];
     for (const k of ['spell', 'plural', 'kanji', 'qa']) if (!s.weak[k]) s.weak[k] = {};
+    const firstDay = Object.keys(s.days || {}).sort()[0];
+    if (firstDay && firstDay < s.startDate) s.startDate = firstDay;
     return s;
   }
   function loadLocal() {
@@ -70,7 +72,7 @@
   }
   function snapshot() {
     const r = RANKS[rankIdx(S.xp)];
-    return { ...S, summary: { rank: r[1], streak: streak(), cardKinds: Object.keys(S.cards).length } };
+    return { ...S, summary: { rank: r[1], streak: streak(), cardKinds: Object.keys(S.cards).length, allowanceCfg: ALLOWANCE } };
   }
   let flushTimer = null;
   let flushing = false;
@@ -274,7 +276,7 @@
     const mkey = st + '@' + addDays(todayStr(), -(st - 1));
     if (bonus && !S.milestones[mkey]) { S.milestones[mkey] = true; S.tickets += bonus; r.streakBonus = bonus; }
     const after = rankIdx(S.xp);
-    if (after > before) { r.levelUp = true; r.newRank = after; }
+    if (after > before) { r.levelUp = true; r.newRank = after; d.ru = (d.ru || 0) + (after - before); }
     save();
     logEvent(type, item, subject, pts + (r.tipoff ? 1 : 0), { ...(detail || {}), win: r.win || undefined, levelUp: r.levelUp ? RANKS[after][1] : undefined });
     return r;
@@ -317,6 +319,7 @@
         <div><div class="vs">VS</div><div class="clock">${t.slice(5).replace('-', '/')}</div></div>
         <div><div class="lbl">${esc(RIVAL.name)}</div><div class="sc away">${RIVAL.score}</div></div></div>
       <div class="winmsg ${d.win ? 'win' : ''}">${d.win ? '🏆 今日はWIN！ ナイスゲーム！' : left > 0 ? `あと ${left} 点で WIN → ガチャチケット！` : 'ミッションを1本決めたら WIN！'}</div>
+      ${allowanceCard()}
       <div class="sec-title"><h2>今日のミッション</h2><span>タップでシュート</span></div>
       <div class="missions">${S.missions.map((m) => {
         const done = d.m.includes(m.id);
@@ -495,6 +498,7 @@
     S.cards[card.id] = (S.cards[card.id] || 0) + 1;
     const before = rankIdx(S.xp);
     if (dup) S.xp += 5;
+    if (rankIdx(S.xp) > before) { const d = day(); d.ru = (d.ru || 0) + 1; }
     save();
     logEvent('gacha', card.name, '', 0, { card: card.id, rarity: rar, dup });
     return { card, dup, levelUp: rankIdx(S.xp) > before ? rankIdx(S.xp) : null };
@@ -797,6 +801,7 @@
     else if (act === 'vsend') sendVoice();
     else if (act === 'restore') tryRestore();
     else if (act === 'howto') tutorial();
+    else if (act === 'money') moneyRules();
     else if (act === 'nick') { S.nick = ($('#nick').value || '').trim().slice(0, 12); save(); toast('保存したよ'); render(); }
     else if (act === 'sound') { S.sound = !S.sound; save(); render(); sfx.tap(); }
     else if (act === 'mdel') {
@@ -820,6 +825,50 @@
   });
   addEventListener('online', flush);
 
+
+
+  // ---------- おこづかい（その月の記録から計算） ----------
+  function allowanceFor(ym) {
+    const A = ALLOWANCE;
+    const t = todayStr();
+    const [y, m] = ym.split('-').map(Number);
+    const monthStart = `${ym}-01`;
+    const monthEnd = new Date(Date.UTC(y, m, 0)).toISOString().slice(0, 10);
+    const from = S.startDate > monthStart ? S.startDate : monthStart;
+    const lastDone = t > monthEnd ? monthEnd : addDays(t, -1); // 今日はまだ途中なので数えない
+    let missed = 0, studied = 0, wins = 0, perfect = 0, ranks = 0;
+    for (let d = monthStart; d <= monthEnd && d <= t; d = addDays(d, 1)) {
+      const x = S.days[d];
+      if (x && x.pts > 0) studied++;
+      else if (d >= from && d <= lastDone) missed++;
+      if (x) { if (x.win) wins++; perfect += Math.min(2, x.perfect || 0); ranks += x.ru || 0; }
+    }
+    const over = Math.max(0, missed - A.restDays);
+    const base = Math.max(0, A.base - over * A.missPenalty);
+    const bonusRaw = wins * A.win + perfect * A.perfect + ranks * A.rankUp;
+    const bonus = Math.min(A.bonusMax, bonusRaw);
+    return { ym, studied, missed, restLeft: Math.max(0, A.restDays - missed), over, base, wins, perfect, ranks, bonus, total: Math.min(A.max, base + bonus) };
+  }
+  const yen = (n) => n.toLocaleString('ja-JP') + '円';
+  function allowanceCard() {
+    const t = todayStr(); const a = allowanceFor(t.slice(0, 7));
+    const d = S.days[t] || {};
+    const hint = d.win ? '今日のWIN達成！ +' + ALLOWANCE.win + '円' : `今日WINすると <b>+${ALLOWANCE.win}円</b>！`;
+    return `<button class="money" data-act="money">
+      <div class="mo-top"><span>💰 ${Number(t.slice(5, 7))}月のおこづかい</span><span class="mo-rule">ルール ›</span></div>
+      <div class="mo-total">${yen(a.total)}<small> / MAX ${yen(ALLOWANCE.max)}</small></div>
+      <div class="mo-bar"><i style="width:${Math.min(100, (a.base / ALLOWANCE.max) * 100)}%" class="b1"></i><i style="width:${Math.min(100, (a.bonus / ALLOWANCE.max) * 100)}%" class="b2"></i></div>
+      <div class="mo-row"><span>基本</span><b>${yen(a.base)}</b><span class="mo-sub">${a.over ? `お休みしすぎ −${yen(a.over * ALLOWANCE.missPenalty)}` : `お休み枠 あと${a.restLeft}日`}</span></div>
+      <div class="mo-row"><span>がんばりボーナス</span><b class="plus">+${yen(a.bonus)}</b><span class="mo-sub">WIN ${a.wins}日・全問正解 ${a.perfect}回・ランクUP ${a.ranks}回</span></div>
+      <div class="mo-hint">${hint}</div></button>`;
+  }
+  function moneyRules() {
+    const A = ALLOWANCE;
+    return overlay(`<div class="tut"><div class="tut-e">💰</div><div class="tut-t">おこづかいのルール</div><div class="tut-b">
+      <b>基本 ${yen(A.base)}</b><br>1か月に <b>${A.restDays}日</b> までは、勉強しない日があっても大丈夫（大会・体調が悪い日用のお休み枠）。<br>それをこえて勉強しなかった日は、<b>1日 −${yen(A.missPenalty)}</b>。<br><br>
+      <b>がんばりボーナス 最大 +${yen(A.bonusMax)}</b><br>🏆 WINした日：1日 +${yen(A.win)}<br>💯 ミニゲーム全問正解：1回 +${yen(A.perfect)}（1日2回まで）<br>⭐ ランクアップ：1回 +${yen(A.rankUp)}<br><br>
+      合計は <b>最大 ${yen(A.max)}</b>。月末にしめて、次の月のはじめにもらえるよ。</div></div>`, { lockMs: 400 });
+  }
 
   // ---------- ランク表・あそびかた ----------
   function pacePerDay() {
@@ -873,6 +922,7 @@
     const slides = [
       { e: '🏀', t: '毎日1本、シュートを打とう', b: 'ミッションをタップするとシュートが決まる！<br>1日1本でも打てば <b>🔥連続記録</b> がのびるよ。<br>部活で疲れた日は「1本だけ」でOK。<br><br>「サボり虫（6点）」に勝つと <b>WIN</b> → ガチャチケット🎟️' },
       { e: '⭐', t: 'ポイントでランクアップ', b: `スタートは <b>🪑 ベンチ見習い</b>。<br>ポイントがたまると<br><span class="tl-ladder">🪑 → 6️⃣ → 🏀 スタメン → ⭐ エース → ©️ キャプテン → 🏅 → 🥉 → 🥈 → 🥇 → 🇯🇵 日本代表 → ✈️ → 🌎 → 👑 レジェンド</span><br>全${RANKS.length}ランク！ 最初の1か月はどんどん上がるよ。<br>上のランクのマークをタップすると<b>ランク表</b>が見られる。` },
+      { e: '💰', t: 'おこづかいと連動！', b: `毎月のおこづかいは <b>基本${ALLOWANCE.base.toLocaleString()}円</b>。<br>勉強しない日が月${ALLOWANCE.restDays}日をこえると 1日 −${ALLOWANCE.missPenalty}円。<br><br>がんばるとボーナス！<br>🏆 WINした日 +${ALLOWANCE.win}円 ／ 💯 全問正解 +${ALLOWANCE.perfect}円 ／ ⭐ ランクUP +${ALLOWANCE.rankUp}円<br><br>合計 <b>最大${ALLOWANCE.max.toLocaleString()}円</b>！ ホーム画面でいつでも確認できるよ。` },
       { e: '💬', t: '声とガチャ', b: 'わからないこと・苦手なところ・「アプリこうしてほしい」は <b>💬声</b> へ。マイクで話すだけで送れるよ。<br>おうちの人から返事やエールが届く📣<br><br>チケットで <b>🎰ガチャ</b>。バスケ技カード34種類を集めよう！' },
     ];
     for (let k = 0; k < slides.length; k++) {
