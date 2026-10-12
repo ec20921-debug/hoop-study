@@ -271,13 +271,49 @@ const ALLOWANCE = {
   base: 1500,          // 基本
   restDays: 4,         // 1か月のお休み枠（この日数までは勉強しなくても引かれない）
   missPenalty: 100,    // お休み枠を超えた日 1日あたりマイナス
-  win: 20,             // WIN した日（その日6点超え＋ミッション1本以上）
-  bigWin: 20,          // BIG WIN した日はさらにプラス
-  bigWinPts: 20,       // BIG WIN の条件：その日の点数
-  bigWinMissions: 3,   // BIG WIN の条件：その日のミッション本数
-  perfect: 10,         // ミニゲーム全問正解 1回あたり
-  perfectPerDay: 1,    // 全問正解をボーナスに数えるのは1日何回まで
-  rankUp: 50,          // ランクアップ 1回あたり
+  bigWin: 20,          // BIG WIN の日（基本ミッションを4本以上）
+  bigWinMissions: 4,   // BIG WIN に必要な「基本ミッション」の本数（自分で追加したミッションは数えない）
+  stdMissions: ['kanji', 'eitango', 'work', 'redo', 'mori', 'review'], // 基本ミッション（おうちで決めたもの）
+  mvp: 100,            // 週間MVP（月〜日の1週間で BIG WIN 5日以上）
+  mvpDays: 5,
+  perfect: 15,         // チャレンジ（上級ゲーム）全問正解 1回あたり
+  perfectPerDay: 1,    // 1日何回まで数えるか
+  rankUp: 30,          // ランクアップ（スタメン以上に上がった時だけ）
+  rankUpFrom: 3,       // ランク番号（0=ベンチ見習い, 3=スタメン）
   bonusMax: 1500,      // がんばりボーナスの上限
-  max: 3000,           // 合計の上限（ほぼ毎日 BIG WIN した月だけ届く）
+  max: 3000,           // 合計の上限（ほぼ完ぺきな月だけ届く）
 };
+
+// チャレンジ（上級）用の問題 — 後期期末の範囲（過去形・3単現）と、むずかしめの漢字
+// 不規則・注意が必要な過去形 [原形, 過去形, 意味]
+const PAST_FORMS = [
+  ['go', 'went', '行く'], ['come', 'came', '来る'], ['see', 'saw', '見る'], ['eat', 'ate', '食べる'],
+  ['have', 'had', '持っている'], ['make', 'made', '作る'], ['take', 'took', '取る'], ['get', 'got', '得る'],
+  ['buy', 'bought', '買う'], ['write', 'wrote', '書く'], ['run', 'ran', '走る'], ['swim', 'swam', '泳ぐ'],
+  ['sing', 'sang', '歌う'], ['speak', 'spoke', '話す'], ['think', 'thought', '思う'], ['teach', 'taught', '教える'],
+  ['give', 'gave', '与える'], ['know', 'knew', '知っている'], ['leave', 'left', '去る'], ['meet', 'met', '会う'],
+  ['tell', 'told', '伝える'], ['say', 'said', '言う'], ['find', 'found', '見つける'], ['begin', 'began', '始める'],
+  ['sit', 'sat', 'すわる'], ['stand', 'stood', '立つ'], ['sleep', 'slept', '眠る'], ['feel', 'felt', '感じる'],
+  ['catch', 'caught', '捕る'], ['bring', 'brought', '持ってくる'], ['win', 'won', '勝つ'], ['lose', 'lost', '負ける・失う'],
+  ['become', 'became', '〜になる'], ['drink', 'drank', '飲む'], ['fly', 'flew', '飛ぶ'], ['forget', 'forgot', '忘れる'],
+  ['study', 'studied', '勉強する'], ['stop', 'stopped', '止まる'], ['try', 'tried', 'やってみる'], ['plan', 'planned', '計画する'],
+  ['practice', 'practiced', '練習する'], ['enjoy', 'enjoyed', '楽しむ'], ['cry', 'cried', '泣く'], ['drop', 'dropped', '落とす'],
+];
+// 3単現（主語が he / she のとき）[原形, 3単現]
+const THIRD_FORMS = [
+  ['play', 'plays'], ['study', 'studies'], ['go', 'goes'], ['watch', 'watches'], ['have', 'has'], ['do', 'does'],
+  ['teach', 'teaches'], ['try', 'tries'], ['fly', 'flies'], ['wash', 'washes'], ['enjoy', 'enjoys'], ['fix', 'fixes'],
+  ['catch', 'catches'], ['say', 'says'], ['carry', 'carries'], ['finish', 'finishes'], ['cry', 'cries'], ['buy', 'buys'],
+];
+// むずかしめの漢字 [漢字, 読み]
+const HARD_KANJI = [
+  ['培う', 'つちかう'], ['陥る', 'おちいる'], ['潤う', 'うるおう'], ['携える', 'たずさえる'], ['遂げる', 'とげる'],
+  ['紛れる', 'まぎれる'], ['偽る', 'いつわる'], ['慰める', 'なぐさめる'], ['怠る', 'おこたる'], ['促す', 'うながす'],
+  ['貢献', 'こうけん'], ['均衡', 'きんこう'], ['措置', 'そち'], ['概念', 'がいねん'], ['顕著', 'けんちょ'],
+  ['傑作', 'けっさく'], ['緩和', 'かんわ'], ['奔走', 'ほんそう'], ['捕獲', 'ほかく'], ['搭載', 'とうさい'],
+  ['漂流', 'ひょうりゅう'], ['克明', 'こくめい'], ['一概', 'いちがい'], ['寡黙', 'かもく'], ['頻度', 'ひんど'],
+  ['抑制', 'よくせい'], ['繁栄', 'はんえい'], ['依然', 'いぜん'], ['沈黙', 'ちんもく'], ['把握', 'はあく'],
+];
+
+// 次のテストの家族目標（5科合計）
+const TEST_TARGET = { name: '後期期末', total: 400 };

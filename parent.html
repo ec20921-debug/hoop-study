@@ -164,25 +164,33 @@ function calcAllowance(st, ym, today, cfg) {
   var monthStart = ym + '-01';
   var monthEnd = new Date(Date.UTC(p[0], p[1], 0)).toISOString().slice(0, 10);
   var add = function (ds, n) { var q = ds.split('-').map(Number); return new Date(Date.UTC(q[0], q[1] - 1, q[2] + n)).toISOString().slice(0, 10); };
+  var dow = function (ds) { return new Date(ds + 'T00:00:00Z').getUTCDay(); };
+  var std = A.stdMissions || [];
+  var isBig = function (x) { return !!x && (x.m || []).filter(function (id) { return std.indexOf(id) >= 0; }).length >= A.bigWinMissions; };
   var start = (st && st.startDate) || monthStart;
   var from = start > monthStart ? start : monthStart;
   var lastDone = today > monthEnd ? monthEnd : add(today, -1);
-  var missed = 0, studied = 0, wins = 0, bigs = 0, perfect = 0, ranks = 0;
+  var missed = 0, studied = 0, bigs = 0, perfect = 0, ranks = 0, mvp = 0;
   for (var d = monthStart; d <= monthEnd && d <= today; d = add(d, 1)) {
     var x = days[d];
     if (x && x.pts > 0) studied++;
     else if (d >= from && d <= lastDone) missed++;
     if (x) {
-      if (x.win) wins++;
-      if (x.win && x.pts >= A.bigWinPts && (x.m || []).length >= A.bigWinMissions) bigs++;
-      perfect += Math.min(A.perfectPerDay, x.perfect || 0);
-      ranks += x.ru || 0;
+      if (isBig(x)) bigs++;
+      perfect += Math.min(A.perfectPerDay, x.cp || 0);
+      ranks += x.ru2 || 0;
+    }
+    // 週間MVP：日曜日（週の終わり）がこの月にあり、終わった週だけ数える
+    if (dow(d) === 0 && d < today) {
+      var n = 0;
+      for (var k = 0; k < 7; k++) if (isBig(days[add(d, -k)])) n++;
+      if (n >= A.mvpDays) mvp++;
     }
   }
   var over = Math.max(0, missed - A.restDays);
   var base = Math.max(0, A.base - over * A.missPenalty);
-  var bonus = Math.min(A.bonusMax, wins * A.win + bigs * A.bigWin + perfect * A.perfect + ranks * A.rankUp);
-  return { ym: ym, studied: studied, missed: missed, restLeft: Math.max(0, A.restDays - missed), over: over, base: base, wins: wins, bigs: bigs, perfect: perfect, ranks: ranks, bonus: bonus, total: Math.min(A.max, base + bonus) };
+  var bonus = Math.min(A.bonusMax, bigs * A.bigWin + mvp * A.mvp + perfect * A.perfect + ranks * A.rankUp);
+  return { ym: ym, studied: studied, missed: missed, restLeft: Math.max(0, A.restDays - missed), over: over, base: base, bigs: bigs, mvp: mvp, perfect: perfect, ranks: ranks, bonus: bonus, total: Math.min(A.max, base + bonus) };
 }
 (() => {
   const CFG = window.HOOP_CONFIG || {};
@@ -295,9 +303,11 @@ function calcAllowance(st, ym, today, cfg) {
     const goalTable = gsubs.some((x) => G[x] && (G[x].goal || G[x].prev))
       ? `<table class="goalt"><tr><th></th>${gsubs.map((x) => `<th>${x}</th>`).join('')}</tr><tr><th>前回</th>${gsubs.map((x) => `<td>${esc((G[x] || {}).prev || '—')}</td>`).join('')}</tr><tr><th>目標</th>${gsubs.map((x) => `<td><b>${esc((G[x] || {}).goal || '—')}</b></td>`).join('')}</tr></table>`
       : '<div class="sub" style="margin:6px 0 10px">目標点はまだ未設定です（アプリの「試合前」で本人が入力）</div>';
+    const gS = gsubs.reduce((n, x) => n + (Number((G[x] || {}).goal) || 0), 0), pS = gsubs.reduce((n, x) => n + (Number((G[x] || {}).prev) || 0), 0);
+    const targetLine = `<div style="margin:6px 0 10px;font-size:14px">🎯 家族の目標：<b>5科 ${TEST_TARGET.total}点</b>（前回 ${pS || '—'}点 → 本人の目標合計 ${gS || '—'}点）</div>`;
     $('#test').innerHTML = `<div style="font-weight:800">${esc(T.name || '未設定')} ${left != null ? `<span class="sub">（${left > 0 ? 'あと' + left + '日' : left === 0 ? '今日' : '終了'}）</span>` : '<span class="sub">（日付未設定）</span>'}</div>
       <div class="prog"><i style="width:${done / TEST_CHECKS.length * 100}%"></i></div><div class="sub">準備度 ${done}/${TEST_CHECKS.length}</div>
-      ${goalTable}
+      ${targetLine}${goalTable}
       ${TEST_CHECKS.map((c) => `<div class="chk"><span class="m">${T.checks && T.checks[c.id] ? '✅' : '⬜️'}</span><span><span class="sub">${esc(c.sub)}</span> ${esc(c.label)}</span></div>`).join('')}`;
 
     // エール
@@ -312,7 +322,7 @@ function calcAllowance(st, ym, today, cfg) {
     const yen = (n) => n.toLocaleString('ja-JP') + '円';
     const mblock = (a, label) => `<div class="mmonth"><div class="sub">${label}</div><div class="mbig">${yen(a.total)} <span class="sub">/ 最大 ${yen(cfg.max)}</span></div>
       <div class="mrow"><span>基本</span><b>${yen(a.base)}</b><span class="s">勉強した日 ${a.studied}日・しなかった日 ${a.missed}日（お休み枠 ${cfg.restDays}日${a.over ? `、超えた ${a.over}日 × −${yen(cfg.missPenalty)}` : ''}）</span></div>
-      <div class="mrow"><span>がんばりボーナス</span><b>+${yen(a.bonus)}</b><span class="s">WIN ${a.wins}日 × ${cfg.win}円 ・ BIG WIN ${a.bigs || 0}日 × ${cfg.bigWin || 0}円 ・ 全問正解 ${a.perfect}回 × ${cfg.perfect}円 ・ ランクUP ${a.ranks}回 × ${cfg.rankUp}円（上限 ${yen(cfg.bonusMax)}）</span></div></div>`;
+      <div class="mrow"><span>がんばりボーナス</span><b>+${yen(a.bonus)}</b><span class="s">BIG WIN ${a.bigs}日 × ${cfg.bigWin}円 ・ 週間MVP ${a.mvp}週 × ${cfg.mvp}円 ・ チャレンジ全問正解 ${a.perfect}回 × ${cfg.perfect}円 ・ ランクUP ${a.ranks}回 × ${cfg.rankUp}円（上限 ${yen(cfg.bonusMax)}）</span></div></div>`;
     const hasPrev = st.startDate && st.startDate.slice(0, 7) <= pm;
     $('#money').innerHTML = st.days ? mblock(calcAllowance(st, ymNow, t, cfg), `${Number(ymNow.slice(5))}月（見込み・今日まで）`) + (hasPrev ? mblock(calcAllowance(st, pm, t, cfg), `${Number(pm.slice(5))}月（確定）← 今月渡す金額`) : '')
       : '<div class="empty">まだデータがありません</div>';

@@ -381,3 +381,13 @@ canvas.confetti { position: fixed; inset: 0; z-index: 65; pointer-events: none; 
 .ins-steps { text-align: left; margin: 0 auto 16px; padding: 16px 16px 16px 36px; max-width: 380px; border-radius: 18px; background: var(--card); border: 1px solid var(--line); font-size: 15px; line-height: 1.8; }
 .ins-steps b { color: var(--orange2); }
 .ins-ic { display: inline-block; padding: 0 6px; border-radius: 6px; background: #1f5b86; }
+.gc-challenge { background: linear-gradient(135deg, #4a3300, #2a1a40); border-color: #c79a00; box-shadow: 0 0 18px #ffc40033; }
+.gc-challenge b { color: var(--yellow); }
+.target { margin-bottom: 12px; padding: 16px; border-radius: 20px; background: linear-gradient(135deg, #3b1a07, #2a1340); border: 1px solid var(--orange); box-shadow: 0 0 18px #ff7a1a33; }
+.tg-l { font-size: 12px; color: #ffcf9e; }
+.tg-n { font-size: 20px; font-weight: 800; margin: 4px 0; }
+.tg-n b { color: var(--yellow); font-family: var(--display); font-size: 26px; }
+.tg-s { font-size: 13px; margin-top: 4px; } .tg-s b { color: var(--yellow); }
+.tg-bar { position: relative; height: 12px; border-radius: 99px; background: var(--line); margin: 8px 0 4px; }
+.tg-bar i { display: block; height: 100%; border-radius: 99px; background: linear-gradient(90deg, var(--orange), var(--yellow)); }
+.tg-bar span { position: absolute; top: -4px; width: 4px; height: 20px; margin-left: -2px; border-radius: 2px; background: var(--green); }
