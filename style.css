@@ -373,3 +373,11 @@ canvas.confetti { position: fixed; inset: 0; z-index: 65; pointer-events: none; 
 .mo-sub { font-size: 11px; color: var(--sub); text-align: right; }
 .mo-hint { margin-top: 8px; font-size: 13px; color: #ffcf9e; }
 .mo-hint b { color: var(--yellow); }
+
+/* ---------- v6: ホーム画面に追加の案内 ---------- */
+.install { text-align: center; padding-top: 6vh; }
+.ins-lead { font-size: 16px; line-height: 1.8; margin: 14px 0 18px; }
+.ins-lead b { color: var(--yellow); }
+.ins-steps { text-align: left; margin: 0 auto 16px; padding: 16px 16px 16px 36px; max-width: 380px; border-radius: 18px; background: var(--card); border: 1px solid var(--line); font-size: 15px; line-height: 1.8; }
+.ins-steps b { color: var(--orange2); }
+.ins-ic { display: inline-block; padding: 0 6px; border-radius: 6px; background: #1f5b86; }

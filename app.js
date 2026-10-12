@@ -115,16 +115,17 @@ function calcAllowance(st, ym, today, cfg) {
       if (j.ok) {
         const rest = loadQueue().slice(batch.length);
         saveQueue(rest);
-        S.lastSync = Date.now(); S.syncError = null; save();
+        S.lastSync = Date.now(); S.syncError = null; S.everSynced = true; save();
         if (rest.length) setTimeout(flush, 300);
       } else if (j.error === 'device') { S.syncError = 'device'; save(); }
       updateSyncLabel();
     } catch (e) { /* オフライン時は次回まとめて送る */ }
     flushing = false;
   }
-  async function api(params) {
+  async function api(params, withDev) {
     if (!CFG.GAS_URL) return null;
-    const url = CFG.GAS_URL + '?' + new URLSearchParams({ key: CFG.APP_KEY, dev: S ? S.device : '', ...params });
+    const dev = S && (withDev || S.everSynced) ? S.device : '';
+    const url = CFG.GAS_URL + '?' + new URLSearchParams({ key: CFG.APP_KEY, dev, ...params });
     const ctl = new AbortController();
     const t = setTimeout(() => ctl.abort(), 9000);
     try { const r = await fetch(url, { signal: ctl.signal }); return await r.json(); } catch (e) { return null; } finally { clearTimeout(t); }
@@ -797,13 +798,13 @@ function calcAllowance(st, ym, today, cfg) {
 
   // ---------- イベント ----------
   async function tryRestore() {
-    const j = await api({ action: 'state' });
+    const j = await api({ action: 'state' }, true);
     if (!j) { toast('通信できなかった…'); return; }
     if (!j.ok) { toast(j.error === 'device' ? 'まだリセットされていないみたい' : '失敗しちゃった'); return; }
     if (j.state && j.state.v && j.state.xp > S.xp && confirm('スプレッドシートのデータの方が進んでいるよ。そっちを使う？')) {
       const dev = S.device; S = migrate(j.state); S.device = dev; delete S.summary;
     }
-    S.syncError = null; save(); flush(); toast('つながったよ！'); render();
+    S.syncError = null; S.everSynced = true; save(); flush(); checkCheers(); toast('つながったよ！'); render();
   }
   document.addEventListener('click', (e) => {
     const t = e.target.closest('[data-tab]');
@@ -974,7 +975,28 @@ function calcAllowance(st, ym, today, cfg) {
       });
     });
   }
+  function needsInstall() {
+    const ua = navigator.userAgent || '';
+    const ios = /iPhone|iPad|iPod/.test(ua) || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
+    const standalone = navigator.standalone === true || (window.matchMedia && matchMedia('(display-mode: standalone)').matches);
+    return ios && !standalone;
+  }
+  function installGuide() {
+    $('#tabbar').innerHTML = '';
+    $('#app').innerHTML = `<div class="install">
+      <div style="font-size:84px">🏀</div>
+      <div class="lvup-title" style="font-size:38px">HOOP STUDY</div>
+      <p class="ins-lead">まずは <b>ホーム画面に追加</b> してね！<br>ホーム画面のアイコンから開いたときだけ、記録がおうちに届くよ。</p>
+      <ol class="ins-steps">
+        <li>画面の下（または上）にある <b>共有ボタン</b> <span class="ins-ic">⬆︎</span> をタップ</li>
+        <li>メニューを下にスクロールして <b>「ホーム画面に追加」</b> をタップ</li>
+        <li>右上の <b>「追加」</b> をタップ</li>
+        <li>ホーム画面にできた <b>🏀 HOOP STUDY</b> のアイコンから開く</li>
+      </ol>
+      <p class="note" style="text-align:center">※ このSafariの画面では使わないでね（記録が別々になっちゃうよ）</p></div>`;
+  }
   async function boot() {
+    if (needsInstall()) { installGuide(); return; }
     if (!S) {
       $('#app').innerHTML = '<p class="note" style="text-align:center;margin-top:40vh">準備中…</p>';
       const fresh = freshState();
