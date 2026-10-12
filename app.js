@@ -1,4 +1,31 @@
 // HOOP STUDY — 本体
+function calcAllowance(st, ym, today, cfg) {
+  var A = cfg; var days = (st && st.days) || {};
+  var p = ym.split('-').map(Number);
+  var monthStart = ym + '-01';
+  var monthEnd = new Date(Date.UTC(p[0], p[1], 0)).toISOString().slice(0, 10);
+  var add = function (ds, n) { var q = ds.split('-').map(Number); return new Date(Date.UTC(q[0], q[1] - 1, q[2] + n)).toISOString().slice(0, 10); };
+  var start = (st && st.startDate) || monthStart;
+  var from = start > monthStart ? start : monthStart;
+  var lastDone = today > monthEnd ? monthEnd : add(today, -1);
+  var missed = 0, studied = 0, wins = 0, bigs = 0, perfect = 0, ranks = 0;
+  for (var d = monthStart; d <= monthEnd && d <= today; d = add(d, 1)) {
+    var x = days[d];
+    if (x && x.pts > 0) studied++;
+    else if (d >= from && d <= lastDone) missed++;
+    if (x) {
+      if (x.win) wins++;
+      if (x.win && x.pts >= A.bigWinPts && (x.m || []).length >= A.bigWinMissions) bigs++;
+      perfect += Math.min(A.perfectPerDay, x.perfect || 0);
+      ranks += x.ru || 0;
+    }
+  }
+  var over = Math.max(0, missed - A.restDays);
+  var base = Math.max(0, A.base - over * A.missPenalty);
+  var bonus = Math.min(A.bonusMax, wins * A.win + bigs * A.bigWin + perfect * A.perfect + ranks * A.rankUp);
+  return { ym: ym, studied: studied, missed: missed, restLeft: Math.max(0, A.restDays - missed), over: over, base: base, wins: wins, bigs: bigs, perfect: perfect, ranks: ranks, bonus: bonus, total: Math.min(A.max, base + bonus) };
+}
+
 (() => {
   'use strict';
 
@@ -254,6 +281,12 @@
       <div class="lvup-name">${esc(RIVAL.name)}に勝った！</div>
       <div class="shot-sub" style="opacity:1">ガチャチケット +1 🎟️</div>`, { lockMs: 1200 });
   }
+  function bigWinOv() {
+    sfx.fanfare(); setTimeout(() => confetti(220), 200);
+    return overlay(`<div class="lvup-title" style="font-size:56px">BIG WIN!!</div><div class="lvup-rank">🔥🏆🔥</div>
+      <div class="lvup-name">今日は大勝ち！</div>
+      <div class="reward-big">💰 おこづかい +${ALLOWANCE.bigWin}円 アップ！</div>`, { lockMs: 1200 });
+  }
   function levelUpOv(i) {
     sfx.fanfare(); confetti(200);
     const r = RANKS[i];
@@ -271,6 +304,7 @@
     if (d.pts <= 0 && pts > 0) { r.tipoff = true; d.pts += 1; S.xp += 1; }
     d.pts += pts; S.xp = Math.max(0, S.xp + pts);
     if (!d.win && d.pts > RIVAL.score && (d.m.length > 0 || d.ck > 0)) { d.win = true; S.tickets++; r.win = true; }
+    if (d.win && !d.big && d.pts >= ALLOWANCE.bigWinPts && d.m.length >= ALLOWANCE.bigWinMissions) { d.big = true; r.big = true; }
     const st = streak();
     const bonus = STREAK_BONUS[st];
     const mkey = st + '@' + addDays(todayStr(), -(st - 1));
@@ -284,6 +318,7 @@
   async function afterEffects(r) {
     render();
     if (r.win) await winOv();
+    if (r.big) await bigWinOv();
     if (r.streakBonus) { sfx.coin(); toast(`🔥 ${streak()}日連続ボーナス！ チケット +${r.streakBonus}`); }
     if (r.levelUp) await levelUpOv(r.newRank);
     render();
@@ -828,48 +863,31 @@
 
 
   // ---------- おこづかい（その月の記録から計算） ----------
-  function allowanceFor(ym) {
-    const A = ALLOWANCE;
-    const t = todayStr();
-    const [y, m] = ym.split('-').map(Number);
-    const monthStart = `${ym}-01`;
-    const monthEnd = new Date(Date.UTC(y, m, 0)).toISOString().slice(0, 10);
-    const from = S.startDate > monthStart ? S.startDate : monthStart;
-    const lastDone = t > monthEnd ? monthEnd : addDays(t, -1); // 今日はまだ途中なので数えない
-    let missed = 0, studied = 0, wins = 0, perfect = 0, ranks = 0;
-    for (let d = monthStart; d <= monthEnd && d <= t; d = addDays(d, 1)) {
-      const x = S.days[d];
-      if (x && x.pts > 0) studied++;
-      else if (d >= from && d <= lastDone) missed++;
-      if (x) { if (x.win) wins++; perfect += Math.min(2, x.perfect || 0); ranks += x.ru || 0; }
-    }
-    const over = Math.max(0, missed - A.restDays);
-    const base = Math.max(0, A.base - over * A.missPenalty);
-    const bonusRaw = wins * A.win + perfect * A.perfect + ranks * A.rankUp;
-    const bonus = Math.min(A.bonusMax, bonusRaw);
-    return { ym, studied, missed, restLeft: Math.max(0, A.restDays - missed), over, base, wins, perfect, ranks, bonus, total: Math.min(A.max, base + bonus) };
-  }
+  function allowanceFor(ym) { return calcAllowance(S, ym, todayStr(), ALLOWANCE); }
   const yen = (n) => n.toLocaleString('ja-JP') + '円';
   function allowanceCard() {
-    const t = todayStr(); const a = allowanceFor(t.slice(0, 7));
-    const d = S.days[t] || {};
-    const hint = d.win ? '今日のWIN達成！ +' + ALLOWANCE.win + '円' : `今日WINすると <b>+${ALLOWANCE.win}円</b>！`;
+    const t = todayStr(); const a = allowanceFor(t.slice(0, 7)); const A = ALLOWANCE;
+    const d = S.days[t] || { m: [], pts: 0 };
+    const big = d.win && d.pts >= A.bigWinPts && (d.m || []).length >= A.bigWinMissions;
+    const needP = Math.max(0, A.bigWinPts - d.pts), needM = Math.max(0, A.bigWinMissions - (d.m || []).length);
+    const hint = big ? `🔥 今日は BIG WIN！ +${A.win + A.bigWin}円`
+      : d.win ? `今日WIN達成 +${A.win}円！ BIG WINまで あと${needP ? needP + '点' : ''}${needP && needM ? '・' : ''}${needM ? 'ミッション' + needM + '本' : ''}（さらに+${A.bigWin}円）`
+      : `今日WINで <b>+${A.win}円</b>、BIG WIN（${A.bigWinPts}点＋ミッション${A.bigWinMissions}本）なら <b>+${A.win + A.bigWin}円</b>！`;
     return `<button class="money" data-act="money">
       <div class="mo-top"><span>💰 ${Number(t.slice(5, 7))}月のおこづかい</span><span class="mo-rule">ルール ›</span></div>
-      <div class="mo-total">${yen(a.total)}<small> / MAX ${yen(ALLOWANCE.max)}</small></div>
-      <div class="mo-bar"><i style="width:${Math.min(100, (a.base / ALLOWANCE.max) * 100)}%" class="b1"></i><i style="width:${Math.min(100, (a.bonus / ALLOWANCE.max) * 100)}%" class="b2"></i></div>
-      <div class="mo-row"><span>基本</span><b>${yen(a.base)}</b><span class="mo-sub">${a.over ? `お休みしすぎ −${yen(a.over * ALLOWANCE.missPenalty)}` : `お休み枠 あと${a.restLeft}日`}</span></div>
-      <div class="mo-row"><span>がんばりボーナス</span><b class="plus">+${yen(a.bonus)}</b><span class="mo-sub">WIN ${a.wins}日・全問正解 ${a.perfect}回・ランクUP ${a.ranks}回</span></div>
+      <div class="mo-total">${yen(a.total)}<small> / MAX ${yen(A.max)}</small></div>
+      <div class="mo-bar"><i style="width:${Math.min(100, (a.base / A.max) * 100)}%" class="b1"></i><i style="width:${Math.min(100, (a.bonus / A.max) * 100)}%" class="b2"></i></div>
+      <div class="mo-row"><span>基本</span><b>${yen(a.base)}</b><span class="mo-sub">${a.over ? `お休みしすぎ −${yen(a.over * A.missPenalty)}` : `お休み枠 あと${a.restLeft}日`}</span></div>
+      <div class="mo-row"><span>がんばりボーナス</span><b class="plus">+${yen(a.bonus)}</b><span class="mo-sub">WIN ${a.wins}日・BIG ${a.bigs}日・全問正解 ${a.perfect}回・ランクUP ${a.ranks}回</span></div>
       <div class="mo-hint">${hint}</div></button>`;
   }
   function moneyRules() {
     const A = ALLOWANCE;
     return overlay(`<div class="tut"><div class="tut-e">💰</div><div class="tut-t">おこづかいのルール</div><div class="tut-b">
       <b>基本 ${yen(A.base)}</b><br>1か月に <b>${A.restDays}日</b> までは、勉強しない日があっても大丈夫（大会・体調が悪い日用のお休み枠）。<br>それをこえて勉強しなかった日は、<b>1日 −${yen(A.missPenalty)}</b>。<br><br>
-      <b>がんばりボーナス 最大 +${yen(A.bonusMax)}</b><br>🏆 WINした日：1日 +${yen(A.win)}<br>💯 ミニゲーム全問正解：1回 +${yen(A.perfect)}（1日2回まで）<br>⭐ ランクアップ：1回 +${yen(A.rankUp)}<br><br>
-      合計は <b>最大 ${yen(A.max)}</b>。月末にしめて、次の月のはじめにもらえるよ。</div></div>`, { lockMs: 400 });
+      <b>がんばりボーナス 最大 +${yen(A.bonusMax)}</b><br>🏆 WIN（その日${RIVAL.score}点をこえる・ミッション1本以上）：+${yen(A.win)}<br>🔥 BIG WIN（その日${A.bigWinPts}点以上・ミッション${A.bigWinMissions}本以上）：さらに +${yen(A.bigWin)}<br>💯 ミニゲーム全問正解：+${yen(A.perfect)}（1日${A.perfectPerDay}回まで）<br>⭐ ランクアップ：+${yen(A.rankUp)}<br><br>
+      合計は <b>最大 ${yen(A.max)}</b>。ほぼ毎日 BIG WIN した月だけ届く、本気の金額！<br>月末にしめて、次の月のはじめにもらえるよ。</div></div>`, { lockMs: 400 });
   }
-
   // ---------- ランク表・あそびかた ----------
   function pacePerDay() {
     const t = todayStr();
@@ -922,7 +940,7 @@
     const slides = [
       { e: '🏀', t: '毎日1本、シュートを打とう', b: 'ミッションをタップするとシュートが決まる！<br>1日1本でも打てば <b>🔥連続記録</b> がのびるよ。<br>部活で疲れた日は「1本だけ」でOK。<br><br>「サボり虫（6点）」に勝つと <b>WIN</b> → ガチャチケット🎟️' },
       { e: '⭐', t: 'ポイントでランクアップ', b: `スタートは <b>🪑 ベンチ見習い</b>。<br>ポイントがたまると<br><span class="tl-ladder">🪑 → 6️⃣ → 🏀 スタメン → ⭐ エース → ©️ キャプテン → 🏅 → 🥉 → 🥈 → 🥇 → 🇯🇵 日本代表 → ✈️ → 🌎 → 👑 レジェンド</span><br>全${RANKS.length}ランク！ 最初の1か月はどんどん上がるよ。<br>上のランクのマークをタップすると<b>ランク表</b>が見られる。` },
-      { e: '💰', t: 'おこづかいと連動！', b: `毎月のおこづかいは <b>基本${ALLOWANCE.base.toLocaleString()}円</b>。<br>勉強しない日が月${ALLOWANCE.restDays}日をこえると 1日 −${ALLOWANCE.missPenalty}円。<br><br>がんばるとボーナス！<br>🏆 WINした日 +${ALLOWANCE.win}円 ／ 💯 全問正解 +${ALLOWANCE.perfect}円 ／ ⭐ ランクUP +${ALLOWANCE.rankUp}円<br><br>合計 <b>最大${ALLOWANCE.max.toLocaleString()}円</b>！ ホーム画面でいつでも確認できるよ。` },
+      { e: '💰', t: 'おこづかいと連動！', b: `毎月のおこづかいは <b>基本${ALLOWANCE.base.toLocaleString()}円</b>。<br>勉強しない日が月${ALLOWANCE.restDays}日をこえると 1日 −${ALLOWANCE.missPenalty}円。<br><br>がんばるとボーナス！<br>🏆 WIN +${ALLOWANCE.win}円 ／ 🔥 BIG WIN（${ALLOWANCE.bigWinPts}点＋ミッション${ALLOWANCE.bigWinMissions}本）さらに +${ALLOWANCE.bigWin}円<br>💯 全問正解 +${ALLOWANCE.perfect}円 ／ ⭐ ランクUP +${ALLOWANCE.rankUp}円<br><br>合計 <b>最大${ALLOWANCE.max.toLocaleString()}円</b>。ほぼ毎日 BIG WIN した月だけ届く！` },
       { e: '💬', t: '声とガチャ', b: 'わからないこと・苦手なところ・「アプリこうしてほしい」は <b>💬声</b> へ。マイクで話すだけで送れるよ。<br>おうちの人から返事やエールが届く📣<br><br>チケットで <b>🎰ガチャ</b>。バスケ技カード34種類を集めよう！' },
     ];
     for (let k = 0; k < slides.length; k++) {
