@@ -3,11 +3,11 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
-<title>HOOP STUDY 保護者画面</title>
+<title>保護者画面（HOOP・STAR）</title>
 <meta name="theme-color" content="#0f1424">
 <meta name="robots" content="noindex">
 <meta name="apple-mobile-web-app-capable" content="yes">
-<meta name="apple-mobile-web-app-title" content="HOOP 管理">
+<meta name="apple-mobile-web-app-title" content="勉強アプリ管理">
 <link rel="apple-touch-icon" href="icons/icon-180.png">
 <link rel="icon" href="icons/icon-192.png">
 <link rel="preconnect" href="https://fonts.googleapis.com">
@@ -99,14 +99,22 @@ button.ghost { background: transparent; color: var(--sub); border: 1px solid var
 .goalt td, .goalt th { padding: 6px 4px; border-bottom: 1px solid var(--line); text-align: center; }
 .goalt th { color: var(--sub); font-weight: 600; }
 .btnlink { display: inline-block; padding: 11px 16px; border-radius: 12px; background: var(--accent); color: #fff; text-decoration: none; font-weight: 800; }
+.kids { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin: 12px 0 4px; }
+.kid { display: flex; flex-direction: column; gap: 2px; padding: 10px 12px; border-radius: 14px; background: var(--card); border: 2px solid var(--line); color: var(--text); text-decoration: none; }
+.kid b { font-size: 15px; }
+.kid span { font-size: 12px; color: var(--sub); }
+.kid.on { border-color: var(--accent); background: var(--accent-soft); }
+.hidden { display: none !important; }
 </style>
 </head>
 <body>
 <main>
   <div class="head">
-    <div><h1>🏀 HOOP STUDY</h1><div class="sub">保護者画面</div></div>
+    <div><h1 id="apptitle">保護者画面</h1><div class="sub">保護者画面（子どもを上で切りかえ）</div></div>
     <button class="ghost" id="reload">↻ 更新</button>
   </div>
+
+  <nav id="kids" class="kids"></nav>
 
   <section id="login" class="card hidden">
     <h2>保護者キーを入力</h2>
@@ -119,9 +127,9 @@ button.ghost { background: transparent; color: var(--sub); border: 1px solid var
     <div id="status"></div>
     <div class="kpis" id="kpis"></div>
 
-    <section class="card moneycard"><h2>💰 おこづかい</h2><div id="money"></div></section>
+    <section class="card moneycard" id="moneycard"><h2>💰 おこづかい</h2><div id="money"></div></section>
 
-    <section class="card voicecard"><h2>💬 娘さんの声（要望・わからない・苦手）</h2><div id="voices"></div></section>
+    <section class="card voicecard" id="voicecard"><h2>💬 娘さんの声（要望・わからない・苦手）</h2><div id="voices"></div></section>
 
     <section class="card"><h2>今日の様子</h2><ul class="tl" id="today"></ul></section>
 
@@ -135,7 +143,7 @@ button.ghost { background: transparent; color: var(--sub); border: 1px solid var
 
     <div class="grid2" style="margin-top:12px">
       <section class="card"><h2>苦手リスト（まちがえた回数）</h2><div id="weak"></div></section>
-      <section class="card"><h2>試合前チェック（テスト準備）</h2><div id="test"></div></section>
+      <section class="card" id="testcard"><h2>試合前チェック（テスト準備）</h2><div id="test"></div></section>
     </div>
 
     <section class="card"><h2>📣 エールを送る</h2>
@@ -155,8 +163,25 @@ button.ghost { background: transparent; color: var(--sub); border: 1px solid var
     </section>
   </div>
 </main>
-<script src="config.js"></script>
-<script src="data.js"></script>
+<script>
+// 子どもごとのアプリ。上のボタンで切りかえる（?kid=star）。記録はアプリごとに別のスプレッドシート
+window.KIDS = [
+  { id: 'hoop', label: '🏀 HOOP STUDY', who: '中学生', base: '', cfg: 'HOOP_CONFIG', pk: 'hoop_parent_key', voice: true },
+  { id: 'star', label: '🌟 STAR STUDY', who: '小4', base: 'star/', cfg: 'STAR_CONFIG', pk: 'star_parent_key', voice: false },
+];
+(function () {
+  var q = new URLSearchParams(location.search).get('kid');
+  var saved = ''; try { saved = localStorage.getItem('parent_kid') || ''; } catch (e) { /* noop */ }
+  var kid = KIDS.filter(function (k) { return k.id === q; })[0] || KIDS.filter(function (k) { return k.id === saved; })[0] || KIDS[0];
+  try { localStorage.setItem('parent_kid', kid.id); } catch (e) { /* noop */ }
+  window.KID = kid;
+  var load = function (src) { return new Promise(function (res, rej) { var s = document.createElement('script'); s.src = src; s.onload = res; s.onerror = rej; document.head.appendChild(s); }); };
+  // 全員の設定（送信先）→ 選んだ子のアプリの問題データ の順に読み込んでから表示
+  Promise.all(KIDS.map(function (k) { return load(k.base + 'config.js?v=' + Date.now()).catch(function () {}); }))
+    .then(function () { return load(kid.base + 'data.js?v=' + Date.now()); })
+    .then(function () { window.startParent(); });
+})();
+</script>
 <script>
 function calcAllowance(st, ym, today, cfg) {
   var A = cfg; var days = (st && st.days) || {};
@@ -192,9 +217,12 @@ function calcAllowance(st, ym, today, cfg) {
   var bonus = Math.min(A.bonusMax, bigs * A.bigWin + mvp * A.mvp + perfect * A.perfect + ranks * A.rankUp);
   return { ym: ym, studied: studied, missed: missed, restLeft: Math.max(0, A.restDays - missed), over: over, base: base, bigs: bigs, mvp: mvp, perfect: perfect, ranks: ranks, bonus: bonus, total: Math.min(A.max, base + bonus) };
 }
-(() => {
-  const CFG = window.HOOP_CONFIG || {};
-  const PK = 'hoop_parent_key';
+window.startParent = () => {
+  const KID = window.KID;
+  const CFG = window[KID.cfg] || {};
+  const PK = KID.pk;
+  const cfgOf = (k) => window[k.cfg] || {};
+  const keyOf = (k) => { try { return localStorage.getItem(k.pk) || ''; } catch (e) { return ''; } };
   const $ = (s) => document.querySelector(s);
   const esc = (s) => String(s).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
   const todayStr = (d = new Date()) => new Intl.DateTimeFormat('sv-SE', { timeZone: 'Asia/Tokyo' }).format(d);
@@ -204,12 +232,12 @@ function calcAllowance(st, ym, today, cfg) {
   const getKey = () => { try { return localStorage.getItem(PK) || ''; } catch (e) { return ''; } };
   const setKey = (k) => { try { k ? localStorage.setItem(PK, k) : localStorage.removeItem(PK); } catch (e) { /* noop */ } };
   const ICON = { mission: '🏀', quiz: '🎮', check: '✅', gacha: '🎰', undo: '↩️', cheer_read: '📣', test_set: '📅', goal_set: '🎯', voice: '💬', reset: '⚠️', timer: '⏱', trade: '🔄', complete: '👑', challenge: '📜', badge: '🏅', session: '📱' };
-  const QNAME = { speak: '🎤 スピーキング', listen: '🎧 リスニング', spell: 'スペル', plural: '複数形', kanji: '漢字よみ', weak: '苦手つぶし', 'qa:社会': '社会 一問一答', 'qa:理科': '理科 一問一答' };
+  const QNAME = { calc: '🧮 計算ダッシュ', speak: '🎤 スピーキング', listen: '🎧 リスニング', spell: 'スペル', plural: '複数形', kanji: '漢字よみ', weak: '苦手つぶし', 'qa:社会': '社会 一問一答', 'qa:理科': '理科 一問一答' };
 
   function showLogin(msg) { $('#login').classList.remove('hidden'); $('#dash').classList.add('hidden'); $('#loginmsg').textContent = msg || ''; }
 
   async function load() {
-    if (!CFG.GAS_URL) { showLogin('まだ記録の送信先（GAS_URL）が設定されていません。config.js を設定してください。'); return; }
+    if (!CFG.GAS_URL) { showLogin(`${KID.label} の記録先（スプレッドシート）は、まだ準備中です。準備ができると、ここに様子が出ます。`); $('#keyin').parentNode.classList.add('hidden'); return; }
     const key = getKey();
     if (!key) { showLogin(); return; }
     $('#reload').textContent = '読み込み中…';
@@ -218,7 +246,7 @@ function calcAllowance(st, ym, today, cfg) {
       const j = await r.json();
       if (!j.ok) { setKey(''); showLogin(j.error === 'key' ? '保護者キーが違うようです。' : '読み込めませんでした。'); return; }
       $('#login').classList.add('hidden'); $('#dash').classList.remove('hidden');
-      draw(j);
+      draw(j); drawKids(j);
     } catch (e) {
       showLogin('通信できませんでした。電波を確認して「更新」を押してください。');
     } finally { $('#reload').textContent = '↻ 更新'; }
@@ -374,8 +402,30 @@ function calcAllowance(st, ym, today, cfg) {
   $('#cheergo').addEventListener('click', sendCheer);
   $('#logout').addEventListener('click', () => { if (confirm('この端末から保護者キーを消しますか？')) { setKey(''); showLogin(); } });
   document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'visible' && getKey()) load(); });
+  // 子どもの切りかえボタン（今日の様子つき）
+  function drawKids(cur) {
+    const t = todayStr();
+    const chip = (k, j) => {
+      let info = '';
+      if (j && j.ok) { const st = j.state || {}; const d = (st.days || {})[t] || {}; info = `🔥${(st.summary && st.summary.streak) || 0}日 ・ 今日 ${d.pts || 0}P${d.win ? ' ・ WIN' : ''}`; }
+      else info = !cfgOf(k).GAS_URL ? '記録先 準備中' : !keyOf(k) ? 'キー未入力' : '…';
+      return `<a class="kid ${k.id === KID.id ? 'on' : ''}" href="?kid=${k.id}"><b>${k.label}</b><span>${esc(k.who)} ・ ${esc(info)}</span></a>`;
+    };
+    const res = {}; res[KID.id] = cur;
+    const paint = () => { $('#kids').innerHTML = KIDS.map((k) => chip(k, res[k.id])).join(''); };
+    paint();
+    KIDS.filter((k) => k.id !== KID.id && cfgOf(k).GAS_URL && keyOf(k)).forEach(async (k) => {
+      try { const r = await fetch(cfgOf(k).GAS_URL + '?' + new URLSearchParams({ action: 'dashboard', key: keyOf(k) })); res[k.id] = await r.json(); } catch (e) { res[k.id] = null; }
+      paint();
+    });
+  }
+  $('#apptitle').textContent = KID.label;
+  if (typeof ALLOWANCE !== 'undefined' && ALLOWANCE.on === false) $('#moneycard').classList.add('hidden');
+  if (!KID.voice) $('#voicecard').classList.add('hidden');
+  if (typeof TEST_CHECKS === 'undefined' || !TEST_CHECKS.length) $('#testcard').classList.add('hidden');
+  drawKids(null);
   load();
-})();
+};
 </script>
 </body>
 </html>
