@@ -59,7 +59,7 @@ function calcAllowance(st, ym, today, cfg) {
   function freshState() {
     return {
       v: 1, nick: '', sound: true, xp: 0, tickets: 1, days: {}, cards: {}, pulls: 0, pity: 0,
-      weak: { spell: {}, plural: {}, kanji: {}, qa: {}, past: {}, third: {}, hkanji: {} }, best: {},
+      weak: { spell: {}, plural: {}, kanji: {}, qa: {}, past: {}, third: {}, hkanji: {}, speak: {} }, best: {}, lastPlay: {},
       missions: DEFAULT_MISSIONS.map((m) => ({ ...m })),
       test: { name: '後期期末テスト', date: '', checks: {} },
       goals: {}, voices: [], voiceDays: {}, voiceWeek: '', cheerLog: [], startDate: todayStr(),
@@ -71,7 +71,7 @@ function calcAllowance(st, ym, today, cfg) {
   function migrate(s) {
     const f = freshState();
     for (const k in f) if (s[k] === undefined) s[k] = f[k];
-    for (const k of ['spell', 'plural', 'kanji', 'qa', 'past', 'third', 'hkanji']) if (!s.weak[k]) s.weak[k] = {};
+    for (const k of ['spell', 'plural', 'kanji', 'qa', 'past', 'third', 'hkanji', 'speak']) if (!s.weak[k]) s.weak[k] = {};
     const firstDay = Object.keys(s.days || {}).sort()[0];
     if (firstDay && firstDay < s.startDate) s.startDate = firstDay;
     return s;
@@ -183,8 +183,8 @@ function calcAllowance(st, ym, today, cfg) {
         ${over ? '<div class="tm-s">止め忘れてない？ 押すと、やった分だけ入力できるよ</div>' : ''}
         <button class="btn big" data-act="tstop">⏹ 終わった！</button></div>`;
     }
-    return `<div class="timer"><div class="tm-l">⏱ 紙の勉強タイマー${tm ? `<span class="tm-today">今日 ${tm}分</span>` : ''}</div>
-      <div class="tm-s">紙で勉強する時にスタート。${TIMER.perPts}分ごとに +1P（1日${TIMER.maxPts}Pまで）。${TIMER.winMin}分やればミッションと同じく WIN の条件クリア！</div>
+    return `<div class="timer mini"><div class="grow"><div class="tm-l">⏱ 紙の勉強タイマー${tm ? `<span class="tm-today">今日 ${tm}分</span>` : ''}</div>
+      <div class="tm-s">${TIMER.winMin}分で WIN の条件クリア ・ ${TIMER.perPts}分ごとに +1P</div></div>
       <button class="btn" data-act="tstart">▶ スタート</button></div>`;
   }
   function startTimer() { S.timer = { start: Date.now(), date: todayStr() }; save(); sfx.buzzer(); toast('⏱ スタート！ 終わったら「終わった！」を押してね'); render(); }
@@ -426,21 +426,19 @@ function calcAllowance(st, ym, today, cfg) {
   function viewHome() {
     const t = todayStr(); const d = S.days[t] || { m: [], pts: 0, win: false, ck: 0 };
     const st = streak(); const today = played(t);
-    const msg = today ? `今日もナイス！ 明日も1本で ${st + 1}日連続` : st > 0 ? `今日1本打てば ${st + 1}日連続！` : '今日から連続記録スタート！';
     const cheer = S.lastCheer && diffDays(S.lastCheer.date, t) <= 3
       ? `<div class="cheer">📣 <b>おうちからのエール</b><br>${esc(S.lastCheer.text)}</div>` : '';
     const left = RIVAL.score + 1 - d.pts;
+    // 上から「今の状態 → すぐやる1つ → 紙のミッション」の順。くわしい数字はタップした先に置く
     return header() + coachBox() + `
-      <div class="streak"><div class="flame ${today ? '' : 'cold'}">🔥</div>
-        <div><div class="streak-num">${st}<small>日連続</small></div><div class="streak-msg">${msg}</div></div></div>
-      ${cheer}
-      <div class="board"><div><div class="lbl">YOU</div><div class="sc">${d.pts}</div></div>
-        <div><div class="vs">VS</div><div class="clock">${t.slice(5).replace('-', '/')}</div></div>
-        <div><div class="lbl">${esc(RIVAL.name)}</div><div class="sc away">${RIVAL.score}</div></div></div>
+      <div class="status">
+        <div class="st-streak"><span class="flame ${today ? '' : 'cold'}">🔥</span><b>${st}</b><small>日連続</small></div>
+        <div class="st-score"><span class="lbl">YOU</span><b class="sc">${d.pts}</b><span class="vs">VS</span><b class="sc away">${RIVAL.score}</b><span class="lbl">${esc(RIVAL.name)}</span></div>
+      </div>
       <div class="winmsg ${d.win ? 'win' : ''}">${d.win ? '🏆 今日はWIN！ ナイスゲーム！' : left > 0 ? `あと ${left} 点で WIN → ガチャチケット！` : '紙のミッション1本（または⏱タイマー10分）で WIN！'}</div>
       ${allowanceCard()}
-      ${timerCard()}
-      ${weakCall()}
+      ${cheer}
+      ${heroButton()}
       <div class="sec-title"><h2>今日のミッション</h2><span>${bigProgress(d)}</span></div>
       <div class="missions">${S.missions.map((m) => {
         const done = d.m.includes(m.id);
@@ -448,7 +446,36 @@ function calcAllowance(st, ym, today, cfg) {
           <div class="tx"><div class="lb">${esc(m.label)}</div><div class="mt">${esc(m.sub)} ・ ${m.pts}P${ALLOWANCE.stdMissions.includes(m.id) ? '' : ' ・ おこづかい対象外'}</div></div>
           <button class="shoot-btn" data-act="mission" data-id="${esc(m.id)}">${done ? '✓ IN' : 'SHOOT'}</button></div>`;
       }).join('')}</div>
+      ${timerCard()}
       <div class="sync" id="sync"></div>`;
+  }
+  // ---------- おまかせ（今やるといいゲームを1つ選ぶ。迷わずすぐ始められるように） ----------
+  function gameKinds() { return ['speak', 'spell', 'plural', 'kanji', ...qaSubjects().map((x) => 'qa:' + x), 'challenge']; }
+  const playedToday = (k) => ((S.days[todayStr()] || {}).qk || []).includes(k);
+  function autoPick() {
+    const d = S.days[todayStr()] || {};
+    const n = weakTotal();
+    if (n >= WEAK_BONUS_MIN && !d.wkt) return { kind: 'weak', why: `苦手が${n}問。全問正解で 🎟️ +1` };
+    if (!playedToday('speak')) return { kind: 'speak', why: '今日はまだ英語を声に出してないよ（5問・2分）' };
+    // まだ今日やっていないものの中で、いちばん長くやっていないもの（チャレンジは上級なので最後）
+    const c = gameKinds().filter((k) => !playedToday(k));
+    const pool = c.length ? c : gameKinds();
+    const oldest = pool.reduce((a, k) => ((S.lastPlay[k] || '') < (S.lastPlay[a] || '') ? k : a), pool[0]);
+    const last = S.lastPlay[oldest];
+    return { kind: oldest, why: !last ? 'まだやったことがないゲーム！' : c.length ? `${diffDays(last, todayStr())}日ぶりのゲーム` : 'もう1回、自己ベストに挑戦！' };
+  }
+  const KIND_ICON = { speak: '🎤', spell: '🔤', plural: '📦', kanji: '漢', weak: '🎯', challenge: '👑' };
+  const kindIcon = (k) => KIND_ICON[k] || ({ 理科: '🧪', 社会: '🗾', 数学: '📐', 国語: '✍️' }[k.slice(3)] || '📚');
+  function heroButton() {
+    const p = autoPick();
+    return `<button class="hero" data-act="omakase" data-kind="${esc(p.kind)}"><span class="hero-k">▶ おまかせ</span>
+      <span class="hero-t">${kindIcon(p.kind)} ${esc(quizName(p.kind))}</span><span class="hero-s">${esc(p.why)}</span><span class="hero-a">START</span></button>`;
+  }
+  function playKind(kind) { if (kind === 'speak') startSpeak(); else startQuiz(kind); }
+  function markPlayed(kind) {
+    const d = day(); d.qk = d.qk || [];
+    if (!d.qk.includes(kind)) d.qk.push(kind);
+    S.lastPlay[kind] = todayStr();
   }
   // ---------- コーチ（キャラクターが吹き出しで話す） ----------
   function coachSvg(mood = 'happy') {
@@ -479,6 +506,7 @@ function calcAllowance(st, ym, today, cfg) {
     const add = (k, mood) => (L[k] || []).forEach((s) => out.push({ text: fillLine(s, v), mood }));
     if (S.timer) add('timer', 'happy');
     if (d.pts > 0 && !paperDone(d)) add('gameOnly', 'think');
+    if (played(t) && !(d.qk || []).includes('speak')) add('speakNotYet', 'wink');
     if (stdCount(d) >= ALLOWANCE.bigWinMissions) add('bigDone', 'fire');
     else if (left > 0 && left <= 2 && stdCount(d) > 0) add('nearBig', 'fire');
     if (!played(t)) add('notYet', 'think');
@@ -523,19 +551,22 @@ function calcAllowance(st, ym, today, cfg) {
   function qaSubjects() { return [...new Set(BANK.qa.map((x) => x.s))]; }
   function viewGame() {
     const weakN = weakTotal();
-    const best = (k) => S.best[k] != null ? `<span class="best">ベスト ${S.best[k]}/${QUIZ_LEN}</span>` : '<span class="best">まだ挑戦してない</span>';
-    const qaCards = qaSubjects().map((s, i) => `<button class="gamecard ${i % 2 ? 'gc-qa2' : 'gc-qa'}" data-act="quiz" data-kind="qa:${esc(s)}"><h3>${esc(s)} 一問一答</h3><p>4択で答えよう。<br>ワークで出た言葉も、おうちの人が追加できるよ。</p>${best('qa:' + s)}<span class="big">${{ 理科: '🧪', 社会: '🗾', 数学: '📐', 国語: '✍️' }[s] || '📚'}</span></button>`).join('');
-    return header() + paperNudge() + `
-      <div class="sec-title"><h2>ミニゲーム</h2><span>1問24秒・連続正解で🔥</span></div>
-      <div class="games">
-        <button class="gamecard gc-challenge" data-act="quiz" data-kind="challenge"><h3>🏆 チャレンジ（上級）</h3><p>過去形・3単現・むずかしい漢字・一問一答。<br>1問15秒！ 全問正解で <b>おこづかい +${ALLOWANCE.perfect}円</b></p>${best('challenge')}<span class="big">👑</span></button>
-        <button class="gamecard gc-weak" data-act="quiz" data-kind="weak"><h3>苦手つぶし</h3><p>まちがえた問題だけが出る。<br>正解すると苦手リストから消える！<br>${WEAK_BONUS_MIN}問以上を全問正解で <b>🎟️ +1</b>（1日1回）</p><span class="best">苦手 ${weakN} 問</span><span class="big">🎯</span></button>
-        <button class="gamecard gc-spell" data-act="quiz" data-kind="spell"><h3>スペル・シュート</h3><p>日本語を見て英単語を書こう。<br>大文字にも注意！</p>${best('spell')}<span class="big">🔤</span></button>
-        <button class="gamecard gc-plural" data-act="quiz" data-kind="plural"><h3>複数形チャレンジ</h3><p>box → boxes、child → children。<br>テストで落としやすいところ！</p>${best('plural')}<span class="big">📦</span></button>
-        <button class="gamecard gc-kanji" data-act="quiz" data-kind="kanji"><h3>漢字よみ速攻</h3><p>4択で読みを当てよう。<br>覚えたら紙にも書いてね ✍️</p>${best('kanji')}<span class="big">漢</span></button>
-        ${qaCards}
+    const best = (k, n = QUIZ_LEN) => (S.best[k] != null ? `ベスト ${S.best[k]}/${n}` : 'NEW');
+    const tile = (k, cls, sub) => `<button class="tile ${cls}" data-act="quiz" data-kind="${esc(k)}"><span class="t-e">${kindIcon(k)}</span><span class="t-n">${esc(quizName(k))}</span><span class="t-b">${sub}</span></button>`;
+    const qaTiles = qaSubjects().map((s, i) => tile('qa:' + s, i % 2 ? 'gc-qa2' : 'gc-qa', best('qa:' + s))).join('');
+    // おまかせがスピーキングを選んでいる時は、同じボタンを2つ並べない
+    const speakCard = autoPick().kind === 'speak' ? '' : `<button class="speakcard" data-act="speak"><span class="sp-e">🎤</span><span class="sp-t"><b>スピーキング</b><small>お手本を聞いて、英語で話そう ・ 5問</small></span><span class="sp-b">${best('speak', SPEAK_LEN)}</span></button>`;
+    return header() + paperNudge() + heroButton() + speakCard + `
+      <div class="sec-title"><h2>ゲームをえらぶ</h2><span>1問 1P</span></div>
+      <div class="tiles">
+        ${tile('challenge', 'gc-challenge', `全問正解 +${ALLOWANCE.perfect}円`)}
+        ${tile('weak', 'gc-weak', `苦手 ${weakN}問`)}
+        ${tile('spell', 'gc-spell', best('spell'))}
+        ${tile('plural', 'gc-plural', best('plural'))}
+        ${tile('kanji', 'gc-kanji', best('kanji'))}
+        ${qaTiles}
       </div>
-      <p class="note" style="margin-top:14px">1問正解 1P。全問正解（10/10）で +2P ボーナス＆ガチャチケット（1日2枚まで）。<br>今日の WIN には、紙のミッション1本か ⏱タイマー10分が必要だよ ✍️<br>「出してほしい問題」は 💬声 で教えてね。</p>`;
+      <p class="note" style="margin-top:14px">全問正解で +2P ＆ 🎟️（1日2枚まで）。今日の WIN には紙のミッション1本か ⏱タイマー10分が必要だよ ✍️</p>`;
   }
   function phaseOf(left) { return left == null ? null : ROADMAP.findIndex((p) => left <= p.from && left >= p.to); }
   function viewTest() {
@@ -857,7 +888,7 @@ function calcAllowance(st, ym, today, cfg) {
     return qs;
   }
   function quizName(kind) {
-    return { spell: 'スペル・シュート', plural: '複数形チャレンジ', kanji: '漢字よみ速攻', weak: '苦手つぶし', challenge: 'チャレンジ（上級）' }[kind] || (kind.startsWith('qa:') ? kind.slice(3) + ' 一問一答' : kind);
+    return { speak: 'スピーキング', spell: 'スペル・シュート', plural: '複数形チャレンジ', kanji: '漢字よみ速攻', weak: '苦手つぶし', challenge: 'チャレンジ（上級）' }[kind] || (kind.startsWith('qa:') ? kind.slice(3) + ' 一問一答' : kind);
   }
   function quizSubject(kind) {
     return kind === 'kanji' ? '国語' : kind === 'weak' || kind === 'challenge' ? '全教科' : kind.startsWith('qa:') ? (SUBJECTS.includes(kind.slice(3)) ? kind.slice(3) : '全教科') : '英語';
@@ -967,6 +998,7 @@ function calcAllowance(st, ym, today, cfg) {
       let weakTicket = false;
       if (kind === 'weak' && !quit && n >= WEAK_BONUS_MIN && st.ok === n && !d.wkt) { d.wkt = 1; S.tickets++; weakTicket = true; }
       if (kind !== 'weak') S.best[kind] = Math.max(S.best[kind] || 0, st.ok);
+      markPlayed(kind);
       const subject = quizSubject(kind);
       const sec = Math.round((Date.now() - st.t0) / 1000);
       const info = { kind, n, ok: st.ok, maxCombo: st.maxCombo, miss: st.miss.map((q) => q.key), sec, quit: quit || undefined, weakBonus: weakTicket || undefined };
@@ -1003,6 +1035,320 @@ function calcAllowance(st, ym, today, cfg) {
       if (qz) { if (confirm('やめる？（ここまでの正解は得点になるよ）')) finish(true); }
     });
     q$('.qform').addEventListener('submit', (e) => { e.preventDefault(); if (input.value.trim()) answer(input.value); });
+    sfx.buzzer();
+    show();
+  }
+
+  // ---------- スピーキング（お手本を聞く → 英語で話す → 聞き取れた単語を色分け） ----------
+  // 端末の音声認識（英語）で聞き取り、お手本の単語と順番どおりに照らし合わせる。
+  // 音声認識が使えない端末では「録音 → 聞き比べ → 自分で判定」に切りかえる（このときは全問正解のチケットなし）
+  const SPEAK_LEN = SPEAK_PLAN.length;
+  const SPEAK_PASS = 0.8;
+  const SpeechRec = window.SpeechRecognition || window.webkitSpeechRecognition;
+  let speakAuto = !!SpeechRec;
+  const SPK_EXPAND = { "i'm": 'i am', "you're": 'you are', "he's": 'he is', "she's": 'she is', "it's": 'it is', "that's": 'that is', "we're": 'we are', "they're": 'they are', "what's": 'what is', "where's": 'where is', "let's": 'let us', "don't": 'do not', "doesn't": 'does not', "didn't": 'did not', "can't": 'can not', cannot: 'can not', "isn't": 'is not', "aren't": 'are not', "i'd": 'i would', okay: 'ok', "o'clock": 'oclock' };
+  const SPK_NUM = ['zero', 'one', 'two', 'three', 'four', 'five', 'six', 'seven', 'eight', 'nine', 'ten', 'eleven', 'twelve'];
+  function spkWords(text) {
+    return String(text).toLowerCase().replace(/[’‘]/g, "'").replace(/(\d+):00/g, '$1 oclock').replace(/\bo clock\b/g, 'oclock')
+      .replace(/[^a-z0-9' ]+/g, ' ').split(/\s+/).filter(Boolean)
+      .flatMap((w) => (SPK_EXPAND[w] || (SPK_NUM[w] ? SPK_NUM[w] : w)).split(' '))
+      .map((w) => w.replace(/'/g, '')).filter(Boolean);
+  }
+  // 1文字ちがいまでは同じ単語とみなす（practised / practiced など。短い単語は完全一致だけ）
+  function sameWord(a, b) {
+    if (a === b) return true;
+    if (a.length < 5 || Math.abs(a.length - b.length) > 1) return false;
+    let i = 0; while (i < a.length && a[i] === b[i]) i++;
+    let j = 0; while (j < a.length - i && j < b.length - i && a[a.length - 1 - j] === b[b.length - 1 - j]) j++;
+    return Math.max(a.length, b.length) - i - j <= 1;
+  }
+  // お手本の単語のうち、順番どおりに言えたものに印をつける（最長共通部分列）
+  function matchWords(target, heard) {
+    const n = target.length, m = heard.length;
+    const L = Array.from({ length: n + 1 }, () => new Array(m + 1).fill(0));
+    for (let i = n - 1; i >= 0; i--) for (let j = m - 1; j >= 0; j--) L[i][j] = sameWord(target[i], heard[j]) ? L[i + 1][j + 1] + 1 : Math.max(L[i + 1][j], L[i][j + 1]);
+    const ok = new Array(n).fill(false);
+    for (let i = 0, j = 0; i < n && j < m; ) { if (sameWord(target[i], heard[j])) { ok[i] = true; i++; j++; } else if (L[i + 1][j] >= L[i][j + 1]) i++; else j++; }
+    return ok;
+  }
+  function gradeSpeak(item, alts) {
+    let best = { score: 0, ok: [], heard: '' };
+    for (const h of alts) {
+      const hw = spkWords(h);
+      if (item.mode === 'talk') {
+        const need = spkWords(item.tpl.replace('___', ' '));
+        const ok = matchWords(need, hw);
+        const got = ok.filter(Boolean).length;
+        const extra = hw.length > got; // ___ の部分に自分のことを言えたか
+        const score = need.length ? (got / need.length) * (extra ? 1 : 0.7) : 0;
+        if (score > best.score || !best.heard) best = { score, ok, heard: h, extra };
+      } else {
+        const tw = spkWords(item.en);
+        const ok = matchWords(tw, hw);
+        const score = tw.length ? ok.filter(Boolean).length / tw.length : 0;
+        if (score > best.score || !best.heard) best = { score, ok, heard: h };
+      }
+    }
+    return best;
+  }
+  // お手本の読み上げ（端末の英語の声）
+  let enVoice = null;
+  function pickVoice() {
+    if (!window.speechSynthesis) return;
+    const vs = speechSynthesis.getVoices();
+    enVoice = vs.find((v) => /^en[-_]US/i.test(v.lang) && /Samantha|Ava|Allison|Google US/i.test(v.name)) || vs.find((v) => /^en[-_]US/i.test(v.lang)) || vs.find((v) => /^en/i.test(v.lang)) || null;
+  }
+  if (window.speechSynthesis) { pickVoice(); speechSynthesis.onvoiceschanged = pickVoice; }
+  function sayEn(text, slow) {
+    return new Promise((res) => {
+      if (!window.speechSynthesis) { res(); return; }
+      speechSynthesis.cancel();
+      const u = new SpeechSynthesisUtterance(text);
+      u.lang = 'en-US'; if (enVoice) u.voice = enVoice; u.rate = slow ? 0.6 : 0.9;
+      const to = setTimeout(res, 9000);
+      u.onend = u.onerror = () => { clearTimeout(to); res(); };
+      speechSynthesis.speak(u);
+    });
+  }
+  // 英語を1回聞き取る。もう一度ボタンを押す・黙る・9秒たつ のどれかで終わる
+  let spkRec = null;
+  function hearEnglish(onInterim) {
+    return new Promise((res) => {
+      let r;
+      try { r = new SpeechRec(); } catch (e) { res({ alts: [], error: 'init' }); return; }
+      r.lang = 'en-US'; r.interimResults = true; r.continuous = false; r.maxAlternatives = 3;
+      let alts = []; let done = false;
+      const fin = (x) => { if (done) return; done = true; clearTimeout(cap); spkRec = null; try { r.abort(); } catch (e) { /* noop */ } res(x); };
+      r.onresult = (e) => {
+        const k = Math.max(...Array.from(e.results, (x) => x.length));
+        alts = Array.from({ length: k }, (_, a) => Array.from(e.results, (x) => x[Math.min(a, x.length - 1)].transcript).join(' ').trim()).filter(Boolean);
+        if (onInterim && alts[0]) onInterim(alts[0]);
+        if (e.results[e.results.length - 1].isFinal) fin({ alts });
+      };
+      r.onerror = (e) => fin({ alts, error: e.error });
+      r.onend = () => fin({ alts });
+      const cap = setTimeout(() => { try { r.stop(); } catch (e) { fin({ alts }); } setTimeout(() => fin({ alts }), 1200); }, 9000);
+      try { r.start(); spkRec = r; } catch (e) { fin({ alts: [], error: 'start' }); }
+    });
+  }
+  // 録音して自分の声を聞き比べる（音声認識が使えない時）
+  let selfRec = null;
+  async function recordStart() {
+    if (!navigator.mediaDevices || !window.MediaRecorder) return false;
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      const mr = new MediaRecorder(stream); const chunks = [];
+      mr.ondataavailable = (e) => { if (e.data && e.data.size) chunks.push(e.data); };
+      selfRec = { mr, stream, chunks, done: new Promise((res) => { mr.onstop = () => { stream.getTracks().forEach((t) => t.stop()); res(chunks.length ? URL.createObjectURL(new Blob(chunks, { type: mr.mimeType || 'audio/mp4' })) : null); }; }) };
+      mr.start();
+      return true;
+    } catch (e) { return false; }
+  }
+  async function recordStop() { if (!selfRec) return null; const r = selfRec; selfRec = null; try { r.mr.stop(); } catch (e) { /* noop */ } return r.done; }
+
+  function buildSpeak() {
+    const wk = S.weak.speak;
+    const sent = sampleItems(SPEAK_SENTENCES.map((w) => ({ en: w[0], ja: w[1] })), SPEAK_PLAN.filter((m) => m !== 'talk').length, 'speak', (x) => x.en);
+    const talk = sampleItems(SPEAK_TALK.map((w) => ({ q: w[0], ja: w[1], tpl: w[2], ex: w[3] })), SPEAK_PLAN.filter((m) => m === 'talk').length, 'speak', (x) => x.q);
+    let si = 0, ti = 0;
+    return SPEAK_PLAN.map((mode) => (mode === 'talk' ? { mode, key: talk[ti].q, ...talk[ti++] } : { mode, key: sent[si].en, ...sent[si++] })).map((x) => ({ ...x, weak: !!wk[x.key] }));
+  }
+  const firstLetters = (en) => en.replace(/[A-Za-z']+/g, (w) => w[0] + '_'.repeat(Math.max(0, w.length - 1)));
+  function startSpeak() {
+    const items = buildSpeak();
+    const st = { i: 0, ok: 0, pts: 0, miss: [], scores: [], tries: 0, best: 0, cleared: false, ended: false, busy: false, auto: speakAuto, t0: Date.now() };
+    const el = document.createElement('div'); el.className = 'ov';
+    el.style.background = 'radial-gradient(circle at 50% 30%, #0f3b4f, #05070d)';
+    el.innerHTML = `<div class="quiz spk">
+      <div class="qhead"><button class="qclose" data-s="quit">✕ やめる</button><div class="qprog"><i></i></div><div class="combo"></div></div>
+      <div class="qbody">
+        <div class="spk-mode"></div>
+        <div class="spk-q"></div>
+        <div class="spk-en"></div>
+        <div class="spk-ja"></div>
+        <div class="row spk-listen"><button class="btn ghost" data-s="play">🔊 お手本</button><button class="btn ghost" data-s="slow">🐢 ゆっくり</button></div>
+        <button class="spk-mic" data-s="mic"><span class="mic-i">🎤</span><span class="mic-t">押して話す</span></button>
+        <div class="spk-heard"></div>
+        <div class="judge"></div>
+        <div class="row spk-next hidden" style="width:100%"><button class="btn ghost" style="flex:1" data-s="retry">もう1回</button><button class="btn" style="flex:1" data-s="next">次へ ▶</button></div>
+      </div></div>`;
+    document.body.appendChild(el);
+    const q$ = (x) => el.querySelector(x);
+    const cur = () => items[st.i];
+    const modeLabel = { repeat: '🔁 リピート ・ お手本のとおりに言おう', say: '🇯🇵→🇺🇸 英語で言ってみよう', talk: '💬 会話 ・ コーチの質問に答えよう' };
+    const spoken = (it) => (it.mode === 'talk' ? it.q : it.en);
+    function wordsHtml(it, ok) {
+      return it.en.split(/\s+/).map((w, i) => `<span class="w ${ok ? (ok[i] ? 'ok' : 'ng') : ''}" data-w="${esc(w.replace(/[^A-Za-z']/g, ''))}">${esc(w)}</span>`).join(' ');
+    }
+    // 句読点つきの単語と、照らし合わせ用の単語の数がずれないように、表示の単語ごとに判定し直す
+    function okPerShown(it, heardAlts) {
+      const shown = it.en.split(/\s+/);
+      const flat = []; const owner = [];
+      shown.forEach((w, i) => spkWords(w).forEach((x) => { flat.push(x); owner.push(i); }));
+      let bestOk = null, bestN = -1;
+      for (const h of heardAlts) { const ok = matchWords(flat, spkWords(h)); const n = ok.filter(Boolean).length; if (n > bestN) { bestN = n; bestOk = ok; } }
+      const res = shown.map(() => true);
+      owner.forEach((o, k) => { if (!bestOk || !bestOk[k]) res[o] = false; });
+      return res;
+    }
+    function show() {
+      const it = cur();
+      st.tries = 0; st.best = 0; st.cleared = false; st.busy = false;
+      q$('.qprog i').style.width = (st.i / items.length) * 100 + '%';
+      q$('.combo').textContent = `${st.i + 1}/${items.length}`;
+      q$('.spk-mode').textContent = modeLabel[it.mode] + (it.weak ? ' ・ 🎯前回の苦手' : '');
+      q$('.judge').textContent = ''; q$('.judge').className = 'judge';
+      q$('.spk-heard').textContent = st.auto ? '' : '自分の声を録音して、お手本と聞き比べよう';
+      q$('.spk-next').classList.add('hidden');
+      q$('.spk-mic').classList.remove('hidden', 'rec');
+      q$('.mic-t').textContent = st.auto ? '押して話す' : '押して録音';
+      if (it.mode === 'talk') {
+        q$('.spk-q').innerHTML = `${coachSvg('happy')}<span><b>${esc(it.q)}</b><small>${esc(it.ja)}</small></span>`;
+        q$('.spk-q').classList.remove('hidden');
+        q$('.spk-en').innerHTML = `<span class="tpl">${esc(it.tpl).replace('___', '<i>＿＿＿</i>')}</span>`;
+        q$('.spk-ja').textContent = '＿＿＿ に自分のことを入れて答えよう';
+        q$('[data-s="play"]').textContent = '🔊 質問';
+      } else {
+        q$('.spk-q').classList.add('hidden');
+        q$('.spk-en').innerHTML = it.mode === 'say' ? `<span class="hint">${esc(firstLetters(it.en))}</span>` : wordsHtml(it);
+        q$('.spk-ja').textContent = it.ja;
+        q$('[data-s="play"]').textContent = it.mode === 'say' ? '🔊 答えを聞く' : '🔊 お手本';
+      }
+      // リピートと会話は最初にお手本（質問）を読み上げる。「英語で言ってみよう」は自分で考えてから
+      if (it.mode !== 'say' && S.sound) sayEn(spoken(it));
+    }
+    function judgeShow(g) {
+      const it = cur();
+      const pct = Math.round(g.score * 100);
+      const pass = it.mode === 'talk' ? g.score >= 0.999 : g.score >= SPEAK_PASS;
+      if (it.mode !== 'talk') q$('.spk-en').innerHTML = wordsHtml(it, okPerShown(it, g.alts));
+      else q$('.spk-en').innerHTML = `<span class="tpl">${esc(it.tpl).replace('___', '<i>＿＿＿</i>')}</span><div class="ex">例：${esc(it.ex)}</div>`;
+      q$('.spk-heard').textContent = g.heard ? `聞こえた：「${g.heard}」` : '';
+      const j = q$('.judge');
+      if (pass) { j.innerHTML = `${pct >= 95 ? 'PERFECT!' : 'NICE!'} <small>${pct}点</small>`; j.className = 'judge ok'; sfx.ok(); if (pct >= 95) confetti(40); }
+      else {
+        j.innerHTML = `おしい！ <small>${pct}点</small>`; j.className = 'judge ng'; sfx.ng();
+        q$('.spk-heard').textContent += it.mode === 'talk' ? (g.extra ? '　→ 答えの型の単語を全部入れよう' : '　→ ＿＿＿ に自分のことも言おう') : '　→ 赤い単語をタップすると発音が聞けるよ';
+      }
+      return pass;
+    }
+    function settle(pass) {
+      st.tries++;
+      if (pass && !st.cleared) { st.cleared = true; st.ok++; st.pts += 1; }
+      q$('.spk-next').classList.remove('hidden');
+      q$('[data-s="retry"]').classList.toggle('hidden', st.cleared || st.tries >= 3);
+      q$('.spk-mic').classList.add('hidden');
+      if (st.cleared || st.tries >= 3) q$('[data-s="next"]').textContent = st.i + 1 < items.length ? '次へ ▶' : '結果を見る 🏁';
+      else q$('[data-s="next"]').textContent = 'パス ▶';
+    }
+    async function onMic() {
+      if (st.busy) {
+        if (spkRec) { try { spkRec.stop(); } catch (e) { /* noop */ } } else if (selfRec) selfStop();
+        return;
+      }
+      st.busy = true;
+      if (window.speechSynthesis) speechSynthesis.cancel();
+      const mic = q$('.spk-mic');
+      if (!st.auto) {
+        if (!(await recordStart())) { st.busy = false; selfJudge(null); return; }
+        mic.classList.add('rec'); q$('.mic-t').textContent = '話したら押して止める';
+        return;
+      }
+      mic.classList.add('rec'); q$('.mic-t').textContent = '聞いてるよ…（終わったら押す）';
+      q$('.spk-heard').textContent = '';
+      const r = await hearEnglish((txt) => { q$('.spk-heard').textContent = `🎧 ${txt}`; });
+      mic.classList.remove('rec'); q$('.mic-t').textContent = '押して話す';
+      st.busy = false;
+      if (st.ended) return;
+      if (r.error === 'not-allowed' || r.error === 'service-not-allowed' || r.error === 'init' || r.error === 'start' || r.error === 'audio-capture') {
+        // この端末では聞き取りが使えない → 録音モードに切りかえ
+        speakAuto = false; st.auto = false;
+        q$('.mic-t').textContent = '押して録音';
+        q$('.spk-heard').textContent = 'このスマホでは英語の聞き取りが使えなかったので、録音して聞き比べるモードにしたよ（マイクを許可すると聞き取りも使えることがあるよ）';
+        return;
+      }
+      if (!r.alts.length) { q$('.spk-heard').textContent = r.error === 'network' ? '電波が弱くて聞き取れなかった… もう1回押してね' : '聞こえなかった… もう少し大きな声で、もう1回！'; return; }
+      const g = { ...gradeSpeak(cur(), r.alts), alts: r.alts };
+      settle(judgeShow(g));
+    }
+    async function selfStop() {
+      const url = await recordStop();
+      q$('.spk-mic').classList.remove('rec'); q$('.mic-t').textContent = '押して録音';
+      st.busy = false;
+      selfJudge(url);
+    }
+    function selfJudge(url) {
+      const it = cur();
+      if (it.mode === 'say') q$('.spk-en').innerHTML = wordsHtml(it);
+      if (it.mode === 'talk') q$('.spk-en').innerHTML = `<span class="tpl">${esc(it.tpl).replace('___', '<i>＿＿＿</i>')}</span><div class="ex">例：${esc(it.ex)}</div>`;
+      q$('.spk-heard').innerHTML = url ? `<button class="btn ghost" data-s="mine">▶ 自分の声</button> <button class="btn ghost" data-s="model">🔊 お手本</button><div style="margin-top:8px">お手本と聞き比べて、言えた？</div>` : '声に出して言えた？';
+      if (url) { st.selfUrl = url; new Audio(url).play().catch(() => {}); }
+      q$('.spk-mic').classList.add('hidden');
+      q$('.spk-next').classList.remove('hidden');
+      q$('[data-s="retry"]').classList.remove('hidden'); q$('[data-s="retry"]').textContent = 'もう1回';
+      q$('[data-s="next"]').textContent = '言えた！ ✓';
+      st.selfAsk = true;
+    }
+    function next() {
+      const it = cur();
+      if (st.selfAsk) { st.selfAsk = false; if (!st.cleared) { st.cleared = true; st.ok++; st.pts += 1; } sfx.ok(); }
+      const wk = S.weak.speak;
+      if (st.cleared) { if (wk[it.key]) { wk[it.key]--; if (wk[it.key] <= 0) delete wk[it.key]; } }
+      else { wk[it.key] = (wk[it.key] || 0) + 1; st.miss.push(it); }
+      save();
+      st.i++;
+      if (st.i < items.length) show(); else finish(false);
+    }
+    function finish(quit) {
+      if (st.ended) return;
+      st.ended = true;
+      if (window.speechSynthesis) speechSynthesis.cancel();
+      if (spkRec) try { spkRec.abort(); } catch (e) { /* noop */ }
+      recordStop();
+      const n = quit ? st.i : items.length;
+      if (quit && n === 0) { el.remove(); return; }
+      const d = day();
+      const perfect = !quit && st.auto && st.ok === n && n >= SPEAK_LEN;
+      let ticket = false;
+      if (perfect) { st.pts += 2; if (d.perfect < 2) { d.perfect++; S.tickets++; ticket = true; } }
+      S.best.speak = Math.max(S.best.speak || 0, st.ok);
+      markPlayed('speak');
+      const info = { kind: 'speak', n, ok: st.ok, miss: st.miss.map((x) => x.key), sec: Math.round((Date.now() - st.t0) / 1000), quit: quit || undefined, mode: st.auto ? 'auto' : 'self' };
+      const r = st.pts > 0 ? addPoints(st.pts, 'quiz', 'スピーキング', '英語', info) : null;
+      if (!r) { save(); logEvent('quiz', 'スピーキング', '英語', 0, info); }
+      const tot = st.pts + (r && r.tipoff ? 1 : 0);
+      if (perfect) { sfx.fanfare(); confetti(220); } else if (st.ok >= n * 0.6) { sfx.coin(); confetti(80); } else sfx.tap();
+      el.querySelector('.quiz').innerHTML = `<div class="qbody result">
+        <div style="font-family:var(--display);font-weight:800;font-size:18px">🎤 スピーキング</div>
+        <div class="big">${st.ok}<span style="font-size:28px">/${n}</span></div>
+        <div class="lvup-title" style="font-size:${perfect ? 40 : 30}px">${perfect ? 'PERFECT!!' : st.ok >= n * 0.6 ? 'GREAT!' : 'NICE TRY!'}</div>
+        <div class="shot-pts" style="opacity:1">+${tot} PTS</div>
+        ${ticket ? '<div class="newtag">全問クリア ボーナス 🎟️ +1</div>' : ''}
+        ${st.miss.length ? `<ul>${st.miss.map((x) => `<li>${esc(x.mode === 'talk' ? x.ex : x.en)}</li>`).join('')}</ul><div class="note">↑ 次のスピーキングにもう一度出るよ。声に出して3回言ってみよう</div>` : ''}
+        ${coachQuizLine(perfect, st.ok, n)}
+        ${paperNudge()}
+        <div class="row" style="width:100%;margin-top:14px"><button class="btn ghost" style="flex:1" data-s="again">もう1回</button><button class="btn" style="flex:1" data-s="close">とじる</button></div>
+      </div>`;
+      el.addEventListener('click', async (e) => {
+        const a = e.target.closest('[data-s="again"],[data-s="close"],[data-tab]'); if (!a) return;
+        el.remove();
+        if (r) await afterEffects(r); else render();
+        if (a.dataset.s === 'again') startSpeak();
+      });
+    }
+    el.addEventListener('click', (e) => {
+      if (st.ended) return;
+      const w = e.target.closest('.w'); if (w && w.dataset.w) { sayEn(w.dataset.w, true); return; }
+      const b = e.target.closest('[data-s]'); if (!b) return;
+      const s = b.dataset.s; const it = cur();
+      if (s === 'quit') { if (confirm('やめる？（ここまでのクリアは得点になるよ）')) finish(true); }
+      else if (s === 'play' || s === 'model') sayEn(it.mode === 'talk' && s === 'play' ? it.q : it.mode === 'talk' ? it.ex : it.en);
+      else if (s === 'slow') sayEn(it.mode === 'talk' ? it.q : it.en, true);
+      else if (s === 'mine') { if (st.selfUrl) new Audio(st.selfUrl).play().catch(() => {}); }
+      else if (s === 'mic') onMic();
+      else if (s === 'retry') { st.selfAsk = false; q$('.spk-next').classList.add('hidden'); q$('.spk-mic').classList.remove('hidden'); if (!st.auto) q$('.spk-heard').textContent = ''; onMic(); }
+      else if (s === 'next') next();
+    });
     sfx.buzzer();
     show();
   }
@@ -1092,6 +1438,8 @@ function calcAllowance(st, ym, today, cfg) {
     if (act === 'mission') onMission(a.dataset.id);
     else if (act === 'check') onCheck(a.dataset.id);
     else if (act === 'quiz') { sfx.tap(); startQuiz(a.dataset.kind); }
+    else if (act === 'speak') { sfx.tap(); startSpeak(); }
+    else if (act === 'omakase') { sfx.tap(); playKind(a.dataset.kind); }
     else if (act === 'pull') onPull();
     else if (act === 'trade') onTrade();
     else if (act === 'coach') { coachIdx++; sfx.tap(); const b = $('.coach-box'); if (b) b.outerHTML = coachBox(); }
@@ -1156,7 +1504,8 @@ function calcAllowance(st, ym, today, cfg) {
     for (let k = 0; k <= idx; k++) { const x = S.days[addDays(t, -k)]; if (x && (x.m || []).filter((id) => ALLOWANCE.stdMissions.includes(id)).length >= ALLOWANCE.bigWinMissions) n++; }
     return n;
   }
-  function allowanceCard() {
+  // おこづかいの今の額・見込み（計算は前と同じ。ホームには1行だけ出し、くわしくはタップした先に出す）
+  function allowanceInfo() {
     const t = todayStr(); const a = allowanceFor(t.slice(0, 7)); const A = ALLOWANCE;
     const d = S.days[t] || { m: [] };
     const std = (d.m || []).filter((id) => A.stdMissions.includes(id)).length;
@@ -1175,18 +1524,23 @@ function calcAllowance(st, ym, today, cfg) {
     const passed = diffDays(from, t) + (played(t) ? 1 : 0); const span = diffDays(from, monthEnd) + 1;
     const perDay = (a.bigs * A.bigWin + a.perfect * A.perfect) / Math.max(1, passed);
     const proj = passed >= 3 ? Math.max(a.total, Math.min(A.max, a.base + Math.min(A.bonusMax, Math.floor(perDay * span / 10) * 10 + a.mvp * A.mvp + a.ranks * A.rankUp))) : null;
-    return `<button class="money" data-act="money">
-      <div class="mo-top"><span>💰 ${Number(t.slice(5, 7))}月のおこづかい</span><span class="mo-rule">ルール ›</span></div>
-      <div class="mo-total">${yen(a.total)}<small> / MAX ${yen(A.max)}</small>${up ? `<span class="mo-up">+${yen(up)} UP!</span>` : ''}</div>
-      ${proj != null ? `<div class="mo-proj">📈 このペースなら月末 約 <b>${yen(proj)}</b> ・ 週間MVP 1回で +${yen(A.mvp)}</div>` : ''}
-      <div class="mo-bar"><i style="width:${Math.min(100, (a.base / A.max) * 100)}%" class="b1"></i><i style="width:${Math.min(100, (a.bonus / A.max) * 100)}%" class="b2"></i></div>
-      <div class="mo-row"><span>基本</span><b>${yen(a.base)}</b><span class="mo-sub">${a.over ? `お休みしすぎ −${yen(a.over * A.missPenalty)}` : `お休み枠 あと${a.restLeft}日`}</span></div>
-      <div class="mo-row"><span>がんばりボーナス</span><b class="plus">+${yen(a.bonus)}</b><span class="mo-sub">BIG ${a.bigs}日・MVP ${a.mvp}週・上級全問 ${a.perfect}回・ランク ${a.ranks}</span></div>
-      <div class="mo-hint">${hint}<br>今週の BIG WIN ${wb}/${A.mvpDays}日 ${wb >= A.mvpDays ? '→ 週間MVP達成！🏅' : `（${A.mvpDays}日で週間MVP +${A.mvp}円）`}</div></button>`;
+    return { t, a, A, wb, hint, up, proj };
+  }
+  function allowanceCard() {
+    const { t, a, A, up, proj } = allowanceInfo();
+    return `<button class="money mini" data-act="money">
+      <span class="mo-l">💰 ${Number(t.slice(5, 7))}月</span><b class="mo-total">${yen(a.total)}</b>${up ? `<span class="mo-up">+${yen(up)} UP!</span>` : ''}
+      <span class="mo-proj">${proj != null ? `見込み 約${yen(proj)}` : `MAX ${yen(A.max)}`}</span><span class="mo-a">›</span>
+      <span class="mo-bar"><i style="width:${Math.min(100, (a.base / A.max) * 100)}%" class="b1"></i><i style="width:${Math.min(100, (a.bonus / A.max) * 100)}%" class="b2"></i></span></button>`;
   }
   function moneyRules() {
-    const A = ALLOWANCE;
-    return overlay(`<div class="tut"><div class="tut-e">💰</div><div class="tut-t">おこづかいのルール</div><div class="tut-b">
+    const { t, a, A, wb, hint, proj } = allowanceInfo();
+    return overlay(`<div class="tut"><div class="tut-e">💰</div><div class="tut-t">${Number(t.slice(5, 7))}月のおこづかい ${yen(a.total)}</div><div class="tut-b">
+      ${proj != null ? `📈 このペースなら月末 約 <b>${yen(proj)}</b><br>` : ''}
+      基本 <b>${yen(a.base)}</b>（${a.over ? `お休みしすぎ −${yen(a.over * A.missPenalty)}` : `お休み枠 あと${a.restLeft}日`}）<br>
+      がんばりボーナス <b>+${yen(a.bonus)}</b>（BIG ${a.bigs}日・MVP ${a.mvp}週・上級全問 ${a.perfect}回・ランク ${a.ranks}）<br>
+      ${hint}<br>今週の BIG WIN ${wb}/${A.mvpDays}日 ${wb >= A.mvpDays ? '→ 週間MVP達成！🏅' : `（${A.mvpDays}日で週間MVP +${yen(A.mvp)}）`}<br><br>
+      <b>ルール</b><br>
       <b>基本 ${yen(A.base)}</b><br>1か月に <b>${A.restDays}日</b> までは、勉強しない日があっても大丈夫（大会・体調が悪い日用のお休み枠）。<br>それをこえて勉強しなかった日は、<b>1日 −${yen(A.missPenalty)}</b>。<br><br>
       <b>がんばりボーナス 最大 +${yen(A.bonusMax)}</b><br>🔥 BIG WIN（基本ミッションを1日${A.bigWinMissions}本以上）：+${yen(A.bigWin)}<br>🏅 週間MVP（月〜日でBIG WIN ${A.mvpDays}日以上）：+${yen(A.mvp)}<br>👑 チャレンジ（上級ゲーム）全問正解：+${yen(A.perfect)}（1日${A.perfectPerDay}回まで）<br>⭐ スタメン以上にランクアップ：+${yen(A.rankUp)}<br><br>
       ※ ゲームの点数や、自分で追加したミッションはおこづかいには数えないよ。紙での勉強が勝負！<br><br>

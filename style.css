@@ -436,3 +436,73 @@ canvas.confetti { position: fixed; inset: 0; z-index: 65; pointer-events: none; 
 .coach-mini svg { width: 48px; height: 48px; flex-shrink: 0; }
 .coach-mini span { flex: 1; padding: 8px 12px; border-radius: 14px; background: #f4f6fb; }
 @keyframes bob { 0%,100% { transform: translateY(0) rotate(-3deg); } 50% { transform: translateY(-5px) rotate(3deg); } }
+
+/* ---------- v11: スッキリしたホーム・おまかせ・スピーキング ---------- */
+.status { display: grid; grid-template-columns: auto 1fr; align-items: center; gap: 12px; padding: 10px 14px; border-radius: 20px; margin-bottom: 6px; background: #05070d; border: 2px solid #2b2f3a; }
+.st-streak { display: flex; align-items: baseline; gap: 3px; padding-right: 12px; border-right: 1px solid #2b2f3a; }
+.st-streak .flame { font-size: 26px; align-self: center; }
+.st-streak b { font-family: var(--display); font-weight: 800; font-size: 28px; color: var(--orange2); line-height: 1; }
+.st-streak small { font-size: 12px; }
+.st-score { display: flex; align-items: center; justify-content: center; gap: 8px; }
+.st-score .lbl { font-size: 10px; color: var(--sub); letter-spacing: .06em; }
+.st-score .sc { font-family: var(--display); font-weight: 800; font-size: 30px; line-height: 1; color: var(--yellow); text-shadow: 0 0 12px #ffd40077; }
+.st-score .sc.away { color: #ff5a5a; text-shadow: 0 0 12px #ff5a5a55; }
+.st-score .vs { font-family: var(--display); font-size: 12px; color: var(--sub); }
+.money.mini { display: grid; grid-template-columns: auto auto auto 1fr auto; align-items: center; gap: 8px; padding: 10px 14px; margin: 4px 0 12px; }
+.money.mini .mo-l { font-size: 13px; color: #9ff5d3; }
+.money.mini .mo-total { font-size: 22px; margin: 0; }
+.money.mini .mo-up { font-size: 12px; margin-left: 0; }
+.money.mini .mo-proj { margin: 0; font-size: 11px; text-align: right; }
+.money.mini .mo-a { color: var(--sub); font-size: 18px; }
+.money.mini .mo-bar { grid-column: 1 / -1; height: 6px; margin: 0; }
+.hero { position: relative; display: grid; grid-template-columns: 1fr auto; grid-template-rows: auto auto auto; column-gap: 10px; width: 100%; text-align: left; margin: 4px 0 6px; padding: 14px 16px; border-radius: 22px;
+  background: linear-gradient(135deg, var(--orange), #c2410c); box-shadow: 0 5px 0 #9a3606, 0 10px 26px #ff7a1a55; transition: transform .08s, box-shadow .08s; }
+.hero:active { transform: translateY(4px); box-shadow: 0 1px 0 #9a3606; }
+.hero-k { font-size: 12px; color: #ffe2c8; }
+.hero-t { grid-column: 1; font-family: var(--display); font-weight: 800; font-size: 22px; line-height: 1.25; }
+.hero-s { grid-column: 1; font-size: 12px; color: #ffe9d6; margin-top: 2px; }
+.hero-a { grid-column: 2; grid-row: 1 / 4; align-self: center; padding: 10px 14px; border-radius: 14px; background: #fff; color: #c2410c; font-family: var(--display); font-weight: 800; font-size: 15px; }
+.timer.mini { display: flex; align-items: center; gap: 12px; margin: 14px 0 4px; padding: 12px 14px; }
+.timer.mini .grow { flex: 1; min-width: 0; }
+.timer.mini .tm-s { margin: 4px 0 0; }
+.speakcard { display: flex; align-items: center; gap: 12px; width: 100%; text-align: left; margin: 12px 0 0; padding: 16px; border-radius: 22px;
+  background: linear-gradient(135deg, #0e4a5c, #1b2a6b); border: 1px solid #22d3ee88; box-shadow: 0 0 20px #22d3ee33; }
+.sp-e { font-size: 40px; }
+.sp-t { flex: 1; display: flex; flex-direction: column; gap: 2px; }
+.sp-t b { font-family: var(--display); font-weight: 800; font-size: 22px; }
+.sp-t small { font-size: 12px; color: #bfeefb; }
+.sp-b, .t-b { font-size: 11px; padding: 4px 10px; border-radius: 99px; background: #0006; white-space: nowrap; }
+.tiles { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+.tile { display: flex; flex-direction: column; align-items: flex-start; gap: 6px; padding: 14px; border-radius: 18px; text-align: left; background: var(--card); border: 1px solid var(--line); min-height: 104px; }
+.tile:active { transform: scale(.97); }
+.t-e { font-size: 28px; line-height: 1; font-family: var(--display); }
+.t-n { font-weight: 800; font-size: 15px; line-height: 1.3; }
+.tile.gc-challenge .t-b { color: var(--yellow); }
+.tut-b { max-height: 62vh; overflow-y: auto; }
+
+/* スピーキング */
+.spk .qbody { gap: 12px; }
+.spk-mode { font-size: 13px; color: #a5e8ff; text-align: center; }
+.spk-q { display: flex; align-items: center; gap: 10px; width: 100%; }
+.spk-q svg { width: 56px; height: 56px; flex-shrink: 0; }
+.spk-q span { flex: 1; display: flex; flex-direction: column; gap: 2px; padding: 10px 14px; border-radius: 16px; background: #f4f6fb; color: #121a2e; }
+.spk-q b { font-size: 20px; } .spk-q small { font-size: 12px; color: #4b587c; }
+.spk-en { font-family: var(--body); font-weight: 900; font-size: 28px; line-height: 1.5; text-align: center; -webkit-user-select: none; }
+.spk-en .w { display: inline-block; padding: 0 3px; border-radius: 8px; transition: background .2s, color .2s; }
+.spk-en .w.ok { color: var(--green); }
+.spk-en .w.ng { color: #ff6b6b; background: #ff6b6b22; text-decoration: underline dotted; text-underline-offset: 6px; cursor: pointer; }
+.spk-en .hint { letter-spacing: .08em; color: var(--sub); font-family: ui-monospace, Menlo, monospace; font-size: 24px; }
+.spk-en .tpl i { font-style: normal; color: var(--yellow); }
+.spk-en .ex { font-size: 15px; font-weight: 700; color: #bfeefb; margin-top: 4px; }
+.spk-ja { font-size: 15px; color: #d6dcf0; text-align: center; }
+.spk-listen { justify-content: center; }
+.spk-mic { display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 4px; width: 132px; height: 132px; border-radius: 50%;
+  background: radial-gradient(circle at 35% 30%, #4fe3ff, #0e7490); box-shadow: 0 6px 0 #0a4f63, 0 0 30px #22d3ee66; color: #fff; }
+.spk-mic:active { transform: translateY(4px); box-shadow: 0 2px 0 #0a4f63; }
+.spk-mic .mic-i { font-size: 44px; line-height: 1; }
+.spk-mic .mic-t { font-size: 11px; padding: 0 10px; text-align: center; line-height: 1.3; }
+.spk-mic.rec { background: radial-gradient(circle at 35% 30%, #ff7a7a, #b91c1c); box-shadow: 0 6px 0 #7a1a1a, 0 0 0 0 #ff5a5a88; animation: ripple 1.2s infinite; }
+@keyframes ripple { 0% { box-shadow: 0 6px 0 #7a1a1a, 0 0 0 0 #ff5a5a88; } 100% { box-shadow: 0 6px 0 #7a1a1a, 0 0 0 26px #ff5a5a00; } }
+.spk-heard { min-height: 20px; font-size: 13px; color: #cfd6ee; text-align: center; line-height: 1.6; }
+.spk-heard .btn { margin: 2px; }
+.judge small { font-size: 18px; margin-left: 4px; }
