@@ -64,7 +64,7 @@ function calcAllowance(st, ym, today, cfg) {
       test: { name: '後期期末テスト', date: '', checks: {} },
       goals: {}, voices: [], voiceDays: {}, voiceWeek: '', cheerLog: [], startDate: todayStr(),
       milestones: {}, cheersSeen: [], lastCheer: null, lastSync: 0, syncError: null,
-      timer: null, moneySeen: null, complete: '',
+      timer: null, moneySeen: null, complete: '', beat: {}, badges: {}, chal: 0,
       device: rid(20), created: Date.now(), updated: Date.now(),
     };
   }
@@ -95,6 +95,9 @@ function calcAllowance(st, ym, today, cfg) {
     while (played(cur)) { n++; cur = addDays(cur, -1); }
     return n;
   }
+  // 日がわりのライバル（名前と絵文字だけ変わる。強さ＝RIVAL.score はいつも同じ）
+  const dayNum = (ds = todayStr()) => Math.floor(Date.parse(ds + 'T00:00:00Z') / 86400000);
+  const todayRival = () => RIVALS[dayNum() % RIVALS.length];
   function rankIdx(xp) { let i = 0; RANKS.forEach((r, j) => { if (xp >= r[0]) i = j; }); return i; }
   // 紙の勉強をした日か（ミッション1本・試合前チェック・タイマー10分以上のどれか）
   const paperDone = (d) => !!d && ((d.m || []).length > 0 || d.ck > 0 || (d.tm || 0) >= TIMER.winMin);
@@ -330,7 +333,7 @@ function calcAllowance(st, ym, today, cfg) {
   function overlay(html, opt = {}) {
     return new Promise((res) => {
       const el = document.createElement('div');
-      el.className = 'ov';
+      el.className = 'ov' + (opt.cls ? ' ' + opt.cls : '');
       el.innerHTML = html + (opt.closeOnTap === false ? '' : '<div class="tap-close">タップで閉じる</div>');
       document.body.appendChild(el);
       let done = false;
@@ -361,7 +364,7 @@ function calcAllowance(st, ym, today, cfg) {
   function winOv() {
     sfx.buzzer(); setTimeout(() => { sfx.fanfare(); confetti(160); }, 500);
     return overlay(`<div class="lvup-title">WIN!!</div><div class="lvup-rank">🏆</div>
-      <div class="lvup-name">${esc(RIVAL.name)}に勝った！</div>
+      <div class="lvup-name">${todayRival().e} ${esc(todayRival().name)}に勝った！</div>
       <div class="shot-sub" style="opacity:1">ガチャチケット +1 🎟️</div>`, { lockMs: 1200 });
   }
   function bigWinOv() {
@@ -386,7 +389,7 @@ function calcAllowance(st, ym, today, cfg) {
     const r = { pts, tipoff: false, win: false, levelUp: false, newRank: before, streakBonus: 0 };
     if (d.pts <= 0 && pts > 0) { r.tipoff = true; d.pts += 1; S.xp += 1; }
     d.pts += pts; S.xp = Math.max(0, S.xp + pts);
-    if (!d.win && d.pts > RIVAL.score && paperDone(d)) { d.win = true; S.tickets++; r.win = true; }
+    if (!d.win && d.pts > RIVAL.score && paperDone(d)) { d.win = true; S.tickets++; r.win = true; d.rv = todayRival().name; S.beat[d.rv] = 1; }
     const stdDone = d.m.filter((id) => ALLOWANCE.stdMissions.includes(id)).length;
     if (!d.big && stdDone >= ALLOWANCE.bigWinMissions) { d.big = true; r.big = true; }
     const st = streak();
@@ -420,7 +423,7 @@ function calcAllowance(st, ym, today, cfg) {
     const pct = nx ? Math.min(100, ((S.xp - r[0]) / (nx[0] - r[0])) * 100) : 100;
     return `<div class="top"><div class="rank-badge" data-tab="ranks">${r[2]}</div>
       <div class="top-info" data-tab="ranks"><div class="top-name">${esc(S.nick || 'PLAYER')} ・ Lv.${i + 1}</div><div class="top-rank">${esc(r[1])}</div>
-      <div class="xpbar"><i style="width:${pct}%"></i></div><div class="xpnum">${S.xp} XP${nx ? ` ／ 次の「${esc(nx[1])}」まで ${nx[0] - S.xp}` : ''} <span class="ranklink">ランク表 ›</span></div></div>
+      <div class="xpbar"><i style="width:${pct}%"></i></div><div class="xpnum">${S.xp} XP${nx ? ` ／ 次の「${esc(nx[1])}」まで ${nx[0] - S.xp}` : ''} <span class="ranklink">ランク・バッジ ›</span></div></div>
       <div class="top-side"><div class="tickets">🎟️ ${S.tickets}</div><button class="gear" data-tab="set" aria-label="設定">⚙️</button></div></div>`;
   }
   function viewHome() {
@@ -433,12 +436,13 @@ function calcAllowance(st, ym, today, cfg) {
     return header() + coachBox() + `
       <div class="status">
         <div class="st-streak"><span class="flame ${today ? '' : 'cold'}">🔥</span><b>${st}</b><small>日連続</small></div>
-        <div class="st-score"><span class="lbl">YOU</span><b class="sc">${d.pts}</b><span class="vs">VS</span><b class="sc away">${RIVAL.score}</b><span class="lbl">${esc(RIVAL.name)}</span></div>
+        <div class="st-score"><span class="lbl">YOU</span><b class="sc">${d.pts}</b><span class="vs">VS</span><b class="sc away">${RIVAL.score}</b><span class="lbl"><i class="rv-e">${todayRival().e}</i>${esc(todayRival().name)}</span></div>
       </div>
       <div class="winmsg ${d.win ? 'win' : ''}">${d.win ? '🏆 今日はWIN！ ナイスゲーム！' : left > 0 ? `あと ${left} 点で WIN → ガチャチケット！` : '紙のミッション1本（または⏱タイマー10分）で WIN！'}</div>
       ${allowanceCard()}
       ${cheer}
       ${heroButton()}
+      ${chalRow()}
       <div class="sec-title"><h2>今日のミッション</h2><span>${bigProgress(d)}</span></div>
       <div class="missions">${S.missions.map((m) => {
         const done = d.m.includes(m.id);
@@ -474,10 +478,73 @@ function calcAllowance(st, ym, today, cfg) {
       <span class="hero-t">${kindIcon(p.kind)} ${esc(quizName(p.kind))}</span><span class="hero-s">${esc(p.why)}</span><span class="hero-a">START</span></button>`;
   }
   function playKind(kind) { if (kind === 'speak') startSpeak(); else startQuiz(kind); }
-  function markPlayed(kind) {
+  function markPlayed(kind, ok, combo) {
     const d = day(); d.qk = d.qk || [];
     if (!d.qk.includes(kind)) d.qk.push(kind);
+    d.qb = d.qb || {}; d.qb[kind] = Math.max(d.qb[kind] || 0, ok || 0);
+    if (combo) d.mc = Math.max(d.mc || 0, combo);
     S.lastPlay[kind] = todayStr();
+  }
+  // ---------- コーチの挑戦状（1日1つ）とバッジ。どちらも楽しむためのもので、ポイント・チケット・おこづかいは増えない ----------
+  const todayChal = () => CHALLENGES[(dayNum() + 3) % CHALLENGES.length];
+  function chalValue(c, d) {
+    if (!d) return 0;
+    if (c.k === 'm') return (d.m || []).length;
+    if (c.k === 'tm') return d.tm || 0;
+    if (c.k === 'mc') return d.mc || 0;
+    if (c.k.startsWith('qb:')) return (d.qb || {})[c.k.slice(3)] || 0;
+    return 0;
+  }
+  function chalRow() {
+    const c = todayChal(); const d = S.days[todayStr()];
+    const done = d && d.chal;
+    const v = Math.min(c.n, chalValue(c, d));
+    return `<button class="chal ${done ? 'done' : ''}" data-act="chal"><span class="ch-e">${done ? '🏅' : '📜'}</span>
+      <span class="ch-t"><small>冨樫コーチの挑戦状</small>${esc(c.text)}</span><span class="ch-v">${done ? 'クリア！' : `${v}/${c.n}`}</span></button>`;
+  }
+  function badgeValue(b) {
+    const [t, x] = [b.t.split(':')[0], b.t.split(':').slice(1).join(':')];
+    if (t === 'play') return S.lastPlay[x] ? 1 : 0;
+    if (t === 'best') return S.best[x] || 0;
+    if (t === 'streak') return streak();
+    if (t === 'chal') return S.chal || 0;
+    if (t === 'rivals') return Object.keys(S.beat || {}).length;
+    if (t === 'big') return Object.values(S.days).filter((d) => d.big).length;
+    if (t === 'timer') return Object.values(S.days).reduce((a, d) => a + (d.tm || 0), 0);
+    if (t === 'cards') return Object.keys(S.cards).length;
+    if (t === 'allgames') return gameKinds().every((k) => S.lastPlay[k]) ? 1 : 0;
+    return 0;
+  }
+  // 新しくクリアしたもの（挑戦状・バッジ）を見つけて、画面があいた時に1つずつお祝いする
+  const celebQ = [];
+  let celebTimer = null;
+  function checkUnlocks() {
+    const t = todayStr(); const d = S.days[t];
+    const c = todayChal();
+    let changed = false;
+    if (d && !d.chal && chalValue(c, d) >= c.n) { d.chal = 1; S.chal = (S.chal || 0) + 1; changed = true; celebQ.push({ type: 'chal', c }); logEvent('challenge', c.text, '', 0, { id: c.id }); }
+    const fresh = BADGES.filter((b) => !S.badges[b.id] && badgeValue(b) >= b.n);
+    if (fresh.length) { fresh.forEach((b) => { S.badges[b.id] = t; logEvent('badge', b.name, '', 0, { id: b.id }); }); celebQ.push({ type: 'badge', list: fresh }); changed = true; }
+    if (changed) save();
+    if (celebQ.length) { clearTimeout(celebTimer); celebTimer = setTimeout(showCelebs, 700); }
+  }
+  async function showCelebs() {
+    if (document.querySelector('.ov')) { celebTimer = setTimeout(showCelebs, 1500); return; }
+    const x = celebQ.shift(); if (!x) return;
+    sfx.fanfare(); confetti(160);
+    if (x.type === 'chal') {
+      await overlay(`<div class="stamp">挑戦状<br>クリア</div><div class="lvup-name" style="font-size:22px;margin-top:12px">📜 ${esc(x.c.text)}</div>
+        <div class="coach-mini" style="max-width:340px">${coachFace('fire')}<span>${esc(pick(['さすがだ！ 明日の挑戦状も楽しみにしてろよ', 'ナイス！ その集中力、本物だ 🔥', 'やりきったな！ これがエースの1日だ']))}</span></div>
+        <div class="note">挑戦状クリア 通算 ${S.chal}回</div>`, { lockMs: 1000, cls: 'solid' });
+    } else {
+      const one = x.list.length === 1;
+      await overlay(`<div class="lvup-title" style="font-size:40px">BADGE GET!</div>
+        ${one ? `<div class="badge-big">${x.list[0].e}</div><div class="lvup-name" style="font-size:24px">${esc(x.list[0].name)}</div><div class="badge-d">${esc(x.list[0].d)}</div>`
+          : `<div class="badge-list">${x.list.map((b) => `<div><span>${b.e}</span>${esc(b.name)}</div>`).join('')}</div><div class="badge-d">バッジを ${x.list.length}個 ゲット！</div>`}
+        <div class="note" style="margin-top:10px">ランク表でバッジを全部見られるよ（${Object.keys(S.badges).length}/${BADGES.length}）</div>`, { lockMs: 1000, cls: 'solid' });
+    }
+    render();
+    if (celebQ.length) celebTimer = setTimeout(showCelebs, 500);
   }
   // ---------- コーチ（キャラクターが吹き出しで話す） ----------
   function coachSvg(mood = 'happy') {
@@ -701,6 +768,7 @@ function calcAllowance(st, ym, today, cfg) {
     $('#app').innerHTML = v();
     renderTabs();
     updateSyncLabel();
+    checkUnlocks();
   }
 
   // ---------- 操作 ----------
@@ -1038,7 +1106,7 @@ function calcAllowance(st, ym, today, cfg) {
       let weakTicket = false;
       if (kind === 'weak' && !quit && n >= WEAK_BONUS_MIN && st.ok === n && !d.wkt) { d.wkt = 1; S.tickets++; weakTicket = true; }
       if (kind !== 'weak') S.best[kind] = Math.max(S.best[kind] || 0, st.ok);
-      markPlayed(kind);
+      markPlayed(kind, st.ok, st.maxCombo);
       const subject = quizSubject(kind);
       const sec = Math.round((Date.now() - st.t0) / 1000);
       const info = { kind, n, ok: st.ok, maxCombo: st.maxCombo, miss: st.miss.map((q) => q.key), sec, quit: quit || undefined, weakBonus: weakTicket || undefined };
@@ -1353,7 +1421,7 @@ function calcAllowance(st, ym, today, cfg) {
       let ticket = false;
       if (perfect) { st.pts += 2; if (d.perfect < 2) { d.perfect++; S.tickets++; ticket = true; } }
       S.best.speak = Math.max(S.best.speak || 0, st.ok);
-      markPlayed('speak');
+      markPlayed('speak', st.ok);
       const info = { kind: 'speak', n, ok: st.ok, miss: st.miss.map((x) => x.key), sec: Math.round((Date.now() - st.t0) / 1000), quit: quit || undefined, mode: st.auto ? 'auto' : 'self' };
       const r = st.pts > 0 ? addPoints(st.pts, 'quiz', 'スピーキング', '英語', info) : null;
       if (!r) { save(); logEvent('quiz', 'スピーキング', '英語', 0, info); }
@@ -1481,6 +1549,12 @@ function calcAllowance(st, ym, today, cfg) {
     else if (act === 'quiz') { sfx.tap(); startQuiz(a.dataset.kind); }
     else if (act === 'speak') { sfx.tap(); startSpeak(); }
     else if (act === 'omakase') { sfx.tap(); playKind(a.dataset.kind); }
+    else if (act === 'chal') {
+      const c = todayChal(); sfx.tap();
+      if ((S.days[todayStr()] || {}).chal) toast('今日の挑戦状はクリアずみ！ 明日もお楽しみに 🏅');
+      else if (c.go) playKind(c.go === 'omakase' ? autoPick().kind : c.go);
+      else toast(c.k === 'tm' ? '⏱ 下のタイマーをスタートしてね' : '✍️ 紙で勉強して、下のミッションを SHOOT！', 2600);
+    }
     else if (act === 'pull') onPull();
     else if (act === 'trade') onTrade();
     else if (act === 'coach') { coachIdx++; sfx.tap(); const b = $('.coach-box'); if (b) b.outerHTML = coachBox(); }
@@ -1631,6 +1705,9 @@ function calcAllowance(st, ym, today, cfg) {
         return `<div class="rung ${st}"><span class="re">${x[2]}</span><div class="rt"><div class="rnm">${esc(x[1])}${j === i ? ' <span class="here">◀ いまここ</span>' : ''}</div>
           <div class="rxp">${x[0]} XP${st === 'done' ? ' ・ 達成 ✓' : st === 'lock' ? ` ・ あと ${x[0] - S.xp}` : ''}</div>${rw ? `<div class="rrw">🎁 ${esc(rw)}</div>` : ''}</div></div>`;
       }).join('')}</div>
+      <div class="sec-title"><h2>バッジ</h2><span>${Object.keys(S.badges).length}/${BADGES.length} ・ 挑戦状クリア ${S.chal || 0}回</span></div>
+      <div class="badges">${BADGES.map((b) => { const got = S.badges[b.id]; const v = Math.min(b.n, badgeValue(b));
+        return `<div class="bd ${got ? 'got' : ''}"><span class="bd-e">${b.e}</span><span class="bd-n">${esc(b.name)}</span><span class="bd-d">${esc(b.d)}${got ? '' : b.n > 1 ? `（${v}/${b.n}）` : ''}</span></div>`; }).join('')}</div>
       <div class="sec-title"><h2>ポイントのもらい方</h2></div>
       <div class="howto">${HOWTO_POINTS.map((h) => `<div class="hrow"><span>${h[0]}</span><span class="hl">${esc(h[1])}</span><b>${esc(h[2])}</b></div>`).join('')}</div>
       <p class="note" style="margin-top:12px">最初の1か月は、どんどんランクが上がるよ。部活で疲れた日は「1本だけ」でOK。続けた人が一番強い！</p>`;
