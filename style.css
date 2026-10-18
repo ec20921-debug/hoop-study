@@ -506,3 +506,17 @@ canvas.confetti { position: fixed; inset: 0; z-index: 65; pointer-events: none; 
 .spk-heard { min-height: 20px; font-size: 13px; color: #cfd6ee; text-align: center; line-height: 1.6; }
 .spk-heard .btn { margin: 2px; }
 .judge small { font-size: 18px; margin-left: 4px; }
+
+/* リスニング */
+.gc-listen { background: linear-gradient(135deg, #10304f, #1f1450); border-color: #3b6fd1; }
+.lsn { display: flex; align-items: center; justify-content: center; gap: 14px; }
+.lsn-btn { width: 110px; height: 110px; border-radius: 50%; font-size: 52px; background: radial-gradient(circle at 35% 30%, #7aa7ff, #2f4fd1); box-shadow: 0 6px 0 #1b2f87, 0 0 26px #5b8cff66; }
+.lsn-btn:active { transform: translateY(4px); box-shadow: 0 2px 0 #1b2f87; }
+.lsn-slow { padding: 10px 12px; border-radius: 14px; background: var(--bg2); border: 1px solid var(--line); font-family: var(--body); font-size: 14px; }
+.lsn-blank { margin-top: 14px; font-family: var(--body); font-weight: 900; font-size: 24px; line-height: 1.5; }
+.coach-face { display: block; width: 100%; height: 100%; font-style: normal; }
+.coach-face .coach-img { width: 100%; height: 100%; object-fit: cover; border-radius: 50%; border: 3px solid var(--orange); box-shadow: 0 6px 14px #ff7a1a55; display: block; }
+.coach-face svg { display: none; }
+.coach-face.noimg .coach-img { display: none; }
+.coach-face.noimg svg { display: block; }
+.coach-mini .coach-face, .spk-q .coach-face { width: 56px; height: 56px; flex-shrink: 0; }

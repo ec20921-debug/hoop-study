@@ -59,7 +59,7 @@ function calcAllowance(st, ym, today, cfg) {
   function freshState() {
     return {
       v: 1, nick: '', sound: true, xp: 0, tickets: 1, days: {}, cards: {}, pulls: 0, pity: 0,
-      weak: { spell: {}, plural: {}, kanji: {}, qa: {}, past: {}, third: {}, hkanji: {}, speak: {} }, best: {}, lastPlay: {},
+      weak: { spell: {}, plural: {}, kanji: {}, qa: {}, past: {}, third: {}, hkanji: {}, speak: {}, listen: {} }, best: {}, lastPlay: {},
       missions: DEFAULT_MISSIONS.map((m) => ({ ...m })),
       test: { name: '後期期末テスト', date: '', checks: {} },
       goals: {}, voices: [], voiceDays: {}, voiceWeek: '', cheerLog: [], startDate: todayStr(),
@@ -71,7 +71,7 @@ function calcAllowance(st, ym, today, cfg) {
   function migrate(s) {
     const f = freshState();
     for (const k in f) if (s[k] === undefined) s[k] = f[k];
-    for (const k of ['spell', 'plural', 'kanji', 'qa', 'past', 'third', 'hkanji', 'speak']) if (!s.weak[k]) s.weak[k] = {};
+    for (const k of ['spell', 'plural', 'kanji', 'qa', 'past', 'third', 'hkanji', 'speak', 'listen']) if (!s.weak[k]) s.weak[k] = {};
     const firstDay = Object.keys(s.days || {}).sort()[0];
     if (firstDay && firstDay < s.startDate) s.startDate = firstDay;
     return s;
@@ -450,7 +450,7 @@ function calcAllowance(st, ym, today, cfg) {
       <div class="sync" id="sync"></div>`;
   }
   // ---------- おまかせ（今やるといいゲームを1つ選ぶ。迷わずすぐ始められるように） ----------
-  function gameKinds() { return ['speak', 'spell', 'plural', 'kanji', ...qaSubjects().map((x) => 'qa:' + x), 'challenge']; }
+  function gameKinds() { return ['speak', 'listen', 'spell', 'plural', 'kanji', ...qaSubjects().map((x) => 'qa:' + x), 'challenge']; }
   const playedToday = (k) => ((S.days[todayStr()] || {}).qk || []).includes(k);
   function autoPick() {
     const d = S.days[todayStr()] || {};
@@ -464,7 +464,7 @@ function calcAllowance(st, ym, today, cfg) {
     const last = S.lastPlay[oldest];
     return { kind: oldest, why: !last ? 'まだやったことがないゲーム！' : c.length ? `${diffDays(last, todayStr())}日ぶりのゲーム` : 'もう1回、自己ベストに挑戦！' };
   }
-  const KIND_ICON = { speak: '🎤', spell: '🔤', plural: '📦', kanji: '漢', weak: '🎯', challenge: '👑' };
+  const KIND_ICON = { speak: '🎤', listen: '🎧', spell: '🔤', plural: '📦', kanji: '漢', weak: '🎯', challenge: '👑' };
   const kindIcon = (k) => KIND_ICON[k] || ({ 理科: '🧪', 社会: '🗾', 数学: '📐', 国語: '✍️' }[k.slice(3)] || '📚');
   function heroButton() {
     const p = autoPick();
@@ -495,6 +495,11 @@ function calcAllowance(st, ym, today, cfg) {
       <path d="M90 74 l12 8" stroke="#ffd400" stroke-width="3"/><circle cx="104" cy="84" r="5" fill="#ffd400"/>
     </svg>`;
   }
+  // コーチの絵（data.js の COACH.img があればアニメの絵、読み込めない時はいつものボールのキャラ）
+  function coachFace(mood = 'happy') {
+    if (!COACH.img) return coachSvg(mood);
+    return `<i class="coach-face"><img class="coach-img" src="${esc(COACH.img)}" alt="" onerror="this.parentNode.classList.add('noimg')">${coachSvg(mood)}</i>`;
+  }
   const fillLine = (s, v) => s.replace(/\{(\w+)\}/g, (m, k) => (v[k] != null ? v[k] : m));
   let coachIdx = 0;
   function coachCandidates() {
@@ -523,12 +528,12 @@ function calcAllowance(st, ym, today, cfg) {
     const c = coachCandidates(); if (!c.length) return '';
     // いちばん大事なひとことから。タップするたびに次のひとこと
     const x = c[coachIdx % c.length];
-    return `<button class="coach-box" data-act="coach"><span class="coach-av">${coachSvg(x.mood)}</span>
+    return `<button class="coach-box" data-act="coach"><span class="coach-av">${coachFace(x.mood)}</span>
       <span class="coach-bub"><span class="coach-nm">${esc(COACH.role)} ${esc(COACH.name)}</span>${esc(x.text)}<span class="coach-more">タップで次のひとこと ›</span></span></button>`;
   }
   function coachQuizLine(perfect, ok, n) {
     const k = perfect ? 'quizPerfect' : n && ok / n >= 0.7 ? 'quizGood' : 'quizLow';
-    return `<div class="coach-mini">${coachSvg(perfect ? 'fire' : k === 'quizGood' ? 'wink' : 'think')}<span>${esc(pick(COACH_LINES[k] || ['ナイスゲーム！']))}</span></div>`;
+    return `<div class="coach-mini">${coachFace(perfect ? 'fire' : k === 'quizGood' ? 'wink' : 'think')}<span>${esc(pick(COACH_LINES[k] || ['ナイスゲーム！']))}</span></div>`;
   }
   const stdCount = (d) => ((d && d.m) || []).filter((id) => ALLOWANCE.stdMissions.includes(id)).length;
   function bigProgress(d) {
@@ -559,6 +564,7 @@ function calcAllowance(st, ym, today, cfg) {
     return header() + paperNudge() + heroButton() + speakCard + `
       <div class="sec-title"><h2>ゲームをえらぶ</h2><span>1問 1P</span></div>
       <div class="tiles">
+        ${tile('listen', 'gc-listen', best('listen'))}
         ${tile('challenge', 'gc-challenge', `全問正解 +${ALLOWANCE.perfect}円`)}
         ${tile('weak', 'gc-weak', `苦手 ${weakN}問`)}
         ${tile('spell', 'gc-spell', best('spell'))}
@@ -863,12 +869,40 @@ function calcAllowance(st, ym, today, cfg) {
     if (q.type === 'past') return pastRule(q.key, q.answer);
     return '';
   }
+  // リスニング：英語を聞いて答える（意味を選ぶ／聞こえた単語を選ぶ／質問への返事を選ぶ）
+  const listenMain = (extra) => `<div class="lsn"><button class="lsn-btn" data-listen="1">🔊</button><button class="lsn-slow" data-listen="slow">🐢 ゆっくり</button></div>${extra || ''}`;
+  function mkListenMeaning(w) {
+    return { type: 'listen', key: w[0], sub: '英語', prompt: '聞いて、意味は？', main: listenMain(), say: w[0], answer: w[1], long: true, choices: choicesFor(w[1], SPEAK_SENTENCES.map((x) => x[1])) };
+  }
+  function mkListenWord(w) {
+    const words = w[0].split(' ');
+    const cand = words.map((x, i) => [x.replace(/[^A-Za-z']/g, ''), i]).filter(([x]) => x.length >= 3 && !/'/.test(x));
+    if (!cand.length) return mkListenMeaning(w);
+    const [ans, at] = pick(cand);
+    const pool = [...new Set(SPEAK_SENTENCES.flatMap((x) => x[0].split(' ').map((y) => y.replace(/[^A-Za-z']/g, ''))).filter((y) => y.length >= 3 && !/'/.test(y) && y.toLowerCase() !== ans.toLowerCase()))];
+    const blank = words.map((x, i) => (i === at ? x.replace(ans, '＿＿＿') : x)).join(' ');
+    return { type: 'listen', key: w[0], sub: '英語', prompt: '聞こえた単語はどれ？', main: listenMain(`<div class="lsn-blank">${esc(blank)}</div>`), say: w[0], answer: ans, choices: choicesFor(ans, pool) };
+  }
+  function mkListenReply(t) {
+    return { type: 'listen', key: t[0], sub: '英語', prompt: '質問を聞いて、正しい返事は？', main: listenMain(), say: t[0], answer: t[3], long: true, choices: choicesFor(t[3], SPEAK_TALK.map((x) => x[3])) };
+  }
+  function mkListenFor(key) {
+    const t = SPEAK_TALK.find((x) => x[0] === key); if (t) return mkListenReply(t);
+    const w = SPEAK_SENTENCES.find((x) => x[0] === key); return w ? mkListenMeaning(w) : null;
+  }
+  function buildListen() {
+    const wk = S.weak.listen;
+    const sent = sampleItems(SPEAK_SENTENCES.map((w) => ({ w, f: false })), 7, 'listen', (x) => x.w[0]);
+    const talk = sampleItems(SPEAK_TALK.map((w) => ({ w, f: false })), 3, 'listen', (x) => x.w[0]);
+    return shuffle([...sent.map((x, i) => (i < 4 ? mkListenMeaning(x.w) : mkListenWord(x.w))), ...talk.map((x) => mkListenReply(x.w))]).map((q) => ({ ...q, weak: !!wk[q.key] }));
+  }
   function pickW(list, n, kind) { const wk = S.weak[kind] || {}; const weak = shuffle(list.filter((w) => wk[w[0]])).slice(0, 1); return shuffle(weak.concat(shuffle(list.filter((w) => !weak.includes(w))).slice(0, n - weak.length))); }
   function buildQuestions(kind) {
     if (kind === 'challenge') {
       const qa = shuffle(BANK.qa).slice(0, 2).map(mkQa);
       return shuffle([...pickW(PAST_FORMS, 3, 'past').map(mkPast), ...pickW(THIRD_FORMS, 2, 'third').map(mkThird), ...pickW(HARD_KANJI, 3, 'hkanji').map(mkHard), ...qa]);
     }
+    if (kind === 'listen') return buildListen();
     if (kind === 'spell') return sampleItems(BANK.spell, QUIZ_LEN, 'spell', (x) => x.a).map(mkSpell);
     if (kind === 'plural') return sampleItems(BANK.plural, QUIZ_LEN, 'plural', (x) => x.q).map(mkPlural);
     if (kind === 'kanji') return sampleItems(BANK.kanji, QUIZ_LEN, 'kanji', (x) => x.q).map(mkKanji);
@@ -885,10 +919,11 @@ function calcAllowance(st, ym, today, cfg) {
     PAST_FORMS.filter((w) => S.weak.past[w[0]]).forEach((w) => qs.push(mkPast(w)));
     THIRD_FORMS.filter((w) => S.weak.third[w[0]]).forEach((w) => qs.push(mkThird(w)));
     HARD_KANJI.filter((w) => S.weak.hkanji[w[0]]).forEach((w) => qs.push(mkHard(w)));
+    Object.keys(S.weak.listen).map(mkListenFor).filter(Boolean).forEach((q) => qs.push(q));
     return qs;
   }
   function quizName(kind) {
-    return { speak: 'スピーキング', spell: 'スペル・シュート', plural: '複数形チャレンジ', kanji: '漢字よみ速攻', weak: '苦手つぶし', challenge: 'チャレンジ（上級）' }[kind] || (kind.startsWith('qa:') ? kind.slice(3) + ' 一問一答' : kind);
+    return { speak: 'スピーキング', listen: 'リスニング', spell: 'スペル・シュート', plural: '複数形チャレンジ', kanji: '漢字よみ速攻', weak: '苦手つぶし', challenge: 'チャレンジ（上級）' }[kind] || (kind.startsWith('qa:') ? kind.slice(3) + ' 一問一答' : kind);
   }
   function quizSubject(kind) {
     return kind === 'kanji' ? '国語' : kind === 'weak' || kind === 'challenge' ? '全教科' : kind.startsWith('qa:') ? (SUBJECTS.includes(kind.slice(3)) ? kind.slice(3) : '全教科') : '英語';
@@ -938,6 +973,7 @@ function calcAllowance(st, ym, today, cfg) {
       q$('.qprog i').style.width = (st.i / qs.length) * 100 + '%';
       q$('.qprompt').textContent = `${st.i + 1}/${qs.length} ・ ${q.prompt}`;
       q$('.qmain').innerHTML = q.main; q$('.qmain').classList.toggle('long', !!q.long);
+      if (q.say) sayEn(q.say);
       q$('.qhint').textContent = q.hint || '';
       q$('.judge').textContent = ''; q$('.judge').className = 'judge';
       q$('.answer').textContent = '';
@@ -975,19 +1011,20 @@ function calcAllowance(st, ym, today, cfg) {
         st.miss.push(q);
         j.textContent = res === 'time' ? '⏰ ショットクロック！' : res === 'case' ? 'おしい！ 大文字に注意' : 'MISS…'; j.className = 'judge ng';
         const tip = ruleTip(q);
-        q$('.answer').innerHTML = `正解：${esc(q.answer)}${tip ? `<div class="rule">💡 ${esc(tip)}</div>` : ''}`;
+        q$('.answer').innerHTML = `正解：${esc(q.answer)}${q.say ? `<div class="rule">🔊 ${esc(q.say)}</div>` : ''}${tip ? `<div class="rule">💡 ${esc(tip)}</div>` : ''}`;
         res === 'time' ? sfx.buzzer() : sfx.ng();
         if (btn) btn.classList.add('ng');
         el.querySelectorAll('.choice').forEach((b) => { if (b.dataset.c === q.answer) b.classList.add('ok'); });
       }
       save();
       setCombo();
-      setTimeout(() => { if (st.ended) return; st.i++; if (st.i < qs.length) show(); else finish(false); }, res === 'ok' ? 750 : ruleTip(q) ? 3200 : 1700);
+      setTimeout(() => { if (st.ended) return; st.i++; if (st.i < qs.length) show(); else finish(false); }, res === 'ok' ? 750 : ruleTip(q) || q.say ? 3200 : 1700);
     }
     function finish(quit) {
       if (st.ended) return;
       st.ended = true;
       clearInterval(st.timer);
+      if (window.speechSynthesis) speechSynthesis.cancel();
       const n = quit ? st.answered : qs.length;
       if (quit && n === 0) { el.remove(); return; }
       const d = day();
@@ -1016,7 +1053,7 @@ function calcAllowance(st, ym, today, cfg) {
         ${ticket ? '<div class="newtag">全問正解ボーナス 🎟️ +1</div>' : ''}
         ${weakTicket ? '<div class="newtag">🎯 苦手つぶし完了！ 🎟️ +1</div>' : ''}
         ${perfect && kind === 'challenge' && (d.cp || 0) <= ALLOWANCE.perfectPerDay ? `<div class="reward-big">💰 チャレンジ全問正解！ おこづかい +${ALLOWANCE.perfect}円</div>` : ''}
-        ${st.miss.length ? `<ul>${st.miss.map((q) => `<li>${['kanji', 'qa', 'hkanji', 'past', 'third'].includes(q.type) ? esc(q.key) + ' → ' + esc(q.answer) : esc(q.answer)}</li>`).join('')}</ul><div class="note">↑ 紙に3回書いて覚えよう ✍️（苦手つぶしにも出るよ）</div>` : ''}
+        ${st.miss.length ? `<ul>${st.miss.map((q) => `<li>${['kanji', 'qa', 'hkanji', 'past', 'third', 'listen'].includes(q.type) ? esc(q.key) + ' → ' + esc(q.answer) : esc(q.answer)}</li>`).join('')}</ul><div class="note">↑ 紙に3回書いて覚えよう ✍️（苦手つぶしにも出るよ）</div>` : ''}
         ${coachQuizLine(perfect || weakTicket, st.ok, n)}
         ${tips.length ? `<div class="rulebox"><b>💡 ルールのおさらい</b>${tips.map((t) => `<div>・${esc(t)}</div>`).join('')}</div>` : ''}
         ${paperNudge()}
@@ -1030,6 +1067,7 @@ function calcAllowance(st, ym, today, cfg) {
       });
     }
     el.addEventListener('click', (e) => {
+      const lb = e.target.closest('[data-listen]'); if (lb) { const q = qs[st.i]; if (q && q.say) sayEn(q.say, lb.dataset.listen === 'slow'); return; }
       const c = e.target.closest('.choice'); if (c) { answer(c.dataset.c, c); return; }
       const qz = e.target.closest('[data-q="quit"]');
       if (qz) { if (confirm('やめる？（ここまでの正解は得点になるよ）')) finish(true); }
@@ -1203,7 +1241,7 @@ function calcAllowance(st, ym, today, cfg) {
       q$('.spk-mic').classList.remove('hidden', 'rec');
       q$('.mic-t').textContent = st.auto ? '押して話す' : '押して録音';
       if (it.mode === 'talk') {
-        q$('.spk-q').innerHTML = `${coachSvg('happy')}<span><b>${esc(it.q)}</b><small>${esc(it.ja)}</small></span>`;
+        q$('.spk-q').innerHTML = `${coachFace('happy')}<span><b>${esc(it.q)}</b><small>${esc(it.ja)}</small></span>`;
         q$('.spk-q').classList.remove('hidden');
         q$('.spk-en').innerHTML = `<span class="tpl">${esc(it.tpl).replace('___', '<i>＿＿＿</i>')}</span>`;
         q$('.spk-ja').textContent = '＿＿＿ に自分のことを入れて答えよう';
