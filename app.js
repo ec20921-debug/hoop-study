@@ -524,7 +524,7 @@ function calcAllowance(st, ym, today, cfg) {
   function viewGame() {
     const weakN = weakTotal();
     const best = (k) => S.best[k] != null ? `<span class="best">ベスト ${S.best[k]}/${QUIZ_LEN}</span>` : '<span class="best">まだ挑戦してない</span>';
-    const qaCards = qaSubjects().map((s, i) => `<button class="gamecard ${i % 2 ? 'gc-qa2' : 'gc-qa'}" data-act="quiz" data-kind="qa:${esc(s)}"><h3>${esc(s)} 一問一答</h3><p>4択で答えよう。<br>ワークで出た言葉も、おうちの人が追加できるよ。</p>${best('qa:' + s)}<span class="big">${s === '理科' ? '🧪' : s === '社会' ? '🗾' : '📚'}</span></button>`).join('');
+    const qaCards = qaSubjects().map((s, i) => `<button class="gamecard ${i % 2 ? 'gc-qa2' : 'gc-qa'}" data-act="quiz" data-kind="qa:${esc(s)}"><h3>${esc(s)} 一問一答</h3><p>4択で答えよう。<br>ワークで出た言葉も、おうちの人が追加できるよ。</p>${best('qa:' + s)}<span class="big">${{ 理科: '🧪', 社会: '🗾', 数学: '📐', 国語: '✍️' }[s] || '📚'}</span></button>`).join('');
     return header() + paperNudge() + `
       <div class="sec-title"><h2>ミニゲーム</h2><span>1問24秒・連続正解で🔥</span></div>
       <div class="games">
