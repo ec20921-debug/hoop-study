@@ -391,3 +391,35 @@ canvas.confetti { position: fixed; inset: 0; z-index: 65; pointer-events: none; 
 .tg-bar { position: relative; height: 12px; border-radius: 99px; background: var(--line); margin: 8px 0 4px; }
 .tg-bar i { display: block; height: 100%; border-radius: 99px; background: linear-gradient(90deg, var(--orange), var(--yellow)); }
 .tg-bar span { position: absolute; top: -4px; width: 4px; height: 20px; margin-left: -2px; border-radius: 2px; background: var(--green); }
+
+/* ---------- v8: タイマー・苦手つぶし・一押し・トレード・おこづかい見込み ---------- */
+.timer { margin: 10px 0 4px; padding: 14px 16px; border-radius: 20px; background: linear-gradient(135deg, #0c2440, #13203a); border: 1px solid #1f5b86; }
+.timer.on { border-color: var(--cyan); box-shadow: 0 0 18px #22d3ee44; text-align: center; }
+.tm-l { font-size: 13px; color: #a5e8ff; display: flex; justify-content: space-between; align-items: center; gap: 8px; }
+.timer.on .tm-l { justify-content: center; }
+.tm-live { padding: 2px 8px; border-radius: 99px; background: var(--cyan); color: #04202b; font-size: 11px; font-weight: 800; animation: flick 1.6s infinite; }
+.tm-today { color: var(--yellow); font-weight: 800; }
+.tm-s { font-size: 12px; color: var(--sub); margin: 6px 0 10px; line-height: 1.6; }
+.tm-n { font-family: var(--display); font-weight: 800; font-size: 20px; margin: 6px 0 10px; }
+.tm-n b { font-size: 52px; color: var(--cyan); text-shadow: 0 0 14px #22d3ee88; }
+.weakcall { display: flex; align-items: center; gap: 12px; width: 100%; text-align: left; margin: 10px 0 4px; padding: 12px 14px; border-radius: 18px; background: linear-gradient(135deg, #3a0f2a, #1d1638); border: 1px solid var(--pink); color: var(--text); font-size: 12px; line-height: 1.6; }
+.weakcall b { font-size: 14px; color: #ffc2d7; }
+.wc-e { font-size: 30px; } .wc-t { flex: 1; } .wc-a { font-size: 22px; color: var(--pink); }
+.sec-title .bp { color: var(--yellow); }
+.nudge { margin: 12px 0; padding: 12px 14px; border-radius: 16px; background: #2b2207; border: 1px solid var(--yellow); font-size: 13px; line-height: 1.7; color: #ffe9a8; text-align: left; }
+.nudge b { color: var(--yellow); }
+.nudge .btn { display: block; width: 100%; margin-top: 8px; }
+.answer .rule { margin-top: 8px; padding: 8px 10px; border-radius: 10px; background: #0f2a22; border: 1px solid #1d6b52; color: #b8f5dc; font-size: 13px; line-height: 1.6; }
+.rulebox { width: 100%; margin: 4px 0; padding: 10px 12px; border-radius: 14px; background: #0f2a22; border: 1px solid #1d6b52; color: #b8f5dc; font-size: 13px; line-height: 1.7; text-align: left; }
+.rulebox b { color: var(--green); }
+.trade { margin: 12px 0 0; padding: 14px 16px; border-radius: 18px; background: var(--card); border: 1px solid var(--line); }
+.tr-t { font-family: var(--display); font-weight: 800; font-size: 16px; display: flex; justify-content: space-between; align-items: baseline; }
+.tr-t span { font-family: var(--body); font-size: 12px; color: var(--sub); }
+.tr-s { font-size: 12px; color: var(--sub); margin: 6px 0 10px; line-height: 1.6; } .tr-s b { color: var(--yellow); }
+.trade .btn { width: 100%; }
+.complete-banner { margin-bottom: 12px; padding: 14px; border-radius: 18px; text-align: center; font-family: var(--display); font-weight: 800; font-size: 18px; background: linear-gradient(135deg, #ff3d7f55, #ffd40055, #22d3ee55); border: 1px solid var(--yellow); }
+.complete-banner small { font-family: var(--body); font-size: 12px; color: var(--sub); }
+.mo-up { display: inline-block; margin-left: 8px; padding: 2px 10px; border-radius: 99px; background: var(--yellow); color: #2b2207; font-size: 15px; vertical-align: middle; animation: pop .5s; }
+.mo-proj { font-size: 12px; color: #9ff5d3; margin: -4px 0 8px; }
+.mo-proj b { color: var(--green); font-size: 14px; }
+.wn-i { text-align: left; margin: 8px 0; line-height: 1.6; }

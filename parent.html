@@ -203,7 +203,7 @@ function calcAllowance(st, ym, today, cfg) {
   const hm = (iso) => new Intl.DateTimeFormat('ja-JP', { timeZone: 'Asia/Tokyo', hour: '2-digit', minute: '2-digit' }).format(new Date(iso));
   const getKey = () => { try { return localStorage.getItem(PK) || ''; } catch (e) { return ''; } };
   const setKey = (k) => { try { k ? localStorage.setItem(PK, k) : localStorage.removeItem(PK); } catch (e) { /* noop */ } };
-  const ICON = { mission: '🏀', quiz: '🎮', check: '✅', gacha: '🎰', undo: '↩️', cheer_read: '📣', test_set: '📅', goal_set: '🎯', voice: '💬', reset: '⚠️' };
+  const ICON = { mission: '🏀', quiz: '🎮', check: '✅', gacha: '🎰', undo: '↩️', cheer_read: '📣', test_set: '📅', goal_set: '🎯', voice: '💬', reset: '⚠️', timer: '⏱', trade: '🔄', complete: '👑' };
   const QNAME = { spell: 'スペル', plural: '複数形', kanji: '漢字よみ', weak: '苦手つぶし', 'qa:社会': '社会 一問一答', 'qa:理科': '理科 一問一答' };
 
   function showLogin(msg) { $('#login').classList.remove('hidden'); $('#dash').classList.add('hidden'); $('#loginmsg').textContent = msg || ''; }
@@ -233,12 +233,15 @@ function calcAllowance(st, ym, today, cfg) {
     let streak = 0; { let d = (byDay[t] || 0) > 0 ? t : addDays(t, -1); while ((byDay[d] || 0) > 0) { streak++; d = addDays(d, -1); } }
     const w1 = sumRange(addDays(t, -6), t), w0 = sumRange(addDays(t, -13), addDays(t, -7));
     const act7 = daysActive(addDays(t, -6), t);
-    const lastLog = logs.length ? logs[logs.length - 1] : null;
+    const acts = logs.filter((l) => l.type !== 'session');
+    const lastLog = acts.length ? acts[acts.length - 1] : null;
+    // 今日アプリを開いていた時間（2026-10-18 から記録）
+    const appMinToday = Math.round(logs.filter((l) => l.date === t && l.type === 'session').reduce((a, l) => a + (Number((l.detail || {}).sec) || 0), 0) / 60);
     const rank = (st.summary && st.summary.rank) || '—';
     const todayPts = byDay[t] || 0;
 
     $('#status').innerHTML = todayPts > 0
-      ? `<div class="status ok">✅ 今日はもう勉強しています（${todayPts}ポイント）</div>`
+      ? `<div class="status ok">✅ 今日はもう勉強しています（${todayPts}ポイント${appMinToday ? `・アプリ ${appMinToday}分` : ''}）</div>`
       : `<div class="status wait">⏳ 今日はまだ記録がありません${lastLog ? `（最後の記録：${esc(lastLog.date.slice(5).replace('-', '/'))} ${esc(hm(lastLog.ts))}）` : ''}</div>`;
 
     const diff = w1 - w0;
@@ -248,7 +251,7 @@ function calcAllowance(st, ym, today, cfg) {
       <div class="kpi"><div class="sub">直近7日のポイント</div><div class="v">${w1}<small>P</small></div><div class="d ${diff >= 0 ? 'up' : 'down'}">前の7日より ${diff >= 0 ? '+' : ''}${diff}</div></div>
       <div class="kpi"><div class="sub">ランク</div><div class="v" style="font-size:20px">${esc(rank)}</div><div class="d">累計 ${st.xp || 0} XP ・ 🎟️ ${st.tickets || 0}</div></div>`;
 
-    const tl = logs.filter((l) => l.date === t && l.type !== 'cheer_read');
+    const tl = logs.filter((l) => l.date === t && l.type !== 'cheer_read' && l.type !== 'session');
     $('#today').innerHTML = tl.length ? tl.slice().reverse().map((l) => {
       let txt = l.item;
       if (l.type === 'quiz' && l.detail) txt += `　${l.detail.ok}/${l.detail.n} 正解`;
