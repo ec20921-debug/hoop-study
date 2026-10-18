@@ -456,6 +456,8 @@ function calcAllowance(st, ym, today, cfg) {
     const d = S.days[todayStr()] || {};
     const n = weakTotal();
     if (n >= WEAK_BONUS_MIN && !d.wkt) return { kind: 'weak', why: `苦手が${n}問。全問正解で 🎟️ +1` };
+    // 社会は重点教科（前期の通知表から）。その日まだなら英語より先に出す
+    if (qaSubjects().includes(FOCUS_SUBJECT) && !playedToday('qa:' + FOCUS_SUBJECT)) return { kind: 'qa:' + FOCUS_SUBJECT, why: `今日の${FOCUS_SUBJECT}、まだだよ（10問・3分）` };
     if (!playedToday('speak')) return { kind: 'speak', why: '今日はまだ英語を声に出してないよ（5問・2分）' };
     // まだ今日やっていないものの中で、いちばん長くやっていないもの（チャレンジは上級なので最後）
     const c = gameKinds().filter((k) => !playedToday(k));
@@ -511,6 +513,7 @@ function calcAllowance(st, ym, today, cfg) {
     const add = (k, mood) => (L[k] || []).forEach((s) => out.push({ text: fillLine(s, v), mood }));
     if (S.timer) add('timer', 'happy');
     if (d.pts > 0 && !paperDone(d)) add('gameOnly', 'think');
+    if (played(t) && !(d.qk || []).includes('qa:' + FOCUS_SUBJECT)) add('socialToday', 'think');
     if (played(t) && !(d.qk || []).includes('speak')) add('speakNotYet', 'wink');
     if (stdCount(d) >= ALLOWANCE.bigWinMissions) add('bigDone', 'fire');
     else if (left > 0 && left <= 2 && stdCount(d) > 0) add('nearBig', 'fire');
@@ -610,7 +613,7 @@ function calcAllowance(st, ym, today, cfg) {
       <div class="roadmap">${ROADMAP.map((p, i) => `<div class="phase ${i === ph ? 'now' : ph != null && ph >= 0 && i < ph ? 'past' : ''}"><div class="pt">${i === ph ? '▶ ' : ''}${esc(p.title)}<span>${p.from >= 999 ? `${p.to}日前まで` : p.to === 0 ? '前日〜当日' : `${p.from}〜${p.to}日前`}</span></div><div class="px">${esc(p.text)}</div></div>`).join('')}</div>
       <div class="sec-title"><h2>目標スコア</h2><span>自分で決めよう</span></div>
       <div class="goals">${goalRows}<div class="note" style="text-align:right;margin:4px 2px">前回 合計 <b>${pSum || '—'}</b> → 目標 合計 <b style="color:var(--yellow)">${gSum || '—'}</b> / ${TEST_TARGET.total}</div><button class="btn" data-act="gsave" style="width:100%;margin-top:8px">目標を保存</button></div>
-      <div class="sec-title"><h2>試合前チェック</h2><span>前期の振り返りから</span></div>
+      <div class="sec-title"><h2>試合前チェック</h2><span>オール5は3つの観点すべてA</span></div>
       ${groups.map((g) => `<div class="subgroup"><h4>${esc(g)}</h4>${TEST_CHECKS.filter((c) => c.sub === g).map((c) => `
         <button class="check ${T.checks[c.id] ? 'on' : ''}" data-act="check" data-id="${c.id}"><span class="bx">${T.checks[c.id] ? '✓' : ''}</span><span>${esc(c.label)}</span></button>`).join('')}</div>`).join('')}`;
   }
@@ -730,7 +733,7 @@ function calcAllowance(st, ym, today, cfg) {
     }
     S.test.checks[id] = todayStr();
     { const d = day(); d.ck = (d.ck || 0) + 1; }
-    const r = addPoints(3, 'check', c.label, c.sub === '本番' ? '全教科' : c.sub, { check: id, test: S.test.name });
+    const r = addPoints(3, 'check', c.label, SUBJECTS.includes(c.sub) ? c.sub : '全教科', { check: id, test: S.test.name });
     sfx.ok(); confetti(50); toast(`✅ +${3 + (r.tipoff ? 1 : 0)}P  準備OK！`);
     await afterEffects(r);
   }
