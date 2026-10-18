@@ -222,7 +222,7 @@ const COLLECTION_MILESTONES = [15, 22, CARDS.length];
 const COMPLETE_REWARD = '';
 
 // コーチ（オリジナルのアイドルキャラ）。img に絵のファイルを入れると絵で表示
-const COACH = { name: 'レイ', role: 'コーチ', img: '' };
+const COACH = { name: 'レイ', role: 'コーチ', img: 'icons/coach.jpg' };
 const COACH_LINES = {
   morning: ['おはよう、{name}ちゃん！ 今日もいっしょにがんばろうね ✨', '朝の1つは気持ちいいよ！ 帰ってきたら1つクリアしよう'],
   day: ['おかえり、{name}ちゃん！ 宿題から1つクリアしちゃおう', 'おやつの前に1つだけ、どう？ 🍪'],
@@ -246,4 +246,4 @@ const COACH_LINES = {
 };
 
 // アップデートのお知らせ（id を変えると、次に開いた時に1回だけ表示される）
-const UPDATE_NOTE = { id: 'star-1', title: 'ようこそ！', items: [] };
+const UPDATE_NOTE = { id: 'star-2', title: 'レイコーチ、登場！', img: 'icons/coach-full.jpg', items: ['🎤 レイコーチがホームやゲームの結果で話しかけてくれるよ！ いっしょにがんばろうね ✨'] };

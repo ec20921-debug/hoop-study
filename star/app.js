@@ -1032,7 +1032,7 @@ function calcAllowance(st, ym, today, cfg) {
     const CLOCK = kind === 'challenge' ? 15 : SHOT_CLOCK;
     const st = { i: 0, answered: 0, ok: 0, combo: 0, maxCombo: 0, pts: 0, miss: [], timer: null, left: CLOCK, locked: false, ended: false, t0: Date.now() };
     const el = document.createElement('div'); el.className = 'ov';
-    el.style.background = 'radial-gradient(circle at 50% 30%, #1b2a55, #05070d)';
+    el.style.background = 'radial-gradient(circle at 50% 30%, #3a1d5c, #0d0618)';
     el.innerHTML = `<div class="quiz">
       <div class="qhead"><button class="qclose" data-q="quit">✕ やめる</button><div class="qprog"><i></i></div><div class="combo"></div></div>
       <div class="qbody">
