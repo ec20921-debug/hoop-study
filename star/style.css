@@ -203,7 +203,7 @@ input, select { font: inherit; font-size: 16px; }
 /* ---------- overlay (shoot / level up / gacha / quiz) ---------- */
 .ov {
   position: fixed; inset: 0; z-index: 50; display: flex; flex-direction: column; align-items: center; justify-content: center;
-  background: radial-gradient(circle at 50% 40%, #1c2b5acc, #05070dee); animation: fadein .15s;
+  background: radial-gradient(circle at 50% 40%, #3a1d5ccc, #05070dee); animation: fadein .15s;
   padding: calc(16px + var(--safe-t)) 16px calc(16px + var(--safe-b));
 }
 @keyframes fadein { from { opacity: 0; } }
@@ -545,7 +545,7 @@ canvas.confetti { position: fixed; inset: 0; z-index: 65; pointer-events: none; 
 .bd .bd-d { font-size: 10px; color: var(--sub); line-height: 1.4; }
 .bd.got { opacity: 1; border-color: var(--yellow); box-shadow: 0 0 12px #ffd40033; background: linear-gradient(135deg, #3b2a07, #2a1840); }
 .bd.got .bd-e { filter: none; }
-.ov.solid { background: radial-gradient(circle at 50% 40%, #1c2b5af5, #05070dfc); }
+.ov.solid { background: radial-gradient(circle at 50% 40%, #3a1d5cf5, #05070dfc); }
 .badge-d { margin-top: 8px; font-size: 15px; color: #ffc2e2; text-align: center; }
 .st-score .rv-e { display: block; font-style: normal; font-size: 20px; line-height: 1.1; }
 

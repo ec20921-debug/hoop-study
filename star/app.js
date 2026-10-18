@@ -370,7 +370,7 @@ function calcAllowance(st, ym, today, cfg) {
   function bigWinOv() {
     sfx.fanfare(); setTimeout(() => confetti(220), 200);
     return overlay(`<div class="lvup-title" style="font-size:56px">BIG WIN!!</div><div class="lvup-rank">🔥🏆🔥</div>
-      <div class="lvup-name">基本ミッション${ALLOWANCE.bigWinMissions}本クリア！</div>
+      <div class="lvup-name">基本ミッション${ALLOWANCE.bigWinMissions}つクリア！</div>
       <div class="reward-big">💰 おこづかい +${ALLOWANCE.bigWin}円 アップ！</div>`, { lockMs: 1200 });
   }
   function levelUpOv(i) {
@@ -608,7 +608,7 @@ function calcAllowance(st, ym, today, cfg) {
   function bigProgress(d) {
     if (!ALLOWANCE.on) return `今日 ${(d.m || []).length}こ クリア`;
     const n = stdCount(d); const A = ALLOWANCE;
-    return n >= A.bigWinMissions ? `🔥 BIG WIN 達成！ +${A.bigWin}円` : `基本 <b class="bp">${n}/${A.bigWinMissions}本</b> → BIG WIN +${A.bigWin}円`;
+    return n >= A.bigWinMissions ? `🔥 BIG WIN 達成！ +${A.bigWin}円` : `基本 <b class="bp">${n}/${A.bigWinMissions}つ</b> → BIG WIN +${A.bigWin}円`;
   }
   const weakTotal = () => weakPool().length;
   function weakCall() {
@@ -787,7 +787,7 @@ function calcAllowance(st, ym, today, cfg) {
     await afterEffects(r);
     // おこづかいの手応え：基本ミッションを決めるたびに BIG WIN までの残りを知らせる
     const left = ALLOWANCE.bigWinMissions - stdCount(d);
-    if (ALLOWANCE.stdMissions.includes(id) && left > 0) { sfx.coin(); toast(left === 1 ? `💰 あと1本で BIG WIN！ おこづかい +${ALLOWANCE.bigWin}円` : `💰 BIG WIN まで あと${left}本（+${ALLOWANCE.bigWin}円）`, 2600); }
+    if (ALLOWANCE.stdMissions.includes(id) && left > 0) { sfx.coin(); toast(left === 1 ? `💰 あと1つで BIG WIN！ おこづかい +${ALLOWANCE.bigWin}円` : `💰 BIG WIN まで あと${left}つ（+${ALLOWANCE.bigWin}円）`, 2600); }
   }
   async function onCheck(id) {
     const c = TEST_CHECKS.find((x) => x.id === id); if (!c) return;
@@ -1645,7 +1645,7 @@ function calcAllowance(st, ym, today, cfg) {
     const d = S.days[t] || { m: [] };
     const std = (d.m || []).filter((id) => A.stdMissions.includes(id)).length;
     const wb = weekBigs(t);
-    const hint = std >= A.bigWinMissions ? `🔥 今日は BIG WIN！ +${A.bigWin}円` : `BIG WIN まで 基本ミッション あと<b>${A.bigWinMissions - std}本</b>（+${A.bigWin}円）`;
+    const hint = std >= A.bigWinMissions ? `🔥 今日は BIG WIN！ +${A.bigWin}円` : `BIG WIN まで 基本ミッション あと<b>${A.bigWinMissions - std}つ</b>（+${A.bigWin}円）`;
     // 前に見た時より増えていたら「+◯円 UP!」を数秒出す
     const ym = t.slice(0, 7); const seen = S.moneySeen;
     if (!seen || seen.ym !== ym) S.moneySeen = { ym, total: a.total, diff: 0, at: 0 };
@@ -1674,13 +1674,13 @@ function calcAllowance(st, ym, today, cfg) {
     return overlay(`<div class="tut"><div class="tut-e">💰</div><div class="tut-t">${Number(t.slice(5, 7))}月のおこづかい ${yen(a.total)}</div><div class="tut-b">
       ${proj != null ? `📈 このペースなら月末 約 <b>${yen(proj)}</b><br>` : ''}
       基本 <b>${yen(a.base)}</b>（${a.over ? `お休みしすぎ −${yen(a.over * A.missPenalty)}` : `お休み枠 あと${a.restLeft}日`}）<br>
-      がんばりボーナス <b>+${yen(a.bonus)}</b>（BIG ${a.bigs}日・MVP ${a.mvp}週・上級全問 ${a.perfect}回・ランク ${a.ranks}）<br>
+      がんばりボーナス <b>+${yen(a.bonus)}</b>（BIG ${a.bigs}日・MVP ${a.mvp}週・ランク ${a.ranks}）<br>
       ${hint}<br>今週の BIG WIN ${wb}/${A.mvpDays}日 ${wb >= A.mvpDays ? '→ 週間MVP達成！🏅' : `（${A.mvpDays}日で週間MVP +${yen(A.mvp)}）`}<br><br>
       <b>ルール</b><br>
       <b>基本 ${yen(A.base)}</b><br>1か月に <b>${A.restDays}日</b> までは、勉強しない日があっても大丈夫（大会・体調が悪い日用のお休み枠）。<br>それをこえて勉強しなかった日は、<b>1日 −${yen(A.missPenalty)}</b>。<br><br>
-      <b>がんばりボーナス 最大 +${yen(A.bonusMax)}</b><br>🔥 BIG WIN（基本ミッションを1日${A.bigWinMissions}本以上）：+${yen(A.bigWin)}<br>🏅 週間MVP（月〜日でBIG WIN ${A.mvpDays}日以上）：+${yen(A.mvp)}<br>👑 チャレンジ（上級ゲーム）全問正解：+${yen(A.perfect)}（1日${A.perfectPerDay}回まで）<br>⭐ スタメン以上にランクアップ：+${yen(A.rankUp)}<br><br>
-      ※ ゲームの点数や、自分で追加したミッションはおこづかいには数えないよ。紙での勉強が勝負！<br><br>
-      合計は <b>最大 ${yen(A.max)}</b>。毎日BIG WIN＋毎日チャレンジ全問正解の、完ぺきな月だけ届く金額！<br>月末にしめて、次の月のはじめにもらえるよ。</div></div>`, { lockMs: 400 });
+      <b>がんばりボーナス 最大 +${yen(A.bonusMax)}</b><br>🔥 BIG WIN（基本ミッションを1日${A.bigWinMissions}つ以上）：+${yen(A.bigWin)}<br>🏅 週間MVP（月〜日でBIG WIN ${A.mvpDays}日以上）：+${yen(A.mvp)}${A.perfect ? `<br>👑 チャレンジ（上級ゲーム）全問正解：+${yen(A.perfect)}（1日${A.perfectPerDay}回まで）` : ''}<br>⭐ ${esc(RANKS[A.rankUpFrom][1])}以上にランクアップ：+${yen(A.rankUp)}<br><br>
+      ※ ゲームの点数や、自分で追加したミッションはおこづかいには数えないよ。ドリルと宿題が勝負！<br><br>
+      合計は <b>最大 ${yen(A.max)}</b>。毎日 BIG WIN＋毎週 MVP の、完ぺきな月だけ届く金額！<br>月末にしめて、次の月のはじめにもらえるよ。</div></div>`, { lockMs: 400 });
   }
   // ---------- ランク表・あそびかた ----------
   function pacePerDay() {
@@ -1737,6 +1737,7 @@ function calcAllowance(st, ym, today, cfg) {
     const slides = [
       { e: '🌟', t: '毎日1つ、クリアしよう', b: 'ドリルや宿題が終わったら、ミッションの「クリア！」をタップ！<br>1日1つでも <b>🔥連続記録</b> がのびるよ。<br><br>今日のライバルより点数が多くなると <b>WIN</b> → ガチャチケット🎟️' },
       { e: '🎤', t: 'ポイントでランクアップ', b: `スタートは <b>🌱 練習生</b>。<br>ポイントがたまると<br><span class="tl-ladder">🌱 → 🌙 → 🎤 デビュー → ⭐ → 📺 → 💫 センター → 🏟️ → ✈️ → 👑 レジェンド</span><br>全${RANKS.length}ランク！ 「⭐ランク」でいつでも見られるよ。` },
+      { e: '💰', t: 'おこづかいと連動！', b: `毎月のおこづかいは <b>基本${ALLOWANCE.base}円</b>。<br>勉強しない日が月${ALLOWANCE.restDays}日をこえると 1日 −${ALLOWANCE.missPenalty}円。<br><br>がんばるとボーナス！<br>🔥 BIG WIN（基本ミッション1日${ALLOWANCE.bigWinMissions}つ）+${ALLOWANCE.bigWin}円<br>🏅 週間MVP（BIG WIN 週${ALLOWANCE.mvpDays}日）+${ALLOWANCE.mvp}円<br>⭐ デビュー以上にランクUP +${ALLOWANCE.rankUp}円<br><br>合計 <b>最大${ALLOWANCE.max.toLocaleString()}円</b>！` },
       { e: '🎮', t: 'ゲームとガチャ', b: '迷ったら <b>▶おまかせ</b>！ レイコーチがゲームを選んでくれるよ。<br>英語を話す🎤・聞く🎧、計算、漢字、都道府県…<br><br>チケットで <b>🎰ガチャ</b>。スターカードを集めよう！' },
     ];
 

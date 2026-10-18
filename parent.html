@@ -353,7 +353,7 @@ window.startParent = () => {
     const yen = (n) => n.toLocaleString('ja-JP') + '円';
     const mblock = (a, label) => `<div class="mmonth"><div class="sub">${label}</div><div class="mbig">${yen(a.total)} <span class="sub">/ 最大 ${yen(cfg.max)}</span></div>
       <div class="mrow"><span>基本</span><b>${yen(a.base)}</b><span class="s">勉強した日 ${a.studied}日・しなかった日 ${a.missed}日（お休み枠 ${cfg.restDays}日${a.over ? `、超えた ${a.over}日 × −${yen(cfg.missPenalty)}` : ''}）</span></div>
-      <div class="mrow"><span>がんばりボーナス</span><b>+${yen(a.bonus)}</b><span class="s">BIG WIN ${a.bigs}日 × ${cfg.bigWin}円 ・ 週間MVP ${a.mvp}週 × ${cfg.mvp}円 ・ チャレンジ全問正解 ${a.perfect}回 × ${cfg.perfect}円 ・ ランクUP ${a.ranks}回 × ${cfg.rankUp}円（上限 ${yen(cfg.bonusMax)}）</span></div></div>`;
+      <div class="mrow"><span>がんばりボーナス</span><b>+${yen(a.bonus)}</b><span class="s">BIG WIN ${a.bigs}日 × ${cfg.bigWin}円 ・ 週間MVP ${a.mvp}週 × ${cfg.mvp}円 ${cfg.perfect ? ` ・ チャレンジ全問正解 ${a.perfect}回 × ${cfg.perfect}円` : ''} ・ ランクUP ${a.ranks}回 × ${cfg.rankUp}円（上限 ${yen(cfg.bonusMax)}）</span></div></div>`;
     const hasPrev = st.startDate && st.startDate.slice(0, 7) <= pm;
     $('#money').innerHTML = st.days ? mblock(calcAllowance(st, ymNow, t, cfg), `${Number(ymNow.slice(5))}月（見込み・今日まで）`) + (hasPrev ? mblock(calcAllowance(st, pm, t, cfg), `${Number(pm.slice(5))}月（確定）← 今月渡す金額`) : '')
       : '<div class="empty">まだデータがありません</div>';

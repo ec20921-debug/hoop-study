@@ -154,10 +154,23 @@ const HOWTO_POINTS = [
   ['🎤', 'スピーキング 1文クリア', '1P'],
 ];
 
-// おこづかい連動はなし（on:false で、おこづかいの表示やボーナスが全部出ない）
+// おこづかい連動ルール（2026-10-18 おうちで決めた数字。変えたらアプリにも保護者画面にもそのまま反映）
 const ALLOWANCE = {
-  on: false, base: 0, restDays: 0, missPenalty: 0, bigWin: 0, bigWinMissions: 99, stdMissions: [],
-  mvp: 0, mvpDays: 7, perfect: 0, perfectPerDay: 0, rankUp: 0, rankUpFrom: 99, bonusMax: 0, max: 0,
+  on: true,
+  base: 500,           // 基本
+  restDays: 4,         // 1か月のお休み枠（この日数までは勉強しなくても引かれない）
+  missPenalty: 30,     // お休み枠を超えた日 1日あたりマイナス
+  bigWin: 10,          // BIG WIN の日（基本ミッションを3つ以上）
+  bigWinMissions: 3,
+  stdMissions: ['homework', 'kanji', 'keisan', 'ondoku', 'dokusho', 'junbi'], // 基本ミッション（自分で追加したものは数えない）
+  mvp: 50,             // 週間MVP（月〜日の1週間で BIG WIN 5日以上）
+  mvpDays: 5,
+  perfect: 0,          // 小4版は上級ゲームなし
+  perfectPerDay: 0,
+  rankUp: 20,          // ランクアップ（デビュー以上に上がった時だけ）
+  rankUpFrom: 3,       // ランク番号（0=練習生, 3=デビュー！）
+  bonusMax: 500,       // がんばりボーナスの上限
+  max: 1000,           // 合計の上限（ほぼ完ぺきな月だけ届く）
 };
 
 // スピーキング・リスニング（小学4年「Let's Try! 2」くらいの英語）[英文, 日本語]
@@ -235,7 +248,8 @@ const COACH_LINES = {
   late: ['もうおそい時間だね。今日は1つだけやって、早くねようね 🌙', 'ねる前の音読、ちょっとだけしてみない？'],
   notYet: ['今日はまだ0こ。1つクリアして、今日のライバルに勝とう ✨', '今日はまだ0こ。タイマー10分だけやってみない？'],
   gameOnly: ['ゲームすごい！ でもドリルか宿題も1つやると今日は WIN だよ ✍️'],
-  nearBig: [], bigDone: [],
+  nearBig: ['あと{left}つで BIG WIN！ おこづかい +10円だよ 💰', 'BIG WIN まであと{left}つ！ がんばれー 📣'],
+  bigDone: ['BIG WIN おめでとう！ 今日のりっぱなスターだね 🌟', '基本ミッション3つ！ GO! FIGHT! WIN! 🎉'],
   winDone: ['今日も WIN！ ナイスジャンプ 🤸', '今日も WIN！ キラキラしてる ✨', 'ナイス！ 明日も1つで{next}日連続だよ'],
   timer: ['⏱ 集中タイム中！ 終わったら「終わった！」をおしてね', 'いいね、集中してる！ スマホはちょっとおやすみ'],
   weak: ['まちがえた問題が{weak}こあるよ。苦手つぶしで全問正解するとチケット 🎯'],
@@ -251,4 +265,4 @@ const COACH_LINES = {
 };
 
 // アップデートのお知らせ（id を変えると、次に開いた時に1回だけ表示される）
-const UPDATE_NOTE = { id: 'star-3', title: 'レイコーチ、登場！', img: 'icons/coach-full.jpg', items: ['🎤 レイコーチがホームやゲームの結果で話しかけてくれるよ！ いっしょにがんばろうね ✨', '📣 チアのカード（ポンポン・ピラミッド・大会優勝…）がガチャに登場！'] };
+const UPDATE_NOTE = { id: 'star-4', title: 'レイコーチ、登場！', img: 'icons/coach-full.jpg', items: ['💰 <b>おこづかいと連動！</b> 基本500円。基本ミッションを1日3つで BIG WIN +10円、週5日で週間MVP +50円（最大1,000円）', '🎤 レイコーチがホームやゲームの結果で話しかけてくれるよ！ いっしょにがんばろうね ✨', '📣 チアのカード（ポンポン・ピラミッド・大会優勝…）がガチャに登場！'] };
