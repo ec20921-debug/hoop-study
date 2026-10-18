@@ -203,7 +203,7 @@ function calcAllowance(st, ym, today, cfg) {
   const hm = (iso) => new Intl.DateTimeFormat('ja-JP', { timeZone: 'Asia/Tokyo', hour: '2-digit', minute: '2-digit' }).format(new Date(iso));
   const getKey = () => { try { return localStorage.getItem(PK) || ''; } catch (e) { return ''; } };
   const setKey = (k) => { try { k ? localStorage.setItem(PK, k) : localStorage.removeItem(PK); } catch (e) { /* noop */ } };
-  const ICON = { mission: '🏀', quiz: '🎮', check: '✅', gacha: '🎰', undo: '↩️', cheer_read: '📣', test_set: '📅', goal_set: '🎯', voice: '💬', reset: '⚠️', timer: '⏱', trade: '🔄', complete: '👑' };
+  const ICON = { mission: '🏀', quiz: '🎮', check: '✅', gacha: '🎰', undo: '↩️', cheer_read: '📣', test_set: '📅', goal_set: '🎯', voice: '💬', reset: '⚠️', timer: '⏱', trade: '🔄', complete: '👑', challenge: '📜', badge: '🏅', session: '📱' };
   const QNAME = { speak: '🎤 スピーキング', listen: '🎧 リスニング', spell: 'スペル', plural: '複数形', kanji: '漢字よみ', weak: '苦手つぶし', 'qa:社会': '社会 一問一答', 'qa:理科': '理科 一問一答' };
 
   function showLogin(msg) { $('#login').classList.remove('hidden'); $('#dash').classList.add('hidden'); $('#loginmsg').textContent = msg || ''; }
