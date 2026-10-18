@@ -409,7 +409,8 @@ window.startParent = () => {
       let info = '';
       if (j && j.ok) { const st = j.state || {}; const d = (st.days || {})[t] || {}; info = `🔥${(st.summary && st.summary.streak) || 0}日 ・ 今日 ${d.pts || 0}P${d.win ? ' ・ WIN' : ''}`; }
       else info = !cfgOf(k).GAS_URL ? '記録先 準備中' : !keyOf(k) ? 'キー未入力' : '…';
-      return `<a class="kid ${k.id === KID.id ? 'on' : ''}" href="?kid=${k.id}"><b>${k.label}</b><span>${esc(k.who)} ・ ${esc(info)}</span></a>`;
+      const nick = j && j.ok && j.state && j.state.nick ? j.state.nick : k.who;
+      return `<a class="kid ${k.id === KID.id ? 'on' : ''}" href="?kid=${k.id}"><b>${k.label}</b><span>${esc(nick)} ・ ${esc(info)}</span></a>`;
     };
     const res = {}; res[KID.id] = cur;
     const paint = () => { $('#kids').innerHTML = KIDS.map((k) => chip(k, res[k.id])).join(''); };
