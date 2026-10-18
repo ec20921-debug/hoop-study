@@ -430,7 +430,7 @@ function calcAllowance(st, ym, today, cfg) {
     const cheer = S.lastCheer && diffDays(S.lastCheer.date, t) <= 3
       ? `<div class="cheer">📣 <b>おうちからのエール</b><br>${esc(S.lastCheer.text)}</div>` : '';
     const left = RIVAL.score + 1 - d.pts;
-    return header() + `
+    return header() + coachBox() + `
       <div class="streak"><div class="flame ${today ? '' : 'cold'}">🔥</div>
         <div><div class="streak-num">${st}<small>日連続</small></div><div class="streak-msg">${msg}</div></div></div>
       ${cheer}
@@ -449,6 +449,58 @@ function calcAllowance(st, ym, today, cfg) {
           <button class="shoot-btn" data-act="mission" data-id="${esc(m.id)}">${done ? '✓ IN' : 'SHOOT'}</button></div>`;
       }).join('')}</div>
       <div class="sync" id="sync"></div>`;
+  }
+  // ---------- コーチ（キャラクターが吹き出しで話す） ----------
+  function coachSvg(mood = 'happy') {
+    const eyes = mood === 'wink' ? '<path d="M37 47 q5 -5 10 0" stroke="#3a1a05" stroke-width="3.5" fill="none" stroke-linecap="round"/><circle cx="68" cy="47" r="5" fill="#3a1a05"/>'
+      : mood === 'think' ? '<circle cx="42" cy="49" r="4.5" fill="#3a1a05"/><circle cx="68" cy="49" r="4.5" fill="#3a1a05"/><path d="M35 39 q7 -6 14 -2 M61 36 q7 -4 14 1" stroke="#3a1a05" stroke-width="3" fill="none" stroke-linecap="round"/>'
+      : '<circle cx="42" cy="47" r="5" fill="#3a1a05"/><circle cx="68" cy="47" r="5" fill="#3a1a05"/><circle cx="44" cy="45" r="1.6" fill="#fff"/><circle cx="70" cy="45" r="1.6" fill="#fff"/>';
+    const mouth = mood === 'think' ? '<path d="M46 66 q9 -4 18 0" stroke="#3a1a05" stroke-width="3.5" fill="none" stroke-linecap="round"/>'
+      : mood === 'fire' ? '<path d="M42 60 q13 16 26 0 z" fill="#3a1a05"/><path d="M48 64 q7 6 14 0" fill="#ff6b6b"/>'
+      : '<path d="M43 61 q12 11 24 0" stroke="#3a1a05" stroke-width="3.5" fill="none" stroke-linecap="round"/>';
+    return `<svg class="coach-svg" viewBox="0 0 110 110" aria-hidden="true">
+      <circle cx="55" cy="58" r="44" fill="#ff7a1a"/><circle cx="55" cy="58" r="44" fill="url(#cg)"/>
+      <defs><radialGradient id="cg" cx=".35" cy=".3" r=".8"><stop offset="0" stop-color="#ffb066" stop-opacity=".9"/><stop offset="1" stop-color="#c2410c" stop-opacity="0"/></radialGradient></defs>
+      <path d="M11 58 h88 M55 14 v88 M24 26 q22 32 0 64 M86 26 q-22 32 0 64" stroke="#7a2a05" stroke-width="2.4" fill="none" opacity=".55"/>
+      <rect x="14" y="22" width="82" height="11" rx="5.5" fill="#22d3ee"/><rect x="14" y="26" width="82" height="3" fill="#fff" opacity=".7"/>
+      <ellipse cx="33" cy="60" rx="6" ry="4" fill="#ff3d7f" opacity=".45"/><ellipse cx="77" cy="60" rx="6" ry="4" fill="#ff3d7f" opacity=".45"/>
+      ${eyes}${mouth}
+      <path d="M90 74 l12 8" stroke="#ffd400" stroke-width="3"/><circle cx="104" cy="84" r="5" fill="#ffd400"/>
+    </svg>`;
+  }
+  const fillLine = (s, v) => s.replace(/\{(\w+)\}/g, (m, k) => (v[k] != null ? v[k] : m));
+  let coachIdx = 0;
+  function coachCandidates() {
+    const t = todayStr(); const d = S.days[t] || { m: [], pts: 0 };
+    const st = streak(); const h = Number(new Intl.DateTimeFormat('en-US', { timeZone: 'Asia/Tokyo', hour: 'numeric', hour12: false }).format(new Date())) % 24;
+    const left = ALLOWANCE.bigWinMissions - stdCount(d);
+    const v = { name: S.nick || 'キミ', streak: st, next: st + 1, left, weak: weakTotal(), days: S.test.date ? diffDays(t, S.test.date) : '', min: timerMin() };
+    const L = COACH_LINES; const out = [];
+    const add = (k, mood) => (L[k] || []).forEach((s) => out.push({ text: fillLine(s, v), mood }));
+    if (S.timer) add('timer', 'happy');
+    if (d.pts > 0 && !paperDone(d)) add('gameOnly', 'think');
+    if (stdCount(d) >= ALLOWANCE.bigWinMissions) add('bigDone', 'fire');
+    else if (left > 0 && left <= 2 && stdCount(d) > 0) add('nearBig', 'fire');
+    if (!played(t)) add('notYet', 'think');
+    else if (d.win) add('winDone', 'wink');
+    if (STREAK_BONUS[st] || [3, 5, 7, 10, 14, 21, 30, 50, 100].includes(st)) add('streakUp', 'fire');
+    if (v.weak >= 5) add('weak', 'think');
+    if (v.days !== '' && v.days > 0 && v.days <= 21) add('test', 'think');
+    if (S.lastCheer && diffDays(S.lastCheer.date, t) <= 1) add('cheer', 'wink');
+    add(h >= 5 && h < 11 ? 'morning' : h < 17 && h >= 11 ? 'day' : h >= 17 && h < 21 ? 'evening' : 'late', 'happy');
+    add('tips', 'wink');
+    return out;
+  }
+  function coachBox() {
+    const c = coachCandidates(); if (!c.length) return '';
+    // いちばん大事なひとことから。タップするたびに次のひとこと
+    const x = c[coachIdx % c.length];
+    return `<button class="coach-box" data-act="coach"><span class="coach-av">${coachSvg(x.mood)}</span>
+      <span class="coach-bub"><span class="coach-nm">${esc(COACH.role)} ${esc(COACH.name)}</span>${esc(x.text)}<span class="coach-more">タップで次のひとこと ›</span></span></button>`;
+  }
+  function coachQuizLine(perfect, ok, n) {
+    const k = perfect ? 'quizPerfect' : n && ok / n >= 0.7 ? 'quizGood' : 'quizLow';
+    return `<div class="coach-mini">${coachSvg(perfect ? 'fire' : k === 'quizGood' ? 'wink' : 'think')}<span>${esc(pick(COACH_LINES[k] || ['ナイスゲーム！']))}</span></div>`;
   }
   const stdCount = (d) => ((d && d.m) || []).filter((id) => ALLOWANCE.stdMissions.includes(id)).length;
   function bigProgress(d) {
@@ -933,6 +985,7 @@ function calcAllowance(st, ym, today, cfg) {
         ${weakTicket ? '<div class="newtag">🎯 苦手つぶし完了！ 🎟️ +1</div>' : ''}
         ${perfect && kind === 'challenge' && (d.cp || 0) <= ALLOWANCE.perfectPerDay ? `<div class="reward-big">💰 チャレンジ全問正解！ おこづかい +${ALLOWANCE.perfect}円</div>` : ''}
         ${st.miss.length ? `<ul>${st.miss.map((q) => `<li>${['kanji', 'qa', 'hkanji', 'past', 'third'].includes(q.type) ? esc(q.key) + ' → ' + esc(q.answer) : esc(q.answer)}</li>`).join('')}</ul><div class="note">↑ 紙に3回書いて覚えよう ✍️（苦手つぶしにも出るよ）</div>` : ''}
+        ${coachQuizLine(perfect || weakTicket, st.ok, n)}
         ${tips.length ? `<div class="rulebox"><b>💡 ルールのおさらい</b>${tips.map((t) => `<div>・${esc(t)}</div>`).join('')}</div>` : ''}
         ${paperNudge()}
         <div class="row" style="width:100%;margin-top:14px"><button class="btn ghost" style="flex:1" data-q="again">もう1回</button><button class="btn" style="flex:1" data-q="close">とじる</button></div>
@@ -1041,6 +1094,7 @@ function calcAllowance(st, ym, today, cfg) {
     else if (act === 'quiz') { sfx.tap(); startQuiz(a.dataset.kind); }
     else if (act === 'pull') onPull();
     else if (act === 'trade') onTrade();
+    else if (act === 'coach') { coachIdx++; sfx.tap(); const b = $('.coach-box'); if (b) b.outerHTML = coachBox(); }
     else if (act === 'tstart') startTimer();
     else if (act === 'tstop') stopTimer();
     else if (act === 'tsave') {
