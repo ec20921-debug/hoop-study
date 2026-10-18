@@ -1655,7 +1655,7 @@ function calcAllowance(st, ym, today, cfg) {
   // アップデートのお知らせ（UPDATE_NOTE.id が変わった時に1回だけ出す）
   function whatsNew() {
     sfx.fanfare(); confetti(120);
-    return overlay(`<div class="tut"><div class="tut-step">NEW!</div><div class="tut-e">🆕</div><div class="tut-t">${esc(UPDATE_NOTE.title)}</div>
+    return overlay(`<div class="tut"><div class="tut-step">NEW!</div>${UPDATE_NOTE.img ? `<img class="wn-img" src="${esc(UPDATE_NOTE.img)}" alt="" onerror="this.remove()">` : '<div class="tut-e">🆕</div>'}<div class="tut-t">${esc(UPDATE_NOTE.title)}</div>
       <div class="tut-b">${UPDATE_NOTE.items.map((x) => `<div class="wn-i">${x}</div>`).join('')}</div></div>`, { lockMs: 900 });
   }
 
