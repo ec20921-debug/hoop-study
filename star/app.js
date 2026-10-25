@@ -345,6 +345,9 @@ function calcAllowance(st, ym, today, cfg) {
   }
   function toast(msg, ms = 2200) {
     const t = document.createElement('div'); t.className = 'toast'; t.textContent = msg;
+    // すでに出ているお知らせがあれば、その上に積む（重ならないように）
+    const up = [...document.querySelectorAll('.toast')].reduce((a, x) => a + x.offsetHeight + 8, 0);
+    if (up) t.style.bottom = `calc(${96 + up}px + var(--safe-b))`;
     document.body.appendChild(t); setTimeout(() => t.remove(), ms);
   }
   const HOOP_SVG = `<svg class="hoop" viewBox="0 0 150 130">
@@ -969,7 +972,7 @@ function calcAllowance(st, ym, today, cfg) {
   // リスニング：英語を聞いて答える（意味を選ぶ／聞こえた単語を選ぶ／質問への返事を選ぶ）
   const listenMain = (extra) => `<div class="lsn"><button class="lsn-btn" data-listen="1">🔊</button><button class="lsn-slow" data-listen="slow">🐢 ゆっくり</button></div>${extra || ''}`;
   function mkListenMeaning(w) {
-    return { type: 'listen', key: w[0], sub: '英語', prompt: '聞いて、意味は？', main: listenMain(), say: w[0], answer: w[1], long: true, choices: choicesFor(w[1], SPEAK_SENTENCES.map((x) => x[1])) };
+    return { type: 'listen', key: w[0], sub: '英語', prompt: '聞いて、意味は？', main: listenMain(), say: w[0], ja: w[1], answer: w[1], long: true, choices: choicesFor(w[1], SPEAK_SENTENCES.map((x) => x[1])) };
   }
   function mkListenWord(w) {
     const words = w[0].split(' ');
@@ -978,10 +981,15 @@ function calcAllowance(st, ym, today, cfg) {
     const [ans, at] = pick(cand);
     const pool = [...new Set(SPEAK_SENTENCES.flatMap((x) => x[0].split(' ').map((y) => y.replace(/[^A-Za-z']/g, ''))).filter((y) => y.length >= 3 && !/'/.test(y) && y.toLowerCase() !== ans.toLowerCase()))];
     const blank = words.map((x, i) => (i === at ? x.replace(ans, '＿＿＿') : x)).join(' ');
-    return { type: 'listen', key: w[0], sub: '英語', prompt: '聞こえた単語はどれ？', main: listenMain(`<div class="lsn-blank">${esc(blank)}</div>`), say: w[0], answer: ans, choices: choicesFor(ans, pool) };
+    return { type: 'listen', key: w[0], sub: '英語', prompt: '聞こえた単語はどれ？', main: listenMain(`<div class="lsn-blank">${esc(blank)}</div>`), say: w[0], ja: w[1], answer: ans, choices: choicesFor(ans, pool) };
   }
   function mkListenReply(t) {
-    return { type: 'listen', key: t[0], sub: '英語', prompt: '質問を聞いて、正しい返事は？', main: listenMain(), say: t[0], answer: t[3], long: true, choices: choicesFor(t[3], SPEAK_TALK.map((x) => x[3])) };
+    return { type: 'listen', key: t[0], sub: '英語', prompt: '質問を聞いて、正しい返事は？', main: listenMain(), say: t[0], ja: t[1], reply: t[3], answer: t[3], long: true, choices: choicesFor(t[3], SPEAK_TALK.map((x) => x[3])) };
+  }
+  // 答え合わせのあとに出す「英文 ＝ 日本語の意味」（正解でも不正解でも出す）
+  function listenLine(q) {
+    if (!q.say) return '';
+    return `<div class="rule">🔊 ${esc(q.say)} ＝ ${esc(q.ja || '')}${q.reply ? `<br>→ ${esc(q.reply)}` : ''}</div>`;
   }
   function mkListenFor(key) {
     const t = SPEAK_TALK.find((x) => x[0] === key); if (t) return mkListenReply(t);
@@ -1003,6 +1011,18 @@ function calcAllowance(st, ym, today, cfg) {
     else if (k === 'mul') { const b = ri(12, 99); const c = ri(3, 9); q = `${b} × ${c}`; a = String(b * c); }
     else if (k === 'deci') { const b = ri(11, 89), c = ri(11, 89); const plus = Math.random() < 0.5 || b < c; q = plus ? `${(b / 10).toFixed(1)} + ${(c / 10).toFixed(1)}` : `${(b / 10).toFixed(1)} − ${(c / 10).toFixed(1)}`; a = String(Math.round(plus ? b + c : b - c) / 10); }
     else { const m = ri(2, 9), n = ri(2, 9); q = `${m}億 ＋ ${n}億`; a = `${m + n}億`; }
+    return calcQ(k, q, a);
+  }
+  // まちがえた計算（苦手リストに残っている式）から、同じ問題をもう一度作る
+  function calcFromKey(key) {
+    let m;
+    if ((m = key.match(/^(\d+) ÷ (\d+)$/))) { const n = +m[1], b = +m[2]; return n % b ? calcQ('divr', key, `${Math.floor(n / b)}あまり${n % b}`) : calcQ('div', key, String(n / b)); }
+    if ((m = key.match(/^(\d+) × (\d+)$/))) return calcQ('mul', key, String(+m[1] * +m[2]));
+    if ((m = key.match(/^(\d+)\.(\d) ([+−]) (\d+)\.(\d)$/))) { const b = +m[1] * 10 + +m[2], c = +m[4] * 10 + +m[5]; return calcQ('deci', key, String(Math.round(m[3] === '+' ? b + c : b - c) / 10)); }
+    if ((m = key.match(/^(\d+)億 ＋ (\d+)億$/))) return calcQ('big', key, `${+m[1] + +m[2]}億`);
+    return null;
+  }
+  function calcQ(k, q, a) {
     const near = new Set([a]);
     while (near.size < 4) {
       if (k === 'divr') { const [c, r] = a.split('あまり').map(Number); near.add(`${c + ri(-2, 2)}あまり${Math.max(1, r + ri(-1, 1))}`); }
@@ -1019,7 +1039,11 @@ function calcAllowance(st, ym, today, cfg) {
       return shuffle([...pickW(PAST_FORMS, 3, 'past').map(mkPast), ...pickW(THIRD_FORMS, 2, 'third').map(mkThird), ...pickW(HARD_KANJI, 3, 'hkanji').map(mkHard), ...qa]);
     }
     if (kind === 'listen') return buildListen();
-    if (kind === 'calc') return Array.from({ length: QUIZ_LEN }, () => mkCalc());
+    if (kind === 'calc') {
+      // 苦手リストの計算を3問まで先に入れて、残りはその場で作る
+      const weak = shuffle(Object.keys(S.weak.calc || {})).slice(0, 3).map(calcFromKey).filter(Boolean);
+      return shuffle(weak.concat(Array.from({ length: QUIZ_LEN - weak.length }, () => mkCalc())));
+    }
     if (kind === 'spell') return sampleItems(BANK.spell, QUIZ_LEN, 'spell', (x) => x.a).map(mkSpell);
     if (kind === 'plural') return sampleItems(BANK.plural, QUIZ_LEN, 'plural', (x) => x.q).map(mkPlural);
     if (kind === 'kanji') return sampleItems(BANK.kanji, QUIZ_LEN, 'kanji', (x) => x.q).map(mkKanji);
@@ -1037,6 +1061,7 @@ function calcAllowance(st, ym, today, cfg) {
     THIRD_FORMS.filter((w) => S.weak.third[w[0]]).forEach((w) => qs.push(mkThird(w)));
     HARD_KANJI.filter((w) => S.weak.hkanji[w[0]]).forEach((w) => qs.push(mkHard(w)));
     Object.keys(S.weak.listen).map(mkListenFor).filter(Boolean).forEach((q) => qs.push(q));
+    Object.keys(S.weak.calc || {}).map(calcFromKey).filter(Boolean).forEach((q) => qs.push(q));
     return qs;
   }
   function quizName(kind) {
@@ -1124,20 +1149,26 @@ function calcAllowance(st, ym, today, cfg) {
         if (wk[q.key]) { wk[q.key]--; if (wk[q.key] <= 0) delete wk[q.key]; }
         sfx.ok(); if (st.combo >= 3) confetti(25);
         if (btn) btn.classList.add('ok');
+        // リスニングは正解でも意味を見せる（聞いた英語と意味を結びつける）
+        if (q.say) q$('.answer').innerHTML = listenLine(q);
       } else {
         st.combo = 0;
         wk[q.key] = (wk[q.key] || 0) + 1;
+        if (q.type === 'calc') { const ks = Object.keys(wk); if (ks.length > 30) delete wk[ks[0]]; }
         st.miss.push(q);
         j.textContent = res === 'time' ? '⏰ ショットクロック！' : res === 'case' ? 'おしい！ 大文字に注意' : 'MISS…'; j.className = 'judge ng';
         const tip = ruleTip(q);
-        q$('.answer').innerHTML = `正解：${esc(q.answer)}${q.say ? `<div class="rule">🔊 ${esc(q.say)}</div>` : ''}${tip ? `<div class="rule">💡 ${esc(tip)}</div>` : ''}`;
+        q$('.answer').innerHTML = `正解：${esc(q.answer)}${listenLine(q)}${tip ? `<div class="rule">💡 ${esc(tip)}</div>` : ''}`;
         res === 'time' ? sfx.buzzer() : sfx.ng();
         if (btn) btn.classList.add('ng');
         el.querySelectorAll('.choice').forEach((b) => { if (b.dataset.c === q.answer) b.classList.add('ok'); });
+        // まちがえたら、ゆっくりもう一度読み上げる
+        if (q.say) setTimeout(() => { if (!st.ended) sayEn(q.say, true); }, 600);
       }
       save();
       setCombo();
-      setTimeout(() => { if (st.ended) return; st.i++; if (st.i < qs.length) show(); else finish(false); }, res === 'ok' ? 750 : ruleTip(q) || q.say ? 3200 : 1700);
+      const wait = res === 'ok' ? (q.say ? 1800 : 750) : q.say ? 4200 : ruleTip(q) ? 3200 : 1700;
+      setTimeout(() => { if (st.ended) return; st.i++; if (st.i < qs.length) show(); else finish(false); }, wait);
     }
     function finish(quit) {
       if (st.ended) return;
@@ -1172,7 +1203,7 @@ function calcAllowance(st, ym, today, cfg) {
         ${ticket ? '<div class="newtag">全問正解ボーナス 🎟️ +1</div>' : ''}
         ${weakTicket ? '<div class="newtag">🎯 苦手つぶし完了！ 🎟️ +1</div>' : ''}
         ${perfect && kind === 'challenge' && (d.cp || 0) <= ALLOWANCE.perfectPerDay ? `<div class="reward-big">💰 チャレンジ全問正解！ おこづかい +${ALLOWANCE.perfect}円</div>` : ''}
-        ${st.miss.length ? `<ul>${st.miss.map((q) => `<li>${['kanji', 'qa', 'hkanji', 'past', 'third', 'listen'].includes(q.type) ? esc(q.key) + ' → ' + esc(q.answer) : esc(q.answer)}</li>`).join('')}</ul><div class="note">↑ 紙に3回書いて覚えよう ✍️（苦手つぶしにも出るよ）</div>` : ''}
+        ${st.miss.length ? `<ul>${st.miss.map((q) => `<li>${['kanji', 'qa', 'hkanji', 'past', 'third', 'listen', 'calc'].includes(q.type) ? esc(q.key) + ' → ' + esc(q.answer) : esc(q.answer)}</li>`).join('')}</ul><div class="note">↑ 紙に3回書いて覚えよう ✍️（苦手つぶしにも出るよ）</div>` : ''}
         ${coachQuizLine(perfect || weakTicket, st.ok, n)}
         ${tips.length ? `<div class="rulebox"><b>💡 ルールのおさらい</b>${tips.map((t) => `<div>・${esc(t)}</div>`).join('')}</div>` : ''}
         ${paperNudge()}
@@ -1261,7 +1292,8 @@ function calcAllowance(st, ym, today, cfg) {
       if (!window.speechSynthesis) { res(); return; }
       speechSynthesis.cancel();
       const u = new SpeechSynthesisUtterance(text);
-      u.lang = 'en-US'; if (enVoice) u.voice = enVoice; u.rate = slow ? 0.6 : 0.9;
+      // ふつうの速さは data.js の SPEECH_RATE（無ければ 0.9）。小4版は少しゆっくり
+      u.lang = 'en-US'; if (enVoice) u.voice = enVoice; u.rate = slow ? 0.6 : typeof SPEECH_RATE === 'number' ? SPEECH_RATE : 0.9;
       const to = setTimeout(res, 9000);
       u.onend = u.onerror = () => { clearTimeout(to); res(); };
       speechSynthesis.speak(u);
