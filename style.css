@@ -548,3 +548,33 @@ canvas.confetti { position: fixed; inset: 0; z-index: 65; pointer-events: none; 
 .ov.solid { background: radial-gradient(circle at 50% 40%, #1c2b5af5, #05070dfc); }
 .badge-d { margin-top: 8px; font-size: 15px; color: #ffcf9e; text-align: center; }
 .st-score .rv-e { display: block; font-style: normal; font-size: 20px; line-height: 1.1; }
+
+/* ---------- v16: 週間MVPメーター・WIN ボタン・ルールカード・動詞の形 ---------- */
+.toast { white-space: pre-line; width: max-content; max-width: calc(100vw - 32px); text-align: center; line-height: 1.6; }
+button.winmsg.go { display: block; width: 100%; margin: 0 0 14px; padding: 10px 14px; border-radius: 16px; background: #2b2207; border: 1px solid var(--yellow); color: #ffe9a8; font-size: 14px; font-weight: 800; animation: pop .5s; }
+button.winmsg.go b { color: var(--yellow); font-size: 18px; }
+.winmsg.go .wg-k { display: block; margin-top: 4px; font-size: 12px; color: var(--yellow); }
+.mvp { display: grid; grid-template-columns: 1fr auto; gap: 6px 10px; align-items: center; width: 100%; text-align: left; margin: -4px 0 12px; padding: 10px 14px; border-radius: 16px; background: var(--card); border: 1px solid var(--line); color: var(--text); }
+.mvp-l { font-size: 13px; font-weight: 800; }
+.mvp-l b { font-family: var(--display); color: var(--yellow); font-size: 16px; }
+.mvp-d { display: flex; gap: 4px; }
+.mvp-d i { width: 22px; height: 22px; border-radius: 50%; display: grid; place-items: center; font-style: normal; font-size: 10px; font-weight: 800; background: var(--line); color: var(--sub); }
+.mvp-d i.on { background: var(--yellow); color: #2b2207; }
+.mvp-d i.now { border: 2px solid var(--yellow); color: var(--yellow); background: transparent; }
+.mvp-d i.fut { opacity: .5; }
+.mvp-m { grid-column: 1 / -1; font-size: 12px; color: #ffcf9e; }
+.mvp-m b { color: var(--yellow); font-size: 15px; }
+.mvp.near { border-color: var(--yellow); box-shadow: 0 0 16px #ffd40044; animation: glow 1.6s ease-in-out infinite alternate; }
+.mvp.done { border-color: var(--green); background: linear-gradient(135deg, #0f2a22, #13203a); }
+.mvp.done .mvp-m { color: var(--green); font-weight: 800; }
+@keyframes glow { from { box-shadow: 0 0 6px #ffd40022; } to { box-shadow: 0 0 20px #ffd40066; } }
+.rulecard .tut-b { padding: 12px 14px; }
+.rc-h { font-weight: 800; color: var(--yellow); margin: 6px 0 4px; }
+.rc-h:first-child { margin-top: 0; }
+.rc-r { padding: 6px 0 8px; border-bottom: 1px dashed var(--line); font-size: 14px; line-height: 1.6; }
+.rc-r:last-child { border-bottom: 0; }
+.rc-r b { display: block; color: var(--text); }
+.rc-r span { display: block; font-size: 13px; color: #b8f5dc; font-family: var(--body); }
+.gc-verb { background: linear-gradient(135deg, #0d3a3a, #1b2050); border-color: #1fa3a3; }
+.mvp-l small { font-size: 11px; color: var(--sub); margin-left: 2px; }
+.mvp-l { white-space: nowrap; }

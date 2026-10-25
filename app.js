@@ -345,6 +345,9 @@ function calcAllowance(st, ym, today, cfg) {
   }
   function toast(msg, ms = 2200) {
     const t = document.createElement('div'); t.className = 'toast'; t.textContent = msg;
+    // すでに出ているお知らせがあれば、その上に積む（重ならないように）
+    const up = [...document.querySelectorAll('.toast')].reduce((a, x) => a + x.offsetHeight + 8, 0);
+    if (up) t.style.bottom = `calc(${96 + up}px + var(--safe-b))`;
     document.body.appendChild(t); setTimeout(() => t.remove(), ms);
   }
   const HOOP_SVG = `<svg class="hoop" viewBox="0 0 150 130">
@@ -371,7 +374,16 @@ function calcAllowance(st, ym, today, cfg) {
     sfx.fanfare(); setTimeout(() => confetti(220), 200);
     return overlay(`<div class="lvup-title" style="font-size:56px">BIG WIN!!</div><div class="lvup-rank">🔥🏆🔥</div>
       <div class="lvup-name">基本ミッション${ALLOWANCE.bigWinMissions}本クリア！</div>
-      <div class="reward-big">💰 おこづかい +${ALLOWANCE.bigWin}円 アップ！</div>`, { lockMs: 1200 });
+      <div class="reward-big">💰 おこづかい +${ALLOWANCE.bigWin}円 アップ！</div>${mvpNote()}`, { lockMs: 1200 });
+  }
+  // BIG WIN の画面に出す、今週の週間MVPまでの残り
+  function mvpNote() {
+    const A = ALLOWANCE; if (A.on === false || !A.mvp) return '';
+    const wb = weekBigs(todayStr()); const need = A.mvpDays - wb;
+    const idx = (new Date(todayStr() + 'T00:00:00Z').getUTCDay() + 6) % 7;
+    if (need <= 0) return `<div class="shot-sub" style="opacity:1">🏅 今週 BIG WIN ${wb}日！ 週間MVP 達成 +${A.mvp}円</div>`;
+    if (need <= 6 - idx) return `<div class="shot-sub" style="opacity:1">🏅 今週 BIG WIN ${wb}日 → あと${need}日で 週間MVP +${A.mvp}円</div>`;
+    return '';
   }
   function levelUpOv(i) {
     sfx.fanfare(); confetti(200);
@@ -438,8 +450,9 @@ function calcAllowance(st, ym, today, cfg) {
         <div class="st-streak"><span class="flame ${today ? '' : 'cold'}">🔥</span><b>${st}</b><small>日連続</small></div>
         <div class="st-score"><span class="lbl">YOU</span><b class="sc">${d.pts}</b><span class="vs">VS</span><b class="sc away">${RIVAL.score}</b><span class="lbl"><i class="rv-e">${todayRival().e}</i>${esc(todayRival().name)}</span></div>
       </div>
-      <div class="winmsg ${d.win ? 'win' : ''}">${d.win ? '🏆 今日はWIN！ ナイスゲーム！' : left > 0 ? `あと ${left} 点で WIN → ガチャチケット！` : '紙のミッション1本（または⏱タイマー10分）で WIN！'}</div>
+      ${winLine(d, left)}
       ${allowanceCard()}
+      ${mvpRow()}
       ${cheer}
       ${heroButton()}
       ${chalRow()}
@@ -454,7 +467,7 @@ function calcAllowance(st, ym, today, cfg) {
       <div class="sync" id="sync"></div>`;
   }
   // ---------- おまかせ（今やるといいゲームを1つ選ぶ。迷わずすぐ始められるように） ----------
-  function gameKinds() { return ['speak', 'listen', 'spell', 'plural', 'kanji', ...qaSubjects().map((x) => 'qa:' + x), 'challenge']; }
+  function gameKinds() { return ['speak', 'listen', 'spell', 'plural', 'verb', 'kanji', ...qaSubjects().map((x) => 'qa:' + x), 'challenge']; }
   const playedToday = (k) => ((S.days[todayStr()] || {}).qk || []).includes(k);
   function autoPick() {
     const d = S.days[todayStr()] || {};
@@ -470,7 +483,7 @@ function calcAllowance(st, ym, today, cfg) {
     const last = S.lastPlay[oldest];
     return { kind: oldest, why: !last ? 'まだやったことがないゲーム！' : c.length ? `${diffDays(last, todayStr())}日ぶりのゲーム` : 'もう1回、自己ベストに挑戦！' };
   }
-  const KIND_ICON = { speak: '🎤', listen: '🎧', spell: '🔤', plural: '📦', kanji: '漢', weak: '🎯', challenge: '👑' };
+  const KIND_ICON = { speak: '🎤', listen: '🎧', spell: '🔤', plural: '📦', kanji: '漢', weak: '🎯', challenge: '👑', verb: '🧩' };
   const kindIcon = (k) => KIND_ICON[k] || ({ 理科: '🧪', 社会: '🗾', 数学: '📐', 国語: '✍️' }[k.slice(3)] || '📚');
   function heroButton() {
     const p = autoPick();
@@ -575,10 +588,18 @@ function calcAllowance(st, ym, today, cfg) {
     const t = todayStr(); const d = S.days[t] || { m: [], pts: 0 };
     const st = streak(); const h = Number(new Intl.DateTimeFormat('en-US', { timeZone: 'Asia/Tokyo', hour: 'numeric', hour12: false }).format(new Date())) % 24;
     const left = ALLOWANCE.bigWinMissions - stdCount(d);
-    const v = { name: S.nick || 'キミ', streak: st, next: st + 1, left, weak: weakTotal(), days: S.test.date ? diffDays(t, S.test.date) : '', min: timerMin() };
+    const wb = weekBigs(t); const idx = (new Date(t + 'T00:00:00Z').getUTCDay() + 6) % 7;
+    const mvpLeft = ALLOWANCE.mvpDays - wb; const bigToday = stdCount(d) >= ALLOWANCE.bigWinMissions;
+    const winLeft = RIVAL.score + 1 - (d.pts || 0);
+    const v = { name: S.nick || 'キミ', streak: st, next: st + 1, left, weak: weakTotal(), days: S.test.date ? diffDays(t, S.test.date) : '', min: timerMin(), wb, mvpLeft, mvp: ALLOWANCE.mvp, winLeft };
     const L = COACH_LINES; const out = [];
     const add = (k, mood) => (L[k] || []).forEach((s) => out.push({ text: fillLine(s, v), mood }));
     if (S.timer) add('timer', 'happy');
+    // 週間MVPが今週ねらえる時は、いちばん先に言う（あと1〜2日・今日はまだ BIG WIN していない）
+    if (ALLOWANCE.on !== false && ALLOWANCE.mvp && !bigToday && mvpLeft >= 1 && mvpLeft <= 2 && mvpLeft <= 7 - idx) add('mvpNear', 'fire');
+    if (ALLOWANCE.on !== false && ALLOWANCE.mvp && mvpLeft <= 0 && bigToday) add('mvpDone', 'fire');
+    // 紙の勉強はできていて、点だけ足りない時
+    if (paperDone(d) && !d.win && winLeft > 0) add('nearWin', 'wink');
     if (d.pts > 0 && !paperDone(d)) add('gameOnly', 'think');
     if (played(t) && !(d.qk || []).includes('qa:' + FOCUS_SUBJECT)) add('socialToday', 'think');
     if (played(t) && !(d.qk || []).includes('speak')) add('speakNotYet', 'wink');
@@ -639,6 +660,7 @@ function calcAllowance(st, ym, today, cfg) {
         ${tile('weak', 'gc-weak', `苦手 ${weakN}問`)}
         ${tile('spell', 'gc-spell', best('spell'))}
         ${tile('plural', 'gc-plural', best('plural'))}
+        ${tile('verb', 'gc-verb', S.best.verb != null ? best('verb') : 'NEW ・ 4択で練習')}
         ${tile('kanji', 'gc-kanji', best('kanji'))}
         ${qaTiles}
       </div>
@@ -787,9 +809,13 @@ function calcAllowance(st, ym, today, cfg) {
     render();
     await shootOv(m.pts + (r.tipoff ? 1 : 0), r.tipoff ? '🏀 TIP OFF！ 今日の1本目ボーナス +1' : null);
     await afterEffects(r);
-    // おこづかいの手応え：基本ミッションを決めるたびに BIG WIN までの残りを知らせる
+    // 手応え：WIN まであと何点か・BIG WIN まであと何本か を1つのお知らせで出す
+    const msgs = [];
+    const winLeft = RIVAL.score + 1 - d.pts;
+    if (!d.win && winLeft > 0) msgs.push(`🏆 WIN まで あと${winLeft}点（ゲーム1回で届くよ 🎮）`);
     const left = ALLOWANCE.bigWinMissions - stdCount(d);
-    if (ALLOWANCE.stdMissions.includes(id) && left > 0) { sfx.coin(); toast(left === 1 ? `💰 あと1本で BIG WIN！ おこづかい +${ALLOWANCE.bigWin}円` : `💰 BIG WIN まで あと${left}本（+${ALLOWANCE.bigWin}円）`, 2600); }
+    if (ALLOWANCE.on !== false && ALLOWANCE.stdMissions.includes(id) && left > 0) msgs.push(left === 1 ? `💰 あと1本で BIG WIN！ おこづかい +${ALLOWANCE.bigWin}円` : `💰 BIG WIN まで あと${left}本（+${ALLOWANCE.bigWin}円）`);
+    if (msgs.length) { sfx.coin(); toast(msgs.join('\n'), 3000); }
   }
   async function onCheck(id) {
     const c = TEST_CHECKS.find((x) => x.id === id); if (!c) return;
@@ -917,33 +943,84 @@ function calcAllowance(st, ym, today, cfg) {
   const mkPast = (w) => ({ type: 'past', key: w[0], sub: '英語', prompt: '過去形にすると？', main: `${esc(w[0])}<div style="font-size:16px;color:var(--sub);font-family:var(--body)">（${esc(w[2])}）</div>`, hint: `${w[1].length}文字`, answer: w[1] });
   const mkThird = (w) => ({ type: 'third', key: w[0], sub: '英語', prompt: '( ) の動詞を正しい形に', main: `He ___ … (${esc(w[0])})`, hint: `${w[1].length}文字`, answer: w[1] });
   const mkHard = (w) => ({ type: 'hkanji', key: w[0], sub: '国語', prompt: '読みは？（上級）', main: esc(w[0]), answer: w[1], choices: choicesFor(w[1], [...new Set(HARD_KANJI.map((k) => k[1]))]) });
-  // まちがえた時に出す文法ルールのヒント（複数形・3単現・過去形）。規則どおりの s / ed だけの語は出さない
-  function sRule(base, ans) {
-    const b = base.toLowerCase(); const a = ans.toLowerCase();
-    if (/[^aeiou]y$/.test(b) && a === b.slice(0, -1) + 'ies') return `子音＋y で終わる語は、y を i にかえて es（${base} → ${ans}）`;
-    if (/[aeiou]y$/.test(b) && a === b + 's') return `母音＋y（ay・ey・oy・uy）は、s をつけるだけ（${base} → ${ans}）`;
-    if (/(s|x|z|ch|sh|o)$/.test(b) && a === b + 'es') return `s・x・ch・sh・o で終わる語は、es をつける（${base} → ${ans}）`;
-    if (/(f|fe)$/.test(b) && a.endsWith('ves')) return `f・fe で終わる語は、f を v にかえて es（${base} → ${ans}）`;
-    if (a === b + 's') return '';
-    return `形が変わる特別な形。そのまま覚えよう（${base} → ${ans}）`;
+  // 文法ルールの種類（複数形・3単現・過去形）。まちがえた時のヒントと、ゲーム前のルールカードに使う
+  const RULE_TEXT = {
+    's-s': 'ふつうは s をつけるだけ',
+    's-es': 's・x・ch・sh・o で終わる語は、es をつける',
+    's-ies': '子音＋y で終わる語は、y を i にかえて es',
+    's-ys': '母音＋y（ay・ey・oy・uy）は、s をつけるだけ',
+    's-ves': 'f・fe で終わる語は、f を v にかえて es',
+    's-irr': '形が変わる特別な語。そのまま覚えよう',
+    'p-ed': 'ふつうは ed をつける（e で終わる語は d だけ）',
+    'p-ied': '子音＋y で終わる動詞は、y を i にかえて ed',
+    'p-dbl': '短い音＋子音1文字で終わる動詞は、最後の文字を重ねて ed',
+    'p-irr': '不規則動詞。形ごと覚えよう',
+  };
+  function formCat(type, base, ans) {
+    const b = String(base).toLowerCase(); const a = String(ans).toLowerCase();
+    if (type === 'past') {
+      if (/[^aeiou]y$/.test(b) && a === b.slice(0, -1) + 'ied') return 'p-ied';
+      if (a === b + b.slice(-1) + 'ed') return 'p-dbl';
+      if (a === b + 'd' || a === b + 'ed') return 'p-ed';
+      return 'p-irr';
+    }
+    if (/[^aeiou]y$/.test(b) && a === b.slice(0, -1) + 'ies') return 's-ies';
+    if (/[aeiou]y$/.test(b) && a === b + 's') return 's-ys';
+    if (/(s|x|z|ch|sh|o)$/.test(b) && a === b + 'es') return 's-es';
+    if (/(f|fe)$/.test(b) && a.endsWith('ves')) return 's-ves';
+    if (a === b + 's') return 's-s';
+    return 's-irr';
   }
-  function pastRule(base, ans) {
-    const b = base.toLowerCase(); const a = ans.toLowerCase();
-    if (/[^aeiou]y$/.test(b) && a === b.slice(0, -1) + 'ied') return `子音＋y で終わる動詞は、y を i にかえて ed（${base} → ${ans}）`;
-    if (a === b + b.slice(-1) + 'ed') return `短い音＋子音1文字で終わる動詞は、最後の文字を重ねて ed（${base} → ${ans}）`;
-    if (a === b + 'd' || a === b + 'ed') return '';
-    return `不規則動詞。形ごと覚えよう（${base} → ${ans}）`;
-  }
+  const GRAMMAR = ['plural', 'third', 'past'];
+  // まちがえた時に出すヒント。規則どおりの s / ed だけの語は出さない
   function ruleTip(q) {
-    if (!q) return '';
-    if (q.type === 'plural' || q.type === 'third') return sRule(q.key, q.answer);
-    if (q.type === 'past') return pastRule(q.key, q.answer);
-    return '';
+    if (!q || !GRAMMAR.includes(q.type)) return '';
+    const c = formCat(q.type, q.key, q.answer);
+    return c === 's-s' || c === 'p-ed' ? '' : `${RULE_TEXT[c]}（${q.key} → ${q.answer}）`;
+  }
+  // ゲーム前のルールカード：このラウンドに出るルールだけを、今回は出ない単語の例で見せる（答えそのものは見せない）
+  function ruleCard(qs) {
+    const g = qs.filter((q) => GRAMMAR.includes(q.type));
+    if (!g.length) return '';
+    const pools = { plural: BANK.plural.map((x) => [x.q, x.a]), third: THIRD_FORMS, past: PAST_FORMS };
+    const used = new Set(qs.flatMap((q) => [q.key, q.answer]).map((x) => String(x).toLowerCase()));
+    const bad = (w) => used.has(String(w[0]).toLowerCase()) || used.has(String(w[1]).toLowerCase());
+    const label = { plural: '📦 複数形', third: '🗣️ 3単現（He / She のとき）', past: '⏪ 過去形' };
+    const rows = [];
+    GRAMMAR.forEach((type) => {
+      const cats = [...new Set(g.filter((q) => q.type === type).map((q) => formCat(type, q.key, q.answer)))];
+      if (!cats.length) return;
+      const order = Object.keys(RULE_TEXT);
+      cats.sort((a, b) => order.indexOf(a) - order.indexOf(b));
+      rows.push(`<div class="rc-h">${label[type]}</div>` + cats.map((c) => {
+        const ex = shuffle(pools[type].filter((w) => !bad(w) && formCat(type, w[0], w[1]) === c)).slice(0, 2);
+        return `<div class="rc-r"><b>${esc(RULE_TEXT[c])}</b>${ex.length ? `<span>例：${ex.map((w) => `${esc(w[0])} → ${esc(w[1])}`).join('　')}</span>` : ''}</div>`;
+      }).join(''));
+    });
+    return `<div class="tut rulecard"><div class="tut-step">💡 ルールカード</div>
+      <div class="coach-mini" style="margin:6px 0 10px">${coachFace('think')}<span>まずはルールをチェック！ 例とは別の単語が出るから、ルールを使って答えよう</span></div>
+      <div class="tut-b">${rows.join('')}</div>
+      <button class="btn big" data-rc="go">わかった！ スタート ▶</button><button class="btn ghost" data-rc="back" style="margin-top:10px">もどる</button></div>`;
+  }
+  // 動詞の形トレーニング（過去形・3単現を4択で練習）。よくあるまちがいの形を選択肢に入れる
+  function wrongForms(type, base, ans) {
+    const b = base; const a = ans.toLowerCase(); const cy = /[^aeiou]y$/i.test(b);
+    const c = type === 'past'
+      ? [b + 'ed', /e$/.test(b) ? b + 'd' : '', /[^aeiou][aeiou][^aeiouwxy]$/i.test(b) ? b + b.slice(-1) + 'ed' : '', cy ? b.slice(0, -1) + 'ied' : '', /ed$/.test(a) ? '' : ans + 'ed', b + 's', b + 'ing', b + 'es', b + 'd']
+      : [b + 's', b + 'es', /y$/i.test(b) ? b.slice(0, -1) + 'ies' : '', b + 'ed', b + 'ing', b + 'd'];
+    return [...new Set(c.filter((x) => x && x.toLowerCase() !== a))].slice(0, 3);
+  }
+  const mkVerbPast = (w) => ({ type: 'past', drill: true, key: w[0], sub: '英語', prompt: '過去形はどれ？', main: `${esc(w[0])}<div style="font-size:16px;color:var(--sub);font-family:var(--body)">（${esc(w[2])}）</div>`, answer: w[1], choices: shuffle([w[1], ...wrongForms('past', w[0], w[1])]) });
+  const mkVerbThird = (w) => ({ type: 'third', drill: true, key: w[0], sub: '英語', prompt: 'He / She のときの形はどれ？', main: `He ___ … (${esc(w[0])})`, answer: w[1], choices: shuffle([w[1], ...wrongForms('third', w[0], w[1])]) });
+  // 苦手リストの単語を先に（過去形4・3単現2まで）、残りはランダムで 過去形6＋3単現4＝10問
+  function buildVerb() {
+    const take = (list, n, kind, cap) => { const wk = S.weak[kind] || {}; const weak = shuffle(list.filter((w) => wk[w[0]])).slice(0, cap); return weak.concat(shuffle(list.filter((w) => !weak.includes(w))).slice(0, n - weak.length)); };
+    return shuffle([...take(PAST_FORMS, 6, 'past', 4).map(mkVerbPast), ...take(THIRD_FORMS, 4, 'third', 2).map(mkVerbThird)]);
   }
   // リスニング：英語を聞いて答える（意味を選ぶ／聞こえた単語を選ぶ／質問への返事を選ぶ）
   const listenMain = (extra) => `<div class="lsn"><button class="lsn-btn" data-listen="1">🔊</button><button class="lsn-slow" data-listen="slow">🐢 ゆっくり</button></div>${extra || ''}`;
   function mkListenMeaning(w) {
-    return { type: 'listen', key: w[0], sub: '英語', prompt: '聞いて、意味は？', main: listenMain(), say: w[0], answer: w[1], long: true, choices: choicesFor(w[1], SPEAK_SENTENCES.map((x) => x[1])) };
+    return { type: 'listen', key: w[0], sub: '英語', prompt: '聞いて、意味は？', main: listenMain(), say: w[0], ja: w[1], answer: w[1], long: true, choices: choicesFor(w[1], SPEAK_SENTENCES.map((x) => x[1])) };
   }
   function mkListenWord(w) {
     const words = w[0].split(' ');
@@ -952,10 +1029,15 @@ function calcAllowance(st, ym, today, cfg) {
     const [ans, at] = pick(cand);
     const pool = [...new Set(SPEAK_SENTENCES.flatMap((x) => x[0].split(' ').map((y) => y.replace(/[^A-Za-z']/g, ''))).filter((y) => y.length >= 3 && !/'/.test(y) && y.toLowerCase() !== ans.toLowerCase()))];
     const blank = words.map((x, i) => (i === at ? x.replace(ans, '＿＿＿') : x)).join(' ');
-    return { type: 'listen', key: w[0], sub: '英語', prompt: '聞こえた単語はどれ？', main: listenMain(`<div class="lsn-blank">${esc(blank)}</div>`), say: w[0], answer: ans, choices: choicesFor(ans, pool) };
+    return { type: 'listen', key: w[0], sub: '英語', prompt: '聞こえた単語はどれ？', main: listenMain(`<div class="lsn-blank">${esc(blank)}</div>`), say: w[0], ja: w[1], answer: ans, choices: choicesFor(ans, pool) };
   }
   function mkListenReply(t) {
-    return { type: 'listen', key: t[0], sub: '英語', prompt: '質問を聞いて、正しい返事は？', main: listenMain(), say: t[0], answer: t[3], long: true, choices: choicesFor(t[3], SPEAK_TALK.map((x) => x[3])) };
+    return { type: 'listen', key: t[0], sub: '英語', prompt: '質問を聞いて、正しい返事は？', main: listenMain(), say: t[0], ja: t[1], reply: t[3], answer: t[3], long: true, choices: choicesFor(t[3], SPEAK_TALK.map((x) => x[3])) };
+  }
+  // 答え合わせのあとに出す「英文 ＝ 日本語の意味」（正解でも不正解でも出す）
+  function listenLine(q) {
+    if (!q.say) return '';
+    return `<div class="rule">🔊 ${esc(q.say)} ＝ ${esc(q.ja || '')}${q.reply ? `<br>→ ${esc(q.reply)}` : ''}</div>`;
   }
   function mkListenFor(key) {
     const t = SPEAK_TALK.find((x) => x[0] === key); if (t) return mkListenReply(t);
@@ -974,6 +1056,7 @@ function calcAllowance(st, ym, today, cfg) {
       return shuffle([...pickW(PAST_FORMS, 3, 'past').map(mkPast), ...pickW(THIRD_FORMS, 2, 'third').map(mkThird), ...pickW(HARD_KANJI, 3, 'hkanji').map(mkHard), ...qa]);
     }
     if (kind === 'listen') return buildListen();
+    if (kind === 'verb') return buildVerb();
     if (kind === 'spell') return sampleItems(BANK.spell, QUIZ_LEN, 'spell', (x) => x.a).map(mkSpell);
     if (kind === 'plural') return sampleItems(BANK.plural, QUIZ_LEN, 'plural', (x) => x.q).map(mkPlural);
     if (kind === 'kanji') return sampleItems(BANK.kanji, QUIZ_LEN, 'kanji', (x) => x.q).map(mkKanji);
@@ -994,7 +1077,7 @@ function calcAllowance(st, ym, today, cfg) {
     return qs;
   }
   function quizName(kind) {
-    return { speak: 'スピーキング', listen: 'リスニング', spell: 'スペル・シュート', plural: '複数形チャレンジ', kanji: '漢字よみ速攻', weak: '苦手つぶし', challenge: 'チャレンジ（上級）' }[kind] || (kind.startsWith('qa:') ? kind.slice(3) + ' 一問一答' : kind);
+    return { speak: 'スピーキング', listen: 'リスニング', spell: 'スペル・シュート', plural: '複数形チャレンジ', kanji: '漢字よみ速攻', weak: '苦手つぶし', challenge: 'チャレンジ（上級）', verb: '動詞の形トレーニング' }[kind] || (kind.startsWith('qa:') ? kind.slice(3) + ' 一問一答' : kind);
   }
   function quizSubject(kind) {
     return kind === 'kanji' ? '国語' : kind === 'weak' || kind === 'challenge' ? '全教科' : kind.startsWith('qa:') ? (SUBJECTS.includes(kind.slice(3)) ? kind.slice(3) : '全教科') : '英語';
@@ -1005,9 +1088,17 @@ function calcAllowance(st, ym, today, cfg) {
     if (v.toLowerCase() === q.answer.toLowerCase()) return 'case';
     return 'ng';
   }
+  // ルールカードを出すゲーム：苦手つぶし（文法の問題が入っている時）と、まだ8問以上取れていない複数形・動詞の形
+  // チャレンジ（おこづかいに関係する上級ゲーム）には出さない
+  const needsRuleCard = (kind) => kind === 'weak' || ((kind === 'plural' || kind === 'verb') && (S.best[kind] || 0) < 8);
   function startQuiz(kind) {
     const qs = buildQuestions(kind);
     if (!qs.length) { toast('苦手リストは空っぽ！ すごい！'); return; }
+    const card = needsRuleCard(kind) ? ruleCard(qs) : '';
+    if (!card) { runQuiz(kind, qs); return; }
+    overlay(card, { closeOnTap: false, cls: 'solid', onMount: (el, close) => { el.addEventListener('click', (e) => { const b = e.target.closest('[data-rc]'); if (!b) return; sfx.tap(); close(); if (b.dataset.rc === 'go') runQuiz(kind, qs); }); } });
+  }
+  function runQuiz(kind, qs) {
     const names = { [kind]: quizName(kind) };
     const CLOCK = kind === 'challenge' ? 15 : SHOT_CLOCK;
     const st = { i: 0, answered: 0, ok: 0, combo: 0, maxCombo: 0, pts: 0, miss: [], timer: null, left: CLOCK, locked: false, ended: false, t0: Date.now() };
@@ -1073,23 +1164,30 @@ function calcAllowance(st, ym, today, cfg) {
         st.ok++; st.combo++; st.maxCombo = Math.max(st.maxCombo, st.combo);
         const p = 1; st.pts += p;
         j.textContent = st.combo >= 3 ? `🔥 SWISH! +${p}` : `NICE! +${p}`; j.className = 'judge ok';
-        if (wk[q.key]) { wk[q.key]--; if (wk[q.key] <= 0) delete wk[q.key]; }
+        // 動詞の形（4択の練習）では苦手を消さない。消えるのは苦手つぶし・チャレンジで書いて正解した時
+        if (wk[q.key] && !q.drill) { wk[q.key]--; if (wk[q.key] <= 0) delete wk[q.key]; }
         sfx.ok(); if (st.combo >= 3) confetti(25);
         if (btn) btn.classList.add('ok');
+        // リスニングは正解でも意味を見せる（聞いた英語と意味を結びつける）
+        if (q.say) q$('.answer').innerHTML = listenLine(q);
       } else {
         st.combo = 0;
         wk[q.key] = (wk[q.key] || 0) + 1;
+        if (q.type === 'calc') { const ks = Object.keys(wk); if (ks.length > 30) delete wk[ks[0]]; }
         st.miss.push(q);
         j.textContent = res === 'time' ? '⏰ ショットクロック！' : res === 'case' ? 'おしい！ 大文字に注意' : 'MISS…'; j.className = 'judge ng';
         const tip = ruleTip(q);
-        q$('.answer').innerHTML = `正解：${esc(q.answer)}${q.say ? `<div class="rule">🔊 ${esc(q.say)}</div>` : ''}${tip ? `<div class="rule">💡 ${esc(tip)}</div>` : ''}`;
+        q$('.answer').innerHTML = `正解：${esc(q.answer)}${listenLine(q)}${tip ? `<div class="rule">💡 ${esc(tip)}</div>` : ''}`;
         res === 'time' ? sfx.buzzer() : sfx.ng();
         if (btn) btn.classList.add('ng');
         el.querySelectorAll('.choice').forEach((b) => { if (b.dataset.c === q.answer) b.classList.add('ok'); });
+        // まちがえたら、ゆっくりもう一度読み上げる
+        if (q.say) setTimeout(() => { if (!st.ended) sayEn(q.say, true); }, 600);
       }
       save();
       setCombo();
-      setTimeout(() => { if (st.ended) return; st.i++; if (st.i < qs.length) show(); else finish(false); }, res === 'ok' ? 750 : ruleTip(q) || q.say ? 3200 : 1700);
+      const wait = res === 'ok' ? (q.say ? 1800 : 750) : q.say ? 4200 : ruleTip(q) ? 3200 : 1700;
+      setTimeout(() => { if (st.ended) return; st.i++; if (st.i < qs.length) show(); else finish(false); }, wait);
     }
     function finish(quit) {
       if (st.ended) return;
@@ -1124,9 +1222,10 @@ function calcAllowance(st, ym, today, cfg) {
         ${ticket ? '<div class="newtag">全問正解ボーナス 🎟️ +1</div>' : ''}
         ${weakTicket ? '<div class="newtag">🎯 苦手つぶし完了！ 🎟️ +1</div>' : ''}
         ${perfect && kind === 'challenge' && (d.cp || 0) <= ALLOWANCE.perfectPerDay ? `<div class="reward-big">💰 チャレンジ全問正解！ おこづかい +${ALLOWANCE.perfect}円</div>` : ''}
-        ${st.miss.length ? `<ul>${st.miss.map((q) => `<li>${['kanji', 'qa', 'hkanji', 'past', 'third', 'listen'].includes(q.type) ? esc(q.key) + ' → ' + esc(q.answer) : esc(q.answer)}</li>`).join('')}</ul><div class="note">↑ 紙に3回書いて覚えよう ✍️（苦手つぶしにも出るよ）</div>` : ''}
+        ${st.miss.length ? `<ul>${st.miss.map((q) => `<li>${['kanji', 'qa', 'hkanji', 'past', 'third', 'listen', 'calc'].includes(q.type) ? esc(q.key) + ' → ' + esc(q.answer) : esc(q.answer)}</li>`).join('')}</ul><div class="note">↑ 紙に3回書いて覚えよう ✍️（苦手つぶしにも出るよ）</div>` : ''}
         ${coachQuizLine(perfect || weakTicket, st.ok, n)}
         ${tips.length ? `<div class="rulebox"><b>💡 ルールのおさらい</b>${tips.map((t) => `<div>・${esc(t)}</div>`).join('')}</div>` : ''}
+        ${kind !== 'verb' && PAST_FORMS.length && st.miss.some((q) => q.type === 'past' || q.type === 'third') ? '<button class="btn ghost" style="width:100%;margin-top:10px" data-q="verb">🧩 動詞の形トレーニング（4択）で練習する ›</button>' : ''}
         ${paperNudge()}
         <div class="row" style="width:100%;margin-top:14px"><button class="btn ghost" style="flex:1" data-q="again">もう1回</button><button class="btn" style="flex:1" data-q="close">とじる</button></div>
       </div>`;
@@ -1135,6 +1234,7 @@ function calcAllowance(st, ym, today, cfg) {
         el.remove();
         if (r) await afterEffects(r); else render();
         if (a.dataset.q === 'again') startQuiz(kind);
+        else if (a.dataset.q === 'verb') startQuiz('verb');
       });
     }
     el.addEventListener('click', (e) => {
@@ -1213,7 +1313,8 @@ function calcAllowance(st, ym, today, cfg) {
       if (!window.speechSynthesis) { res(); return; }
       speechSynthesis.cancel();
       const u = new SpeechSynthesisUtterance(text);
-      u.lang = 'en-US'; if (enVoice) u.voice = enVoice; u.rate = slow ? 0.6 : 0.9;
+      // ふつうの速さは data.js の SPEECH_RATE（無ければ 0.9）。小4版は少しゆっくり
+      u.lang = 'en-US'; if (enVoice) u.voice = enVoice; u.rate = slow ? 0.6 : typeof SPEECH_RATE === 'number' ? SPEECH_RATE : 0.9;
       const to = setTimeout(res, 9000);
       u.onend = u.onerror = () => { clearTimeout(to); res(); };
       speechSynthesis.speak(u);
@@ -1640,6 +1741,28 @@ function calcAllowance(st, ym, today, cfg) {
     const perDay = (a.bigs * A.bigWin + a.perfect * A.perfect) / Math.max(1, passed);
     const proj = passed >= 3 ? Math.max(a.total, Math.min(A.max, a.base + Math.min(A.bonusMax, Math.floor(perDay * span / 10) * 10 + a.mvp * A.mvp + a.ranks * A.rankUp))) : null;
     return { t, a, A, wb, hint, up, proj };
+  }
+  // 今日の WIN までの残り。紙の勉強は済んでいて点だけ足りない時は、タップですぐゲームを始められるボタンにする
+  function winLine(d, left) {
+    if (d.win) return '<div class="winmsg win">🏆 今日はWIN！ ナイスゲーム！</div>';
+    if (left > 0 && paperDone(d)) {
+      const p = autoPick(); const reach = p.kind === 'speak' ? 4 : 6;
+      return `<button class="winmsg go" data-act="omakase" data-kind="${esc(p.kind)}">あと <b>${left}</b> 点で WIN！ ${left <= reach ? 'ゲーム1回で届くよ' : 'ゲームで点をかせごう'} 🎮<span class="wg-k">▶ ${kindIcon(p.kind)} ${esc(quizName(p.kind))}</span></button>`;
+    }
+    return `<div class="winmsg">${left > 0 ? `あと ${left} 点で WIN → ガチャチケット！` : '紙のミッション1本（または⏱タイマー10分）で WIN！'}</div>`;
+  }
+  // 週間MVPメーター（月〜日で BIG WIN の日に色がつく）。数え方はおこづかいと同じ（基本ミッションの本数）
+  function mvpRow() {
+    const A = ALLOWANCE; if (A.on === false || !A.mvp) return '';
+    const t = todayStr(); const idx = (new Date(t + 'T00:00:00Z').getUTCDay() + 6) % 7; const mon = addDays(t, -idx);
+    const big = (ds) => stdCount(S.days[ds]) >= A.bigWinMissions;
+    const wb = weekBigs(t); const need = A.mvpDays - wb;
+    const chances = 6 - idx + (big(t) ? 0 : 1); // 今週あと何日 BIG WIN をねらえるか（今日をふくむ）
+    const dots = '月火水木金土日'.split('').map((w, k) => { const ds = addDays(mon, k); return `<i class="${big(ds) ? 'on' : ds === t ? 'now' : ds > t ? 'fut' : ''}">${w}</i>`; }).join('');
+    const msg = need <= 0 ? `🏅 週間MVP 達成！ +${yen(A.mvp)}（日曜が終わったら おこづかいに入るよ）`
+      : need <= chances ? (need === 1 ? `あと<b>1日</b>で 週間MVP +${yen(A.mvp)}！` : `あと${need}日 BIG WIN で 週間MVP +${yen(A.mvp)}`)
+      : `今週の BIG WIN ${wb}日。来週は${A.mvpDays}日で 週間MVP +${yen(A.mvp)}`;
+    return `<button class="mvp ${need <= 0 ? 'done' : need === 1 && chances > 0 ? 'near' : ''}" data-act="money"><span class="mvp-l">🏅 週間MVP <b>${wb}/${A.mvpDays}</b><small>日</small></span><span class="mvp-d">${dots}</span><span class="mvp-m">${msg}</span></button>`;
   }
   function allowanceCard() {
     const { t, a, A, up, proj } = allowanceInfo();
