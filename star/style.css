@@ -553,3 +553,125 @@ canvas.confetti { position: fixed; inset: 0; z-index: 65; pointer-events: none; 
 .starpop { font-size: 130px; line-height: 1; margin-bottom: 10px; animation: starpop .7s cubic-bezier(.2,1.8,.4,1) both; filter: drop-shadow(0 0 30px #ffd400aa); }
 @keyframes starpop { 0% { transform: scale(.2) rotate(-90deg); opacity: 0; } 100% { transform: scale(1) rotate(0); opacity: 1; } }
 .shoot-btn { font-family: var(--body); font-weight: 900; }
+
+/* ---------- v16: かんたんホーム（小4向け。大きい字で「きょう やること」を ① ② ③ の順に） ---------- */
+#app { font-size: 16px; }
+.top2 { display: flex; align-items: center; gap: 8px; margin-bottom: 10px; }
+.tp-rank { flex: 1; min-width: 0; display: flex; align-items: center; gap: 10px; text-align: left; }
+.tp-e { width: 42px; height: 42px; flex-shrink: 0; border-radius: 14px; display: grid; place-items: center; font-size: 26px; background: linear-gradient(145deg, var(--orange), #b0177a); box-shadow: 0 5px 14px #ff4fa355; }
+.tp-t { flex: 1; min-width: 0; display: flex; flex-direction: column; }
+.tp-t b { font-size: 14px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.tp-t .xpbar { height: 7px; margin-top: 5px; }
+.tp-chip { display: flex; align-items: baseline; gap: 2px; padding: 6px 8px; border-radius: 14px; background: var(--card); border: 1px solid var(--line); font-family: var(--display); font-weight: 800; }
+.tp-chip i { font-style: normal; font-size: 18px; align-self: center; }
+.tp-chip b { font-size: 20px; line-height: 1; }
+.tp-chip small { font-family: var(--body); font-size: 12px; }
+.tp-chip.fire:not(.hot) i { filter: grayscale(1) opacity(.55); }
+.tp-chip.hot { border-color: #ff4fa388; color: var(--orange2); }
+.gear { font-size: 22px; padding: 8px; }
+
+.coach-box { margin: 6px 0 14px; }
+.coach-av { width: 82px; height: 82px; }
+.coach-bub { font-size: 18px; line-height: 1.6; padding: 12px 16px; }
+.coach-nm { font-size: 12px; }
+.cheer { font-size: 17px; }
+
+.today { display: flex; align-items: baseline; justify-content: space-between; margin: 6px 4px 10px; }
+.td-h { font-family: var(--display); font-weight: 900; font-size: 30px; letter-spacing: .02em; text-shadow: 0 0 18px #ff4fa366; }
+.td-p { font-family: var(--display); font-weight: 800; font-size: 18px; color: var(--sub); }
+.td-p b { font-size: 34px; color: var(--yellow); margin-right: 2px; }
+
+.step { margin: 0 0 14px; padding: 14px 14px 16px; border-radius: 24px; background: var(--card); border: 2px solid var(--line); }
+.step.now { border-color: var(--orange); background: linear-gradient(160deg, #3b1450, #241040); box-shadow: 0 0 0 4px #ff4fa333, 0 10px 30px #ff4fa333; }
+.step.done { background: linear-gradient(160deg, #0f2a22, #13203a); border-color: #1d6b52; }
+.st-h { display: flex; align-items: center; gap: 12px; }
+.st-n { width: 48px; height: 48px; flex-shrink: 0; border-radius: 50%; display: grid; place-items: center; font-family: var(--display); font-weight: 900; font-size: 28px; background: var(--line); color: var(--text); }
+.step.now .st-n { background: linear-gradient(145deg, var(--yellow), #ff9d00); color: #3a1a05; box-shadow: 0 0 16px #ffd40088; animation: pulse 1.4s ease-in-out infinite; }
+.step.done .st-n { background: var(--green); color: #052; }
+@keyframes pulse { 0%,100% { transform: scale(1); } 50% { transform: scale(1.1); } }
+.st-tt { flex: 1; min-width: 0; display: flex; flex-direction: column; }
+.st-tt b { font-family: var(--display); font-weight: 900; font-size: 26px; line-height: 1.2; }
+.st-tt small { font-size: 15px; color: #e6d5f5; margin-top: 2px; }
+.step.done .st-tt small { color: #9ff5d3; }
+.st-now { flex-shrink: 0; padding: 6px 10px; border-radius: 99px; background: var(--yellow); color: #3a1a05; font-size: 14px; font-weight: 900; animation: bob 1.6s ease-in-out infinite; }
+.st-goal { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; margin: 12px 2px 12px; }
+.dots { display: flex; gap: 2px; }
+.dots i { font-style: normal; font-size: 30px; line-height: 1; color: #5b4a7a; }
+.dots i.on { color: var(--yellow); text-shadow: 0 0 12px #ffd400aa; animation: pop .4s; }
+.st-gt { font-size: 17px; }
+.st-gt b { color: var(--yellow); font-size: 20px; }
+
+.mtiles { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+.mtile { display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 4px; min-height: 128px; padding: 12px 8px; border-radius: 20px; text-align: center;
+  background: linear-gradient(160deg, #ff5fae, #c21f7e); box-shadow: 0 5px 0 #8a145f, 0 8px 18px #ff4fa344; transition: transform .08s, box-shadow .08s; }
+.mtile:active { transform: translateY(4px); box-shadow: 0 1px 0 #8a145f; }
+.mt-e { font-size: 42px; line-height: 1; }
+.mt-l { font-size: 21px; font-weight: 900; line-height: 1.25; }
+.mt-s { font-size: 13px; color: #ffe3f1; line-height: 1.3; }
+.mtile.done { background: linear-gradient(160deg, #1d7a58, #0f3d2e); box-shadow: 0 2px 0 #0a2a20; }
+.mtile.done .mt-s { color: #b6ffe0; font-size: 16px; font-weight: 900; }
+.mtile.done .mt-e { filter: drop-shadow(0 0 10px #2ee59d88); }
+
+.hero.in-step { margin: 12px 0 0; }
+.hero.in-step .hero-t { font-size: 22px; }
+.hero-t { overflow-wrap: anywhere; }
+/* ① が終わったら、ボタンを小さくたたんで ② ③ が見えるようにする（まだ押せる） */
+.step.done .mtiles { gap: 8px; }
+.step.done .mtile { flex-direction: row; justify-content: flex-start; min-height: 0; padding: 10px 12px; gap: 8px; text-align: left; }
+.step.done .mt-e { font-size: 26px; }
+.step.done .mt-l { font-size: 15px; }
+.step.done .mt-s { display: none; }
+.step.done .st-goal { margin: 10px 2px; }
+.hero { padding: 16px 16px; }
+.hero-k { font-size: 14px; }
+.hero-t { font-size: 26px; }
+.hero-s { font-size: 14px; }
+.hero-a { font-size: 18px; padding: 12px 14px; }
+.step.done .hero { background: linear-gradient(135deg, #7a2a6a, #4a1240); box-shadow: 0 3px 0 #2e0f30; }
+
+.bigbtn { display: block; width: 100%; margin-top: 12px; padding: 18px; border-radius: 20px; font-size: 24px; font-weight: 900; text-align: center; }
+.bigbtn.gacha { background: linear-gradient(135deg, #ffd400, #ff9d00); color: #3a1a05; box-shadow: 0 5px 0 #a35a00, 0 10px 24px #ffd40055; }
+.bigbtn:active { transform: translateY(4px); box-shadow: 0 1px 0 #a35a00; }
+
+.alldone { margin: 0 0 14px; padding: 18px; border-radius: 24px; text-align: center; font-family: var(--display); font-weight: 900; font-size: 26px; line-height: 1.3;
+  background: linear-gradient(135deg, #ff3d7f55, #ffd40055, #22d3ee55); border: 2px solid var(--yellow); animation: pop .5s; }
+.alldone small { display: block; margin-top: 6px; font-family: var(--body); font-size: 16px; color: #ffe9d6; }
+
+.money.mini2 { display: flex; align-items: center; gap: 10px; padding: 14px 16px; margin: 4px 0 10px; }
+.money.mini2 .mo-l { flex: 1; display: flex; flex-direction: column; font-size: 16px; color: #9ff5d3; }
+.money.mini2 .mo-l small { font-size: 12px; color: var(--sub); margin-top: 2px; }
+.money.mini2 .mo-total { font-size: 30px; margin: 0; }
+.money.mini2 .mo-up { margin-left: 0; font-size: 14px; }
+.money.mini2 .mo-a { color: var(--sub); font-size: 22px; }
+.tmlink { display: block; width: 100%; margin: 4px 0 0; padding: 12px; border-radius: 16px; border: 1px dashed var(--line); color: var(--sub); font-size: 15px; }
+
+/* ゲーム */
+.pg-h { font-family: var(--display); font-weight: 900; font-size: 30px; margin: 4px 4px 2px; text-shadow: 0 0 18px #ff4fa366; }
+.pg-s { font-size: 15px; color: #e6d5f5; margin: 0 4px 12px; }
+.tile { min-height: 132px; gap: 4px; padding: 14px; }
+.t-e { font-size: 36px; }
+.t-n { font-size: 20px; font-weight: 900; }
+.t-d { font-size: 13px; color: #d6cbe8; line-height: 1.35; }
+.t-b { margin-top: auto; font-size: 12px; }
+.gc-speak { background: linear-gradient(135deg, #0e4a5c, #1b2a6b); border-color: #22d3ee88; }
+.chal { margin-top: 16px; }
+.chal .ch-t { font-size: 16px; }
+.chal .ch-t small { font-size: 12px; }
+.nudge { font-size: 16px; }
+
+/* ガチャ */
+.gm-big { font-size: 22px !important; color: var(--text) !important; }
+.gm-big b { color: var(--yellow); font-size: 26px; }
+.pity { font-size: 13px; }
+.howticket { margin: 12px 0 0; padding: 14px 16px; border-radius: 18px; background: #2b2207; border: 1px solid var(--yellow); color: #ffe9a8; font-size: 16px; line-height: 1.8; }
+.howticket b { color: var(--yellow); }
+.tr-s { font-size: 14px; }
+
+/* 下のタブ・説明・お知らせも大きく */
+.tab { font-size: 13px; font-weight: 800; }
+.tab .ti { font-size: 28px; }
+.tut-t { font-size: 28px; }
+.tut-b { font-size: 18px; line-height: 1.75; }
+.tut.wn .tut-b { font-size: 20px; }
+.tut.wn .wn-i { margin: 10px 0; }
+.wn-img { width: 170px; height: 170px; }
