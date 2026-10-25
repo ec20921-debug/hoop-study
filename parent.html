@@ -105,6 +105,10 @@ button.ghost { background: transparent; color: var(--sub); border: 1px solid var
 .kid span { font-size: 12px; color: var(--sub); }
 .kid.on { border-color: var(--accent); background: var(--accent-soft); }
 .hidden { display: none !important; }
+.ideas { display: flex; flex-direction: column; gap: 6px; margin-bottom: 8px; }
+.idea { text-align: left; padding: 9px 12px; border-radius: 12px; background: var(--card); border: 1px dashed var(--accent); color: var(--text); font-size: 13px; line-height: 1.5; font-weight: 600; }
+.idea::before { content: '💡 '; }
+.lastwarn { color: #c2410c; font-weight: 800; }
 </style>
 </head>
 <body>
@@ -148,6 +152,8 @@ button.ghost { background: transparent; color: var(--sub); border: 1px solid var
 
     <section class="card"><h2>📣 エールを送る</h2>
       <p class="sub">次にアプリを開いた時、大きく表示されます。チケットを付けるとガチャが回せます。</p>
+      <div id="cheerlast" class="sub" style="margin:4px 0 8px"></div>
+      <div id="cheerideas" class="ideas"></div>
       <textarea id="cheertext" maxlength="200" placeholder="例：部活のあとにミッション3つ、すごい！ 今日はゆっくり休んでね"></textarea>
       <div class="row"><select id="cheertk" style="width:auto"><option value="0">チケットなし</option><option value="1" selected>チケット +1</option><option value="2">チケット +2</option><option value="3">チケット +3</option></select>
         <button id="cheergo" style="flex:1">送る</button></div>
@@ -232,7 +238,7 @@ window.startParent = () => {
   const getKey = () => { try { return localStorage.getItem(PK) || ''; } catch (e) { return ''; } };
   const setKey = (k) => { try { k ? localStorage.setItem(PK, k) : localStorage.removeItem(PK); } catch (e) { /* noop */ } };
   const ICON = { mission: '🏀', quiz: '🎮', check: '✅', gacha: '🎰', undo: '↩️', cheer_read: '📣', test_set: '📅', goal_set: '🎯', voice: '💬', reset: '⚠️', timer: '⏱', trade: '🔄', complete: '👑', challenge: '📜', badge: '🏅', session: '📱' };
-  const QNAME = { calc: '🧮 計算ダッシュ', speak: '🎤 スピーキング', listen: '🎧 リスニング', spell: 'スペル', plural: '複数形', kanji: '漢字よみ', weak: '苦手つぶし', 'qa:社会': '社会 一問一答', 'qa:理科': '理科 一問一答' };
+  const QNAME = { calc: '🧮 計算ダッシュ', speak: '🎤 スピーキング', listen: '🎧 リスニング', spell: 'スペル', plural: '複数形', kanji: '漢字よみ', weak: '苦手つぶし', challenge: '👑 チャレンジ（上級）', verb: '🧩 動詞の形トレーニング', 'qa:社会': '社会 一問一答', 'qa:理科': '理科 一問一答' };
 
   function showLogin(msg) { $('#login').classList.remove('hidden'); $('#dash').classList.add('hidden'); $('#loginmsg').textContent = msg || ''; }
 
@@ -250,6 +256,36 @@ window.startParent = () => {
     } catch (e) {
       showLogin('通信できませんでした。電波を確認して「更新」を押してください。');
     } finally { $('#reload').textContent = '↻ 更新'; }
+  }
+
+  // エールの文例を記録から作る（多くて4つ）。BIG WIN の数え方はアプリと同じ（基本ミッションの本数）
+  function cheerIdeas(st, logs, t, streak) {
+    // 子どものスマホが最後に送ったルール（おこづかいの画面と同じ）を優先する
+    const days = st.days || {}; const A = typeof ALLOWANCE !== 'undefined' ? Object.assign({}, ALLOWANCE, (st.summary && st.summary.allowanceCfg) || {}) : null;
+    const kid = KID.id === 'star';
+    const out = [];
+    const isBig = (x) => !!(A && x && (x.m || []).filter((id) => (A.stdMissions || []).includes(id)).length >= A.bigWinMissions);
+    const idx = (dow(t) + 6) % 7; let wb = 0;
+    for (let k = 0; k <= idx; k++) if (isBig(days[addDays(t, -k)])) wb++;
+    let bs = 0; { let d = isBig(days[t]) ? t : addDays(t, -1); while (isBig(days[d])) { bs++; d = addDays(d, -1); } }
+    if (A && A.mvp && A.on !== false) {
+      const need = A.mvpDays - wb; const left = 6 - idx + (isBig(days[t]) ? 0 : 1);
+      if (need <= 0) out.push(kid ? `週間MVPおめでとう！🏅 今週は BIG WIN ${wb}日、ほんとうにすごいね ✨` : `週間MVP達成おめでとう！🏅 今週 BIG WIN ${wb}日、部活と両立してるのが本当にすごい`);
+      else if (need <= 2 && need <= left) out.push(kid ? `今週 BIG WIN ${wb}日！ あと${need}日で週間MVPだね 🏅 おうえんしてるよ 📣` : `今週 BIG WIN ${wb}日！ あと${need}日で週間MVP 🏅 応援してるよ`);
+    }
+    if (bs >= 2) out.push(kid ? `BIG WIN ${bs}日連続！ 毎日コツコツできていて、えらいね 🌟` : `BIG WIN ${bs}日連続！ 紙の勉強がしっかり続いてて、すごいよ 🔥`);
+    else if (streak >= 3) out.push(kid ? `${streak}日連続、すごいね！ 毎日つづけられるのが一番のちからだよ ✨` : `${streak}日連続！ 毎日コツコツ続けられるのが一番の力だよ 🔥`);
+    const G = st.goals || {}; const gs = ['国語', '数学', '英語', '理科', '社会'].filter((s) => G[s] && G[s].goal);
+    if (gs.length) out.push(`${gs.slice(0, 2).map((s) => `${s}${G[s].goal}点`).join('・')}の目標、いいね！ 一緒にがんばろう 📚`);
+    const wk = st.weak || {};
+    if (!kid && Object.keys(wk.past || {}).length + Object.keys(wk.third || {}).length >= 3) out.push('過去形・3単現は「🧩 動詞の形トレーニング」で4択の練習ができるよ。1回やってみてね');
+    if (kid && Object.keys(wk.listen || {}).length >= 3) out.push('リスニング、答えたあとに日本語の意味が出るようになったよ 🎧 1回やってみてね');
+    // 開く時間が21時以降の日が、直近3日のうち2日以上
+    const firstAt = (d) => logs.filter((x) => x.date === d && x.type !== 'session' && x.ts).map((x) => hm(x.ts)).sort()[0] || '';
+    const late = [1, 2, 3].map((k) => firstAt(addDays(t, -k))).filter((h) => h >= '21:00').length;
+    if (late >= 2) out.push(kid ? '夜おそくまでおつかれさま 🌙 今日はごはんの前に1つクリアしてみない？' : '夜おそくまでおつかれさま。今日はごはんの前に1本だけやってみない？ 🌙');
+    if (!out.length) out.push(kid ? '今日もアプリをひらいてくれてありがとう！ おうえんしてるよ 📣' : 'いつもがんばってるね！ 今日も1本、応援してるよ 🏀');
+    return out.slice(0, 4);
   }
 
   function draw(j) {
@@ -322,7 +358,12 @@ window.startParent = () => {
     const kanjiRead = Object.fromEntries(KANJI_WORDS.map((k) => [k[0], k[1]]));
     const plur = Object.fromEntries(PLURAL_WORDS.map((p) => [p[0], p[1]]));
     const block = (title, arr, fmt) => arr.length ? `<div class="sub" style="margin:8px 0 6px">${title}</div><div class="chips">${arr.map(([k, n]) => `<span class="chip">${esc(fmt(k))}<b>${n}</b></span>`).join('')}</div>` : '';
-    const wh = block('英単語スペル', top(weak.spell), (k) => k) + block('複数形', top(weak.plural), (k) => `${k}→${plur[k] || ''}`) + block('漢字の読み', top(weak.kanji), (k) => `${k}（${kanjiRead[k] || ''}）`) + block('一問一答', top(weak.qa), (k) => k);
+    const pastOf = Object.fromEntries(PAST_FORMS.map((p) => [p[0], p[1]]));
+    const thirdOf = Object.fromEntries(THIRD_FORMS.map((p) => [p[0], p[1]]));
+    const wh = block('英単語スペル', top(weak.spell), (k) => k) + block('複数形', top(weak.plural), (k) => `${k}→${plur[k] || ''}`)
+      + block('過去形', top(weak.past), (k) => `${k}→${pastOf[k] || ''}`) + block('3単現', top(weak.third), (k) => `${k}→${thirdOf[k] || ''}`)
+      + block('漢字の読み', top(weak.kanji), (k) => `${k}（${kanjiRead[k] || ''}）`) + block('難しい漢字（チャレンジ）', top(weak.hkanji), (k) => k) + block('一問一答', top(weak.qa), (k) => k)
+      + block('リスニング', top(weak.listen), (k) => k) + block('スピーキング', top(weak.speak), (k) => k) + block('計算', top(weak.calc), (k) => k);
     $('#weak').innerHTML = wh || '<div class="empty">苦手リストは空です（まちがえた問題が自動で入ります）</div>';
 
     // 試合前チェック
@@ -345,6 +386,16 @@ window.startParent = () => {
     const ch = (j.cheers || []).slice().reverse();
     const readIds = new Set(logs.filter((l) => l.type === 'cheer_read').map((l) => l.detail && l.detail.id));
     $('#cheers').innerHTML = ch.length ? ch.map((c) => `<li><span class="t">${esc(c.ts.slice(5, 10).replace('-', '/'))}</span><span>${esc(c.text)}${c.tickets ? ` 🎟️${c.tickets}` : ''}</span><span class="p" style="color:var(--sub);font-weight:600">${readIds.has(c.id) ? '既読' : '未読'}</span></li>`).join('') : '<li class="empty">まだ送っていません</li>';
+    // 最後のエールから何日たったか（3日以上で目立たせる。チケットの4分の1はエールから届いている）
+    // エールの時刻は「yyyy/MM/dd HH:mm」（日本時間）
+    const lastDay = ch.length ? ch.map((c) => String(c.ts).slice(0, 10).replace(/\//g, '-')).sort().pop() : '';
+    const lastAgo = /^\d{4}-\d{2}-\d{2}$/.test(lastDay) ? Math.max(0, Math.round((Date.parse(t + 'T00:00:00Z') - Date.parse(lastDay + 'T00:00:00Z')) / 86400000)) : null;
+    $('#cheerlast').innerHTML = !ch.length ? '<span class="lastwarn">まだ1回もエールを送っていません</span>' : lastAgo == null ? ''
+      : lastAgo >= 3 ? `<span class="lastwarn">最後のエールから ${lastAgo}日 たっています</span>` : `最後のエール：${lastAgo === 0 ? '今日' : lastAgo + '日前'}`;
+    // エールの文例（記録から自動で作る）。タップすると下の欄に入る。送る前に自由に直してOK
+    const ideas = cheerIdeas(st, logs, t, streak);
+    $('#cheerideas').innerHTML = ideas.map((x, i) => `<button class="idea" data-idea="${i}">${esc(x)}</button>`).join('');
+    document.querySelectorAll('[data-idea]').forEach((b) => b.addEventListener('click', () => { $('#cheertext').value = ideas[Number(b.dataset.idea)]; $('#cheertext').focus(); }));
 
     // おこづかい
     const cfg = Object.assign({}, ALLOWANCE, (st.summary && st.summary.allowanceCfg) || {});
