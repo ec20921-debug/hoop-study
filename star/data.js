@@ -286,4 +286,7 @@ const COACH_LINES = {
 };
 
 // アップデートのお知らせ（id を変えると、次に開いた時に1回だけ表示される）
-const UPDATE_NOTE = { id: 'star-5', title: 'アプリが かんたんに なったよ！', img: 'icons/coach-full.jpg', items: ['🏠 ホームに「きょう やること」が <b>3つだけ</b> 出るよ', '<b>①</b> べんきょうが おわったら 大きい ボタンを おす', '<b>②</b> ゲームで 1回 あそぶ', '<b>③</b> チケットで ガチャを まわす', `💰 べんきょう ${ALLOWANCE.bigWinMissions}つで おこづかい <b>+${ALLOWANCE.bigWin}円</b> は そのままだよ`] };
+const UPDATE_NOTE = { id: 'star-6', title: 'アプリが かんたんに なったよ！', img: 'icons/coach-full.jpg', items: ['🏠 ホームに「きょう やること」が <b>3つだけ</b> 出るよ', '<b>①</b> べんきょうが おわったら 大きい ボタンを おす', '<b>②</b> ゲームで 1回 あそぶ', '<b>③</b> チケットで ガチャを まわす', `💰 べんきょう ${ALLOWANCE.bigWinMissions}つで おこづかい <b>+${ALLOWANCE.bigWin}円</b> は そのままだよ`, '🎧 <b>リスニング</b>：こたえたら 日本語の いみが 出るよ'] };
+
+// 英語の読み上げのふつうの速さ（中学生版は 0.9）。小4版は少しゆっくり
+const SPEECH_RATE = 0.8;
