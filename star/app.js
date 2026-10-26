@@ -72,6 +72,11 @@ function calcAllowance(st, ym, today, cfg) {
     const f = freshState();
     for (const k in f) if (s[k] === undefined) s[k] = f[k];
     for (const k of ['spell', 'plural', 'kanji', 'qa', 'past', 'third', 'hkanji', 'speak', 'listen', 'calc']) if (!s.weak[k]) s.weak[k] = {};
+    // 2026-10-26 会話の質問を言いかえた（What do you like? → What animal do you like?）。苦手の記録を引きつぐ
+    for (const k of ['listen', 'speak']) {
+      const w = s.weak[k]; const o = 'What do you like?'; const n = 'What animal do you like?';
+      if (w[o]) { w[n] = (w[n] || 0) + w[o]; delete w[o]; }
+    }
     const firstDay = Object.keys(s.days || {}).sort()[0];
     if (firstDay && firstDay < s.startDate) s.startDate = firstDay;
     return s;

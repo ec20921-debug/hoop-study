@@ -375,6 +375,8 @@ const SPEAK_SENTENCES = [
 ];
 // 会話（コーチの質問に、自分のことで答える）[質問, 日本語の意味, 答えの型, 答えの例]
 // 答えの型の ___ に自分のことを入れて答える。型の単語が言えていて、___ に何か入っていればクリア
+// 質問は「何について」答えるかが決まるものにする（What do you like? のように、ほかの答えの例も正解になる質問は入れない。
+// リスニングの「正しい返事は？」で、ほかの質問の答えの例を選択肢に使うため）
 const SPEAK_TALK = [
   ['What sport do you like?', '好きなスポーツは何？', 'I like ___.', 'I like basketball.'],
   ['What is your name?', 'あなたの名前は？', 'My name is ___.', 'My name is Yui.'],

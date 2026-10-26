@@ -200,9 +200,11 @@ const SPEAK_SENTENCES = [
   ['Turn right.', '右に曲がって。'], ['I can dance.', 'わたしはおどれます。'], ['Nice to meet you.', 'はじめまして。'], ['Good job!', 'よくできました！'],
 ];
 // 会話（コーチの質問に、自分のことで答える）[質問, 日本語の意味, 答えの型, 答えの例]
+// 質問は「何について」答えるかが決まるものにする。What do you like? のように、ほかの答えの例（I like pink. など）も
+// 正解になってしまう質問は入れない（リスニングの「正しい返事は？」で、ほかの質問の答えの例を選択肢に使うため）
 const SPEAK_TALK = [
   ['What\'s your name?', 'お名前は？', 'I\'m ___.', 'I\'m Mei.'],
-  ['What do you like?', '何が好き？', 'I like ___.', 'I like dogs.'],
+  ['What animal do you like?', 'どんな動物が好き？', 'I like ___.', 'I like dogs.'],
   ['What color do you like?', '何色が好き？', 'I like ___.', 'I like pink.'],
   ['What fruit do you like?', 'どんなくだものが好き？', 'I like ___.', 'I like peaches.'],
   ['How are you?', '元気？', 'I\'m ___.', 'I\'m fine.'],
