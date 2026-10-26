@@ -183,8 +183,9 @@ window.KIDS = [
   window.KID = kid;
   var load = function (src) { return new Promise(function (res, rej) { var s = document.createElement('script'); s.src = src; s.onload = res; s.onerror = rej; document.head.appendChild(s); }); };
   // 全員の設定（送信先）→ 選んだ子のアプリの問題データ の順に読み込んでから表示
-  Promise.all(KIDS.map(function (k) { return load(k.base + 'config.js?v=' + Date.now()).catch(function () {}); }))
-    .then(function () { return load(kid.base + 'data.js?v=' + Date.now()); })
+  // ?fresh= で毎回最新を読む（service worker は ?fresh= つきをキャッシュに入れない）
+  Promise.all(KIDS.map(function (k) { return load(k.base + 'config.js?fresh=' + Date.now()).catch(function () {}); }))
+    .then(function () { return load(kid.base + 'data.js?fresh=' + Date.now()); })
     .then(function () { window.startParent(); });
 })();
 </script>

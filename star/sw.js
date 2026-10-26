@@ -1,17 +1,19 @@
 // STAR STUDY service worker — アプリ本体をスマホに保存してオフラインでも開けるようにする
-const CACHE = 'star-v7';
-const SHELL = ['./', './index.html', './style.css?v=7', './app.js?v=7', './data.js?v=7', './config.js?v=7', './manifest.webmanifest', './icons/icon-180.png', './icons/icon-192.png', './icons/coach.jpg', './icons/coach-full.jpg'];
+const CACHE = 'star-v8';
+const SHELL = ['./', './index.html', './style.css?v=8', './app.js?v=8', './data.js?v=8', './config.js?v=8', './manifest.webmanifest', './icons/icon-180.png', './icons/icon-192.png', './icons/coach.jpg', './icons/coach-full.jpg'];
 
 self.addEventListener('install', (e) => {
   e.waitUntil(caches.open(CACHE).then((c) => c.addAll(SHELL)).then(() => self.skipWaiting()));
 });
+// 古いキャッシュを消すのは STAR のものだけ（同じサイトの HOOP STUDY のキャッシュは消さない）
 self.addEventListener('activate', (e) => {
-  e.waitUntil(caches.keys().then((ks) => Promise.all(ks.filter((k) => k !== CACHE).map((k) => caches.delete(k)))).then(() => self.clients.claim()));
+  e.waitUntil(caches.keys().then((ks) => Promise.all(ks.filter((k) => k.startsWith('star-') && k !== CACHE).map((k) => caches.delete(k)))).then(() => self.clients.claim()));
 });
 // 同じサイトのファイル: ネット優先（更新をすぐ反映）→ 圏外ならキャッシュ
+// ?fresh= つき（保護者画面が毎回最新を読む設定・問題データ）はキャッシュに入れない（開くたびにたまるため）
 self.addEventListener('fetch', (e) => {
   const u = new URL(e.request.url);
-  if (e.request.method !== 'GET' || u.origin !== location.origin) return;
+  if (e.request.method !== 'GET' || u.origin !== location.origin || u.searchParams.has('fresh')) return;
   e.respondWith(
     fetch(e.request).then((r) => {
       if (r.ok) { const copy = r.clone(); caches.open(CACHE).then((c) => c.put(e.request, copy)); }
