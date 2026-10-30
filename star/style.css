@@ -678,3 +678,25 @@ canvas.confetti { position: fixed; inset: 0; z-index: 65; pointer-events: none; 
 
 /* お知らせ（toast）：長い文は折り返す・画面からはみ出さない（積み上げは app.js の toast） */
 .toast { white-space: pre-line; width: max-content; max-width: calc(100vw - 32px); text-align: center; line-height: 1.6; }
+
+/* ---------- v9: ② ゲーム 5もん・きょうの きもち ---------- */
+.bigbtn.short { background: linear-gradient(135deg, #7c3aed, #d6338c); color: #fff; box-shadow: 0 5px 0 #5b1a7a, 0 10px 24px #d6338c55; }
+.bigbtn.short small { display: block; font-size: 14px; font-weight: 800; opacity: .9; margin-top: 2px; }
+.bigbtn.short:active { box-shadow: 0 1px 0 #5b1a7a; }
+.shorts { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-top: 10px; }
+.sbtn { padding: 10px 8px; border-radius: 16px; background: #0006; border: 2px solid var(--line); color: var(--text); font-size: 15px; font-weight: 800; white-space: nowrap; }
+.sbtn small { display: block; font-size: 12px; color: var(--sub); margin-top: 2px; }
+.mood { margin: 0 0 14px; padding: 14px; border-radius: 24px; background: var(--card); border: 2px solid var(--line); text-align: center; }
+.md-h { font-size: 18px; font-weight: 900; }
+.md-h small { display: block; font-size: 12px; font-weight: 700; color: var(--sub); margin-top: 2px; }
+.md-b { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin: 12px 0 8px; }
+.md-c { padding: 10px 6px; border-radius: 16px; background: #0006; border: 2px solid var(--line); color: var(--text); font-size: 13px; font-weight: 800; line-height: 1.4; }
+.md-c span { display: block; font-size: 30px; }
+.md-c:active { transform: scale(.96); }
+.mood.done { font-size: 15px; font-weight: 800; }
+.mood.done b { display: block; font-size: 20px; margin: 6px 0 4px; }
+.mlink { background: none; border: 0; color: var(--sub); font-size: 13px; font-weight: 700; text-decoration: underline; padding: 6px; }
+/* 結果画面が画面より長い時（小さいスマホ・まちがいが多い時）はスクロールできるように。短い時はこれまでどおり中央 */
+.qbody.result { min-height: 0; overflow-y: auto; justify-content: flex-start; overscroll-behavior: contain; padding-bottom: 8px; }
+.qbody.result > :first-child { margin-top: auto; }
+.qbody.result > :last-child { margin-bottom: auto; }
