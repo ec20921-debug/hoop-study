@@ -578,3 +578,29 @@ button.winmsg.go b { color: var(--yellow); font-size: 18px; }
 .gc-verb { background: linear-gradient(135deg, #0d3a3a, #1b2050); border-color: #1fa3a3; }
 .mvp-l small { font-size: 11px; color: var(--sub); margin-left: 2px; }
 .mvp-l { white-space: nowrap; }
+
+/* ---------- v18: 漢字かき取り・苦手つぶしのセット・ベスト記録・コレクションの節目 ---------- */
+.st-streak .st-best { display: block; width: 100%; font-size: 10px; color: var(--sub); margin-top: 2px; }
+.st-streak { flex-wrap: wrap; }
+.kw-go { display: inline-block; margin-top: 6px; padding: 5px 10px; border-radius: 99px; background: #2b2207; border: 1px solid var(--yellow); color: #ffe9a8; font-size: 12px; font-weight: 800; }
+.ov.kw { justify-content: flex-start; overflow-y: auto; overscroll-behavior: contain; }
+.kw-box { max-width: 420px; }
+.kw-y { color: var(--yellow); background: #ffd40022; padding: 0 3px; border-radius: 4px; }
+.kw-list { text-align: left; margin: 4px 0 16px; padding: 12px 14px 12px 34px; border-radius: 16px; background: #0006; border: 1px solid var(--line); font-size: 17px; line-height: 2; }
+.kw-ans { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-bottom: 10px; }
+.kw-a { display: flex; align-items: center; gap: 6px; padding: 10px; border-radius: 14px; background: var(--card); border: 2px solid var(--green); color: var(--text); text-align: left; }
+.kw-a.ng { border-color: var(--pink); background: #3a0f2a; }
+.kw-m { font-size: 18px; }
+.kw-r { flex: 1; font-size: 11px; color: var(--sub); min-width: 0; }
+.kw-k { font-size: 22px; letter-spacing: 1px; }
+.kw-sum { font-size: 15px; margin-bottom: 12px; }
+.kw-sum b { font-family: var(--display); font-size: 26px; color: var(--yellow); }
+.colgoal { margin: 0 0 12px; padding: 12px 14px; border-radius: 16px; background: linear-gradient(135deg, #2b2207, #13203a); border: 1px solid var(--yellow); font-size: 14px; line-height: 1.7; }
+.colgoal b { color: var(--yellow); }
+.colgoal .cg-n { font-size: 18px; }
+.colgoal small { display: block; font-size: 12px; color: #b8f5dc; }
+.mvp-m .mvp-s { display: block; font-size: 11px; color: var(--sub); margin-top: 2px; }
+/* 結果画面が画面より長い時（小さいスマホ・まちがいが多い時）はスクロールできるように。短い時はこれまでどおり中央 */
+.qbody.result { min-height: 0; overflow-y: auto; justify-content: flex-start; overscroll-behavior: contain; padding-bottom: 8px; }
+.qbody.result > :first-child { margin-top: auto; }
+.qbody.result > :last-child { margin-bottom: auto; }

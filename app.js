@@ -59,19 +59,19 @@ function calcAllowance(st, ym, today, cfg) {
   function freshState() {
     return {
       v: 1, nick: '', sound: true, xp: 0, tickets: 1, days: {}, cards: {}, pulls: 0, pity: 0,
-      weak: { spell: {}, plural: {}, kanji: {}, qa: {}, past: {}, third: {}, hkanji: {}, speak: {}, listen: {} }, best: {}, lastPlay: {},
+      weak: { spell: {}, plural: {}, kanji: {}, qa: {}, past: {}, third: {}, hkanji: {}, speak: {}, listen: {}, kwrite: {} }, best: {}, lastPlay: {},
       missions: DEFAULT_MISSIONS.map((m) => ({ ...m })),
       test: { name: '後期期末テスト', date: '', checks: {} },
       goals: {}, voices: [], voiceDays: {}, voiceWeek: '', cheerLog: [], startDate: todayStr(),
       milestones: {}, cheersSeen: [], lastCheer: null, lastSync: 0, syncError: null,
-      timer: null, moneySeen: null, complete: '', beat: {}, badges: {}, chal: 0,
+      timer: null, moneySeen: null, complete: '', beat: {}, badges: {}, chal: 0, recapSeen: '',
       device: rid(20), created: Date.now(), updated: Date.now(),
     };
   }
   function migrate(s) {
     const f = freshState();
     for (const k in f) if (s[k] === undefined) s[k] = f[k];
-    for (const k of ['spell', 'plural', 'kanji', 'qa', 'past', 'third', 'hkanji', 'speak', 'listen']) if (!s.weak[k]) s.weak[k] = {};
+    for (const k of ['spell', 'plural', 'kanji', 'qa', 'past', 'third', 'hkanji', 'speak', 'listen', 'kwrite']) if (!s.weak[k]) s.weak[k] = {};
     const firstDay = Object.keys(s.days || {}).sort()[0];
     if (firstDay && firstDay < s.startDate) s.startDate = firstDay;
     return s;
@@ -94,6 +94,12 @@ function calcAllowance(st, ym, today, cfg) {
     let n = 0;
     while (played(cur)) { n++; cur = addDays(cur, -1); }
     return n;
+  }
+  // これまでで いちばん長い連続日数（ベスト記録）。連続が切れた日に「ベスト◯日」を見せるため
+  function bestStreak() {
+    let best = 0; let run = 0; let prev = '';
+    Object.keys(S.days).filter(played).sort().forEach((k) => { run = prev && addDays(prev, 1) === k ? run + 1 : 1; best = Math.max(best, run); prev = k; });
+    return best;
   }
   // 日がわりのライバル（名前と絵文字だけ変わる。強さ＝RIVAL.score はいつも同じ）
   const dayNum = (ds = todayStr()) => Math.floor(Date.parse(ds + 'T00:00:00Z') / 86400000);
@@ -440,14 +446,14 @@ function calcAllowance(st, ym, today, cfg) {
   }
   function viewHome() {
     const t = todayStr(); const d = S.days[t] || { m: [], pts: 0, win: false, ck: 0 };
-    const st = streak(); const today = played(t);
+    const st = streak(); const today = played(t); const best = bestStreak();
     const cheer = S.lastCheer && diffDays(S.lastCheer.date, t) <= 3
       ? `<div class="cheer">📣 <b>おうちからのエール</b><br>${esc(S.lastCheer.text)}</div>` : '';
     const left = RIVAL.score + 1 - d.pts;
     // 上から「今の状態 → すぐやる1つ → 紙のミッション」の順。くわしい数字はタップした先に置く
     return header() + coachBox() + `
       <div class="status">
-        <div class="st-streak"><span class="flame ${today ? '' : 'cold'}">🔥</span><b>${st}</b><small>日連続</small></div>
+        <div class="st-streak"><span class="flame ${today ? '' : 'cold'}">🔥</span><b>${st}</b><small>日連続</small>${best > st && best >= 3 ? `<small class="st-best">ベスト${best}日</small>` : ''}</div>
         <div class="st-score"><span class="lbl">YOU</span><b class="sc">${d.pts}</b><span class="vs">VS</span><b class="sc away">${RIVAL.score}</b><span class="lbl"><i class="rv-e">${todayRival().e}</i>${esc(todayRival().name)}</span></div>
       </div>
       ${winLine(d, left)}
@@ -460,7 +466,7 @@ function calcAllowance(st, ym, today, cfg) {
       <div class="missions">${S.missions.map((m) => {
         const done = d.m.includes(m.id);
         return `<div class="mission ${done ? 'done' : ''}"><div class="ic">${m.icon || '🏀'}</div>
-          <div class="tx"><div class="lb">${esc(m.label)}</div><div class="mt">${esc(m.sub)} ・ ${m.pts}P${ALLOWANCE.stdMissions.includes(m.id) ? '' : ' ・ おこづかい対象外'}</div></div>
+          <div class="tx"><div class="lb">${esc(m.label)}</div><div class="mt">${esc(m.sub)} ・ ${m.pts}P${ALLOWANCE.stdMissions.includes(m.id) ? '' : ' ・ おこづかい対象外'}</div>${m.id === 'kanji' && !done ? `<button class="kw-go" data-act="quiz" data-kind="kwrite">✍️ 漢字かき取り（アプリが${KANJI_WRITE_LEN}問出す）›</button>` : ''}</div>
           <button class="shoot-btn" data-act="mission" data-id="${esc(m.id)}">${done ? '✓ IN' : 'SHOOT'}</button></div>`;
       }).join('')}</div>
       ${timerCard()}
@@ -472,7 +478,7 @@ function calcAllowance(st, ym, today, cfg) {
   function autoPick() {
     const d = S.days[todayStr()] || {};
     const n = weakTotal();
-    if (n >= WEAK_BONUS_MIN && !d.wkt) return { kind: 'weak', why: `苦手が${n}問。全問正解で 🎟️ +1` };
+    if (n >= WEAK_BONUS_MIN && !d.wkt) return { kind: 'weak', why: `苦手が${n}問。${WEAK_SET}問ぜんぶ正解で 🎟️ +1` };
     // 社会は重点教科（前期の通知表から）。その日まだなら英語より先に出す
     if (qaSubjects().includes(FOCUS_SUBJECT) && !playedToday('qa:' + FOCUS_SUBJECT)) return { kind: 'qa:' + FOCUS_SUBJECT, why: `今日の${FOCUS_SUBJECT}、まだだよ（10問・3分）` };
     if (!playedToday('speak')) return { kind: 'speak', why: '今日はまだ英語を声に出してないよ（5問・2分）' };
@@ -483,7 +489,7 @@ function calcAllowance(st, ym, today, cfg) {
     const last = S.lastPlay[oldest];
     return { kind: oldest, why: !last ? 'まだやったことがないゲーム！' : c.length ? `${diffDays(last, todayStr())}日ぶりのゲーム` : 'もう1回、自己ベストに挑戦！' };
   }
-  const KIND_ICON = { speak: '🎤', listen: '🎧', spell: '🔤', plural: '📦', kanji: '漢', weak: '🎯', challenge: '👑', verb: '🧩' };
+  const KIND_ICON = { speak: '🎤', listen: '🎧', spell: '🔤', plural: '📦', kanji: '漢', weak: '🎯', challenge: '👑', verb: '🧩', kwrite: '✍️' };
   const kindIcon = (k) => KIND_ICON[k] || ({ 理科: '🧪', 社会: '🗾', 数学: '📐', 国語: '✍️' }[k.slice(3)] || '📚');
   function heroButton() {
     const p = autoPick();
@@ -591,12 +597,22 @@ function calcAllowance(st, ym, today, cfg) {
     const wb = weekBigs(t); const idx = (new Date(t + 'T00:00:00Z').getUTCDay() + 6) % 7;
     const mvpLeft = ALLOWANCE.mvpDays - wb; const bigToday = stdCount(d) >= ALLOWANCE.bigWinMissions;
     const winLeft = RIVAL.score + 1 - (d.pts || 0);
-    const v = { name: S.nick || 'キミ', streak: st, next: st + 1, left, weak: weakTotal(), days: S.test.date ? diffDays(t, S.test.date) : '', min: timerMin(), wb, mvpLeft, mvp: ALLOWANCE.mvp, winLeft };
+    const best = bestStreak(); const weekend = idx >= 5;
+    const owned = Object.keys(S.cards).length; const ms = COLLECTION_MILESTONES.find((m) => m > owned);
+    const vw = PAST_FORMS.filter((w) => S.weak.past[w[0]]).length + THIRD_FORMS.filter((w) => S.weak.third[w[0]]).length;
+    const v = { name: S.nick || 'キミ', streak: st, next: st + 1, left, weak: weakTotal(), days: S.test.date ? diffDays(t, S.test.date) : '', min: timerMin(), wb, mvpLeft, mvp: ALLOWANCE.mvp, winLeft, best, vw, tk: S.tickets, ms, colLeft: ms ? ms - owned : 0 };
     const L = COACH_LINES; const out = [];
     const add = (k, mood) => (L[k] || []).forEach((s) => out.push({ text: fillLine(s, v), mood }));
     if (S.timer) add('timer', 'happy');
+    // 連続が切れた日（今日はまだ0本）：ベスト記録を見せて、今日を「新しい1日目」にする
+    const broke = !played(t) && st === 0 && best >= 3;
+    if (broke) add('restart', 'fire');
     // 週間MVPが今週ねらえる時は、いちばん先に言う（あと1〜2日・今日はまだ BIG WIN していない）
     if (ALLOWANCE.on !== false && ALLOWANCE.mvp && !bigToday && mvpLeft >= 1 && mvpLeft <= 2 && mvpLeft <= 7 - idx) add('mvpNear', 'fire');
+    // 平日で、週間MVPが金曜までの BIG WIN だけで届く時（あと3〜5日）
+    if (ALLOWANCE.on !== false && ALLOWANCE.mvp && !bigToday && idx <= 4 && mvpLeft >= 3 && mvpLeft <= 5 - idx) add('mvpWeek', 'fire');
+    // 土日は記録が落ちやすいので、紙の勉強がまだなら先に言う
+    if (weekend && !paperDone(d)) add('weekend', 'wink');
     if (ALLOWANCE.on !== false && ALLOWANCE.mvp && mvpLeft <= 0 && bigToday) add('mvpDone', 'fire');
     // 紙の勉強はできていて、点だけ足りない時
     if (paperDone(d) && !d.win && winLeft > 0) add('nearWin', 'wink');
@@ -605,10 +621,14 @@ function calcAllowance(st, ym, today, cfg) {
     if (played(t) && !(d.qk || []).includes('speak')) add('speakNotYet', 'wink');
     if (stdCount(d) >= ALLOWANCE.bigWinMissions) add('bigDone', 'fire');
     else if (left > 0 && left <= 2 && stdCount(d) > 0) add('nearBig', 'fire');
-    if (!played(t)) add('notYet', 'think');
+    if (!played(t)) { if (!broke) add('notYet', 'think'); }
     else if (d.win) add('winDone', 'wink');
     if (STREAK_BONUS[st] || [3, 5, 7, 10, 14, 21, 30, 50, 100].includes(st)) add('streakUp', 'fire');
     if (v.weak >= 5) add('weak', 'think');
+    if (vw >= 3) add('verbTip', 'think');
+    // チケットが残っている時は、コレクションの次の節目までの残りを見せる
+    if (S.tickets > 0 && ms) add('gacha', 'wink');
+    if (!(d.m || []).includes('kanji') && S.missions.some((m) => m.id === 'kanji') && !playedToday('kwrite')) add('kwrite', 'wink');
     if (v.days !== '' && v.days > 0 && v.days <= 21) add('test', 'think');
     if (S.lastCheer && diffDays(S.lastCheer.date, t) <= 1) add('cheer', 'wink');
     add(h >= 5 && h < 11 ? 'morning' : h < 17 && h >= 11 ? 'day' : h >= 17 && h < 21 ? 'evening' : 'late', 'happy');
@@ -636,7 +656,7 @@ function calcAllowance(st, ym, today, cfg) {
     const n = weakTotal();
     if (n < 3) return '';
     const done = (S.days[todayStr()] || {}).wkt;
-    return `<button class="weakcall" data-act="quiz" data-kind="weak"><span class="wc-e">🎯</span><span class="wc-t"><b>苦手つぶし ${n}問 たまってるよ</b><br>${done ? '今日のボーナスはゲットずみ ✓' : n >= WEAK_BONUS_MIN ? `全問正解で 🎟️ +1（1日1回）` : `正解すると苦手リストから消えるよ`}</span><span class="wc-a">›</span></button>`;
+    return `<button class="weakcall" data-act="quiz" data-kind="weak"><span class="wc-e">🎯</span><span class="wc-t"><b>苦手つぶし ${n}問 たまってるよ</b><br>${WEAK_SET}問で1セット。${done ? '今日のボーナスはゲットずみ ✓' : n >= WEAK_BONUS_MIN ? `${WEAK_SET}問ぜんぶ正解で 🎟️ +1（1日1回）` : `正解すると苦手リストから消えるよ`}</span><span class="wc-a">›</span></button>`;
   }
   // ゲームだけで紙の勉強がまだの日に出す一押し
   function paperNudge() {
@@ -657,11 +677,12 @@ function calcAllowance(st, ym, today, cfg) {
       <div class="tiles">
         ${tile('listen', 'gc-listen', best('listen'))}
         ${tile('challenge', 'gc-challenge', `全問正解 +${ALLOWANCE.perfect}円`)}
-        ${tile('weak', 'gc-weak', `苦手 ${weakN}問`)}
+        ${tile('weak', 'gc-weak', `苦手 ${weakN}問 ・ ${WEAK_SET}問ずつ`)}
         ${tile('spell', 'gc-spell', best('spell'))}
         ${tile('plural', 'gc-plural', best('plural'))}
         ${tile('verb', 'gc-verb', S.best.verb != null ? best('verb') : 'NEW ・ 4択で練習')}
         ${tile('kanji', 'gc-kanji', best('kanji'))}
+        ${tile('kwrite', 'gc-kanji', '紙に書く ・ 漢字ミッション')}
         ${qaTiles}
       </div>
       <p class="note" style="margin-top:14px">全問正解で +2P ＆ 🎟️（1日2枚まで）。今日の WIN には紙のミッション1本か ⏱タイマー10分が必要だよ ✍️</p>`;
@@ -743,8 +764,13 @@ function calcAllowance(st, ym, today, cfg) {
     const ex = extraCards();
     const canTrade = ex >= TRADE_COST && tradable().length > 0;
     const nextMs = COLLECTION_MILESTONES.find((m) => m > owned);
+    const tradeN = Math.min(tradable().length, Math.floor(ex / TRADE_COST));
+    // 次の節目（チケットがもらえる種類数）まであと何種か・いまトレードが何回できるか を上に出す
+    const goal = nextMs ? `<div class="colgoal">📚 コレクション <b>${owned}/${CARDS.length}</b> → <b>${nextMs}種</b>まで あと <b class="cg-n">${nextMs - owned}種</b>で 🎟️ +1${nextMs >= CARDS.length ? ' ＆ 👑' : ''}
+        ${tradeN ? `<small>🔄 いまトレード <b>${tradeN}回</b> できる（まだ持っていないカードが かならずもらえる！）</small>` : ''}</div>` : '';
     return header() + `
       ${S.complete ? `<div class="complete-banner">👑 コンプリート達成！（${esc(S.complete.slice(5).replace('-', '/'))}）<br><small>34種類ぜんぶ集めた殿堂入りプレーヤー</small></div>` : ''}
+      ${goal}
       <div class="gacha-machine"><div class="gacha-ball">🏀</div>
         <p>チケット1枚で1回。ダブったら +5XP！</p>
         <button class="btn big" data-act="pull" ${S.tickets > 0 ? '' : 'disabled style="opacity:.4"'}>🎟️ ガチャを回す（残り ${S.tickets}）</button>
@@ -1061,7 +1087,19 @@ function calcAllowance(st, ym, today, cfg) {
     if (kind === 'plural') return sampleItems(BANK.plural, QUIZ_LEN, 'plural', (x) => x.q).map(mkPlural);
     if (kind === 'kanji') return sampleItems(BANK.kanji, QUIZ_LEN, 'kanji', (x) => x.q).map(mkKanji);
     if (kind.startsWith('qa:')) { const s = kind.slice(3); return sampleItems(BANK.qa.filter((x) => x.s === s), QUIZ_LEN, 'qa', (x) => x.q).map(mkQa); }
-    return shuffle(weakPool()).slice(0, QUIZ_LEN);
+    return buildWeak();
+  }
+  // 苦手つぶし：5問ずつのセットで最大10問。過去形・3単現の苦手を各セット3問まで先に入れ、残りはほかの苦手で埋める
+  function buildWeak() {
+    const isVerb = (q) => q.type === 'past' || q.type === 'third';
+    const pool = weakPool(); const verb = shuffle(pool.filter(isVerb)); const other = shuffle(pool.filter((q) => !isVerb(q)));
+    const out = [];
+    while (out.length < QUIZ_LEN && (verb.length || other.length)) {
+      const set = verb.splice(0, 3);
+      while (set.length < WEAK_SET && (other.length || verb.length)) set.push(other.length ? other.shift() : verb.shift());
+      out.push(...shuffle(set));
+    }
+    return out.slice(0, QUIZ_LEN);
   }
   // 苦手つぶしで実際に出せる問題（スプレッドシートで「お休み」にした問題などは入らない）
   function weakPool() {
@@ -1077,7 +1115,7 @@ function calcAllowance(st, ym, today, cfg) {
     return qs;
   }
   function quizName(kind) {
-    return { speak: 'スピーキング', listen: 'リスニング', spell: 'スペル・シュート', plural: '複数形チャレンジ', kanji: '漢字よみ速攻', weak: '苦手つぶし', challenge: 'チャレンジ（上級）', verb: '動詞の形トレーニング' }[kind] || (kind.startsWith('qa:') ? kind.slice(3) + ' 一問一答' : kind);
+    return { speak: 'スピーキング', listen: 'リスニング', spell: 'スペル・シュート', plural: '複数形チャレンジ', kanji: '漢字よみ速攻', weak: '苦手つぶし', challenge: 'チャレンジ（上級）', verb: '動詞の形トレーニング', kwrite: '漢字かき取り' }[kind] || (kind.startsWith('qa:') ? kind.slice(3) + ' 一問一答' : kind);
   }
   function quizSubject(kind) {
     return kind === 'kanji' ? '国語' : kind === 'weak' || kind === 'challenge' ? '全教科' : kind.startsWith('qa:') ? (SUBJECTS.includes(kind.slice(3)) ? kind.slice(3) : '全教科') : '英語';
@@ -1092,6 +1130,7 @@ function calcAllowance(st, ym, today, cfg) {
   // チャレンジ（おこづかいに関係する上級ゲーム）には出さない
   const needsRuleCard = (kind) => kind === 'weak' || ((kind === 'plural' || kind === 'verb') && (S.best[kind] || 0) < 8);
   function startQuiz(kind) {
+    if (kind === 'kwrite') { startKwrite(); return; }
     const qs = buildQuestions(kind);
     if (!qs.length) { toast('苦手リストは空っぽ！ すごい！'); return; }
     const card = needsRuleCard(kind) ? ruleCard(qs) : '';
@@ -1102,6 +1141,8 @@ function calcAllowance(st, ym, today, cfg) {
     const names = { [kind]: quizName(kind) };
     const CLOCK = kind === 'challenge' ? 15 : SHOT_CLOCK;
     const st = { i: 0, answered: 0, ok: 0, combo: 0, maxCombo: 0, pts: 0, miss: [], timer: null, left: CLOCK, locked: false, ended: false, t0: Date.now() };
+    // 苦手つぶしは WEAK_SET 問ずつのセット。セットの区切りで「もう1セット？／ここで終わる」を聞く
+    const setOf = kind === 'weak' && qs.length > WEAK_SET ? WEAK_SET : 0;
     const el = document.createElement('div'); el.className = 'ov';
     el.style.background = 'radial-gradient(circle at 50% 30%, #1b2a55, #05070d)';
     el.innerHTML = `<div class="quiz">
@@ -1132,8 +1173,14 @@ function calcAllowance(st, ym, today, cfg) {
     function show() {
       const q = qs[st.i];
       st.locked = false;
-      q$('.qprog i').style.width = (st.i / qs.length) * 100 + '%';
-      q$('.qprompt').textContent = `${st.i + 1}/${qs.length} ・ ${q.prompt}`;
+      if (setOf) {
+        const si = Math.floor(st.i / setOf); const sn = Math.min(setOf, qs.length - si * setOf);
+        q$('.qprog i').style.width = ((st.i % setOf) / sn) * 100 + '%';
+        q$('.qprompt').textContent = `セット${si + 1} ・ ${(st.i % setOf) + 1}/${sn} ・ ${q.prompt}`;
+      } else {
+        q$('.qprog i').style.width = (st.i / qs.length) * 100 + '%';
+        q$('.qprompt').textContent = `${st.i + 1}/${qs.length} ・ ${q.prompt}`;
+      }
       q$('.qmain').innerHTML = q.main; q$('.qmain').classList.toggle('long', !!q.long);
       if (q.say) sayEn(q.say);
       q$('.qhint').textContent = q.hint || '';
@@ -1187,22 +1234,41 @@ function calcAllowance(st, ym, today, cfg) {
       save();
       setCombo();
       const wait = res === 'ok' ? (q.say ? 1800 : 750) : q.say ? 4200 : ruleTip(q) ? 3200 : 1700;
-      setTimeout(() => { if (st.ended) return; st.i++; if (st.i < qs.length) show(); else finish(false); }, wait);
+      setTimeout(() => { if (st.ended) return; st.i++; if (st.i >= qs.length) finish(false); else if (setOf && st.i % setOf === 0) setBreak(); else show(); }, wait);
     }
-    function finish(quit) {
+    // セットの区切り。ここで終わっても「途中でやめた」にはならない（5問以上ぜんぶ正解ならチケットもそのまま）
+    function setBreak() {
+      if (document.activeElement) document.activeElement.blur(); // iPhone のキーボードを閉じる
+      const d = day();
+      const left = qs.length - st.i; const all = st.ok === st.i;
+      // ここまで全問正解（5問以上）なら、チケットはこの時点で渡す（続けてまちがえても、やめても消えない）
+      if (all && st.i >= WEAK_BONUS_MIN && !d.wkt) { d.wkt = 1; S.tickets++; st.weakTicket = true; save(); }
+      sfx.coin(); if (all) confetti(60);
+      overlay(`<div class="tut"><div class="tut-step">🎯 セット${st.i / setOf} クリア！</div>
+        <div class="big" style="font-family:var(--display);font-weight:800;font-size:56px">${st.ok}<span style="font-size:24px">/${st.i}</span></div>
+        <div class="coach-mini" style="margin:8px 0 14px">${coachFace(all ? 'fire' : 'wink')}<span>${all ? 'ぜんぶ正解！ いい流れだ 🔥' : 'ナイスファイト！ まちがえた問題は、また苦手つぶしに出るぞ'}</span></div>
+        ${st.weakTicket ? '<div class="newtag">🎯 5問ぜんぶ正解！ 🎟️ +1</div>' : ''}
+        <button class="btn big" data-set="next">もう1セット（あと${left}問）▶</button>
+        <button class="btn ghost" data-set="end" style="margin-top:10px">ここで終わる</button></div>`, {
+        closeOnTap: false, cls: 'solid',
+        onMount: (o, close) => { o.addEventListener('click', (e) => { const b = e.target.closest('[data-set]'); if (!b) return; sfx.tap(); close(); if (b.dataset.set === 'next') show(); else finish(false, true); }); },
+      });
+    }
+    function finish(quit, early) {
       if (st.ended) return;
       st.ended = true;
       clearInterval(st.timer);
       if (window.speechSynthesis) speechSynthesis.cancel();
-      const n = quit ? st.answered : qs.length;
+      const n = quit || early ? st.answered : qs.length;
       if (quit && n === 0) { el.remove(); return; }
       const d = day();
       const perfect = !quit && n >= QUIZ_LEN && st.ok === n;
       let ticket = false;
       if (perfect) { st.pts += 2; if (d.perfect < 2) { d.perfect++; S.tickets++; ticket = true; } if (kind === 'challenge') d.cp = (d.cp || 0) + 1; }
       // 苦手つぶし：WEAK_BONUS_MIN 問以上を全問正解でチケット（1日1回。10問の全問正解チケットとは別枠）
-      let weakTicket = false;
+      let weakTicket = !!st.weakTicket; // セットの区切りで先に渡した分
       if (kind === 'weak' && !quit && n >= WEAK_BONUS_MIN && st.ok === n && !d.wkt) { d.wkt = 1; S.tickets++; weakTicket = true; }
+      const allOk = !quit && n > 0 && st.ok === n; // 見出し・コーチのことば用（チケットの判定には使わない）
       if (kind !== 'weak') S.best[kind] = Math.max(S.best[kind] || 0, st.ok);
       markPlayed(kind, st.ok, st.maxCombo);
       const subject = quizSubject(kind);
@@ -1212,22 +1278,22 @@ function calcAllowance(st, ym, today, cfg) {
       if (!r) { save(); logEvent('quiz', names[kind], subject, 0, info); }
       const tips = [...new Set(st.miss.map(ruleTip).filter(Boolean))];
       const tot = st.pts + (r && r.tipoff ? 1 : 0);
-      if (perfect) { sfx.fanfare(); confetti(220); } else if (st.ok >= n * 0.7) { sfx.coin(); confetti(80); } else sfx.tap();
+      if (perfect || allOk) { sfx.fanfare(); confetti(220); } else if (st.ok >= n * 0.7) { sfx.coin(); confetti(80); } else sfx.tap();
       el.querySelector('.quiz').innerHTML = `<div class="qbody result">
         <div style="font-family:var(--display);font-weight:800;font-size:18px">${esc(names[kind])}</div>
         <div class="big">${st.ok}<span style="font-size:28px">/${n}</span></div>
-        <div class="lvup-title" style="font-size:${perfect || weakTicket ? 40 : 30}px">${perfect || weakTicket ? 'PERFECT!!' : st.ok >= n * 0.7 ? 'GREAT!' : 'NICE TRY!'}</div>
+        <div class="lvup-title" style="font-size:${perfect || allOk ? 40 : 30}px">${perfect || allOk ? 'PERFECT!!' : st.ok >= n * 0.7 ? 'GREAT!' : 'NICE TRY!'}</div>
         <div class="shot-pts" style="opacity:1">+${tot} PTS</div>
         ${st.maxCombo >= 3 ? `<div class="note">最大 ${st.maxCombo} 連続正解 🔥</div>` : ''}
         ${ticket ? '<div class="newtag">全問正解ボーナス 🎟️ +1</div>' : ''}
-        ${weakTicket ? '<div class="newtag">🎯 苦手つぶし完了！ 🎟️ +1</div>' : ''}
+        ${weakTicket ? '<div class="newtag">🎯 苦手つぶしボーナス 🎟️ +1</div>' : ''}
         ${perfect && kind === 'challenge' && (d.cp || 0) <= ALLOWANCE.perfectPerDay ? `<div class="reward-big">💰 チャレンジ全問正解！ おこづかい +${ALLOWANCE.perfect}円</div>` : ''}
         ${st.miss.length ? `<ul>${st.miss.map((q) => `<li>${['kanji', 'qa', 'hkanji', 'past', 'third', 'listen', 'calc'].includes(q.type) ? esc(q.key) + ' → ' + esc(q.answer) : esc(q.answer)}</li>`).join('')}</ul><div class="note">↑ 紙に3回書いて覚えよう ✍️（苦手つぶしにも出るよ）</div>` : ''}
-        ${coachQuizLine(perfect || weakTicket, st.ok, n)}
+        ${coachQuizLine(perfect || allOk, st.ok, n)}
         ${tips.length ? `<div class="rulebox"><b>💡 ルールのおさらい</b>${tips.map((t) => `<div>・${esc(t)}</div>`).join('')}</div>` : ''}
         ${kind !== 'verb' && PAST_FORMS.length && st.miss.some((q) => q.type === 'past' || q.type === 'third') ? '<button class="btn ghost" style="width:100%;margin-top:10px" data-q="verb">🧩 動詞の形トレーニング（4択）で練習する ›</button>' : ''}
         ${paperNudge()}
-        <div class="row" style="width:100%;margin-top:14px"><button class="btn ghost" style="flex:1" data-q="again">もう1回</button><button class="btn" style="flex:1" data-q="close">とじる</button></div>
+        <div class="row" style="width:100%;margin-top:14px"><button class="btn ghost" style="flex:1" data-q="again">${kind === 'weak' ? 'もう1セット' : 'もう1回'}</button><button class="btn" style="flex:1" data-q="close">とじる</button></div>
       </div>`;
       el.addEventListener('click', async (e) => {
         const a = e.target.closest('[data-q]'); if (!a) return;
@@ -1246,6 +1312,66 @@ function calcAllowance(st, ym, today, cfg) {
     q$('.qform').addEventListener('submit', (e) => { e.preventDefault(); if (input.value.trim()) answer(input.value); });
     sfx.buzzer();
     show();
+  }
+
+  // ---------- 漢字かき取り（紙に書く練習。アプリは読みと例文を出して、答え合わせを手伝うだけ） ----------
+  // ① 読みを見て紙に書く → ② 答えを見て、書けなかった漢字をタップ → ③ 記録。終わると「漢字」ミッションが SHOOT される
+  // （ミッションの点・BIG WIN の数え方はいつもと同じ。書けなかった漢字は次のかき取りで先に出る）
+  const kwLine = (w) => esc(w[2]).replace(/〔(.+?)〕/, '<b class="kw-y">$1</b>');
+  function buildKwrite() {
+    const wk = S.weak.kwrite || {};
+    const weak = shuffle(KANJI_WRITE.filter((w) => wk[w[0]])).slice(0, 5);
+    return shuffle(weak.concat(shuffle(KANJI_WRITE.filter((w) => !weak.includes(w))).slice(0, KANJI_WRITE_LEN - weak.length)));
+  }
+  function startKwrite() {
+    const qs = buildKwrite(); const t0 = Date.now(); const ng = new Set();
+    const el = document.createElement('div'); el.className = 'ov solid kw';
+    const step1 = () => {
+      el.innerHTML = `<div class="tut kw-box"><div class="tut-step">✍️ 漢字かき取り ${qs.length}問</div>
+        <div class="coach-mini" style="margin:6px 0 10px">${coachFace('wink')}<span>紙とえんぴつを用意！ <b class="kw-y">黄色の読み</b>を漢字にして、紙に書こう。全部書けたら答え合わせだ</span></div>
+        <ol class="kw-list">${qs.map((w) => `<li>${kwLine(w)}</li>`).join('')}</ol>
+        <button class="btn big" data-kw="check">書けた！ 答え合わせ ▶</button><button class="btn ghost" data-kw="quit" style="margin-top:10px">やめる</button></div>`;
+    };
+    const step2 = () => {
+      el.innerHTML = `<div class="tut kw-box"><div class="tut-step">✅ 答え合わせ</div>
+        <p class="note" style="margin:0 0 8px">紙と見くらべて、<b>書けなかった・まちがえた漢字</b>をタップして ❌ にしてね</p>
+        <div class="kw-ans">${qs.map((w, i) => `<button class="kw-a ${ng.has(i) ? 'ng' : ''}" data-kwi="${i}"><span class="kw-m">${ng.has(i) ? '❌' : '⭕'}</span><span class="kw-r">${esc(w[1])}</span><b class="kw-k">${esc(w[0])}</b></button>`).join('')}</div>
+        <div class="kw-sum">⭕ <b>${qs.length - ng.size}</b> / ${qs.length}</div>
+        <button class="btn big" data-kw="done">記録する ✍️</button><button class="btn ghost" data-kw="back" style="margin-top:10px">← 問題にもどる</button></div>`;
+    };
+    step1();
+    document.body.appendChild(el);
+    el.addEventListener('click', (e) => {
+      const a = e.target.closest('[data-kwi]');
+      if (a) { const i = Number(a.dataset.kwi); if (ng.has(i)) ng.delete(i); else ng.add(i); sfx.tap(); const y = el.scrollTop; step2(); el.scrollTop = y; return; }
+      const b = e.target.closest('[data-kw]'); if (!b) return;
+      sfx.tap();
+      const k = b.dataset.kw;
+      if (k === 'quit') { if (confirm('やめる？（記録はされないよ）')) el.remove(); }
+      else if (k === 'check') { step2(); el.scrollTop = 0; }
+      else if (k === 'back') { step1(); el.scrollTop = 0; }
+      else if (k === 'done') { el.remove(); finishKwrite(qs, ng, t0); }
+    });
+  }
+  async function finishKwrite(qs, ng, t0) {
+    const wk = S.weak.kwrite;
+    qs.forEach((w, i) => { if (ng.has(i)) wk[w[0]] = (wk[w[0]] || 0) + 1; else if (wk[w[0]]) { wk[w[0]]--; if (wk[w[0]] <= 0) delete wk[w[0]]; } });
+    const ok = qs.length - ng.size; const miss = qs.filter((w, i) => ng.has(i));
+    markPlayed('kwrite', ok, 0);
+    save();
+    logEvent('quiz', quizName('kwrite'), '国語', 0, { kind: 'kwrite', n: qs.length, ok, miss: miss.map((w) => w[0]), sec: Math.round((Date.now() - t0) / 1000) });
+    const hasM = S.missions.some((m) => m.id === 'kanji'); const done = (S.days[todayStr()] || { m: [] }).m.includes('kanji');
+    // 先にミッションを SHOOT（結果画面のまま閉じられても、ミッションは入るように）
+    if (hasM && !done) await onMission('kanji');
+    if (ok === qs.length) { sfx.fanfare(); confetti(160); } else sfx.coin();
+    await overlay(`<div class="qbody result" style="max-width:420px">
+      <div style="font-family:var(--display);font-weight:800;font-size:18px">✍️ 漢字かき取り</div>
+      <div class="big">${ok}<span style="font-size:28px">/${qs.length}</span></div>
+      <div class="lvup-title" style="font-size:30px">${ok === qs.length ? 'PERFECT!!' : ok >= qs.length * 0.7 ? 'GREAT!' : 'NICE TRY!'}</div>
+      ${miss.length ? `<ul>${miss.map((w) => `<li>${esc(w[1])} → ${esc(w[0])}</li>`).join('')}</ul><div class="note">↑ 紙にあと3回書いて覚えよう ✍️（次のかき取りで先に出るよ）</div>` : ''}
+      <div class="coach-mini">${coachFace(ok === qs.length ? 'fire' : 'wink')}<span>${esc(ok === qs.length ? '全部書けた！ 漢字もエース級だ 🔥' : '書いた分だけ覚えるぞ。まちがえた字こそ宝物だ')}</span></div>
+      <div class="newtag">${!hasM ? '漢字ミッションがリストにないので、記録だけしたよ' : done ? '今日の漢字ミッションは もう IN ✓ 練習ナイス！' : '✍️ 漢字ミッション IN！'}</div></div>`, { lockMs: 900, cls: 'solid kw' });
+    render();
   }
 
   // ---------- スピーキング（お手本を聞く → 英語で話す → 聞き取れた単語を色分け） ----------
@@ -1704,7 +1830,11 @@ function calcAllowance(st, ym, today, cfg) {
   });
   document.addEventListener('visibilitychange', () => {
     if (!S) return;
-    if (document.visibilityState === 'visible') { sessionBegin(); if (tab !== 'voice') render(); flush(); checkCheers(); syncBank(); }
+    if (document.visibilityState === 'visible') {
+      sessionBegin(); if (tab !== 'voice') render(); flush(); checkCheers(); syncBank();
+      // 開いたままで月がかわった時も、先月のふり返りを1回だけ出す
+      const rc = recapDue(); if (rc && !document.querySelector('.ov')) monthRecap(rc);
+    }
     else { sessionEnd(); flush(); }
   });
   addEventListener('pagehide', () => { if (S) { sessionEnd(); flush(); } });
@@ -1758,11 +1888,14 @@ function calcAllowance(st, ym, today, cfg) {
     const big = (ds) => stdCount(S.days[ds]) >= A.bigWinMissions;
     const wb = weekBigs(t); const need = A.mvpDays - wb;
     const chances = 6 - idx + (big(t) ? 0 : 1); // 今週あと何日 BIG WIN をねらえるか（今日をふくむ）
+    const wdChances = idx <= 4 ? 4 - idx + (big(t) ? 0 : 1) : 0; // そのうち金曜まで（平日）の日数
     const dots = '月火水木金土日'.split('').map((w, k) => { const ds = addDays(mon, k); return `<i class="${big(ds) ? 'on' : ds === t ? 'now' : ds > t ? 'fut' : ''}">${w}</i>`; }).join('');
     const msg = need <= 0 ? `🏅 週間MVP 達成！ +${yen(A.mvp)}（日曜が終わったら おこづかいに入るよ）`
       : need <= chances ? (need === 1 ? `あと<b>1日</b>で 週間MVP +${yen(A.mvp)}！` : `あと${need}日 BIG WIN で 週間MVP +${yen(A.mvp)}`)
-      : `今週の BIG WIN ${wb}日。来週は${A.mvpDays}日で 週間MVP +${yen(A.mvp)}`;
-    return `<button class="mvp ${need <= 0 ? 'done' : need === 1 && chances > 0 ? 'near' : ''}" data-act="money"><span class="mvp-l">🏅 週間MVP <b>${wb}/${A.mvpDays}</b><small>日</small></span><span class="mvp-d">${dots}</span><span class="mvp-m">${msg}</span></button>`;
+      : `今週の BIG WIN ${wb}日。来週は 月〜金の${A.mvpDays}日で 週間MVP +${yen(A.mvp)}`;
+    // 数え方は月〜日のまま。平日だけで届く時は「土日は取りかえしのチャンス」と見せる
+    const sub = need > 0 && need <= chances ? (need <= wdChances ? '月〜金で届く！ 土日は取りかえしのチャンス' : '土日も使って 取りかえそう！') : '';
+    return `<button class="mvp ${need <= 0 ? 'done' : need === 1 && chances > 0 ? 'near' : ''}" data-act="money"><span class="mvp-l">🏅 週間MVP <b>${wb}/${A.mvpDays}</b><small>日</small></span><span class="mvp-d">${dots}</span><span class="mvp-m">${msg}${sub ? `<small class="mvp-s">${sub}</small>` : ''}</span></button>`;
   }
   function allowanceCard() {
     const { t, a, A, up, proj } = allowanceInfo();
@@ -1780,7 +1913,7 @@ function calcAllowance(st, ym, today, cfg) {
       ${hint}<br>今週の BIG WIN ${wb}/${A.mvpDays}日 ${wb >= A.mvpDays ? '→ 週間MVP達成！🏅' : `（${A.mvpDays}日で週間MVP +${yen(A.mvp)}）`}<br><br>
       <b>ルール</b><br>
       <b>基本 ${yen(A.base)}</b><br>1か月に <b>${A.restDays}日</b> までは、勉強しない日があっても大丈夫（大会・体調が悪い日用のお休み枠）。<br>それをこえて勉強しなかった日は、<b>1日 −${yen(A.missPenalty)}</b>。<br><br>
-      <b>がんばりボーナス 最大 +${yen(A.bonusMax)}</b><br>🔥 BIG WIN（基本ミッションを1日${A.bigWinMissions}本以上）：+${yen(A.bigWin)}<br>🏅 週間MVP（月〜日でBIG WIN ${A.mvpDays}日以上）：+${yen(A.mvp)}<br>👑 チャレンジ（上級ゲーム）全問正解：+${yen(A.perfect)}（1日${A.perfectPerDay}回まで）<br>⭐ スタメン以上にランクアップ：+${yen(A.rankUp)}<br><br>
+      <b>がんばりボーナス 最大 +${yen(A.bonusMax)}</b><br>🔥 BIG WIN（基本ミッションを1日${A.bigWinMissions}本以上）：+${yen(A.bigWin)}<br>🏅 週間MVP（月〜日でBIG WIN ${A.mvpDays}日以上。月〜金だけでも届く！）：+${yen(A.mvp)}<br>👑 チャレンジ（上級ゲーム）全問正解：+${yen(A.perfect)}（1日${A.perfectPerDay}回まで）<br>⭐ スタメン以上にランクアップ：+${yen(A.rankUp)}<br><br>
       ※ ゲームの点数や、自分で追加したミッションはおこづかいには数えないよ。紙での勉強が勝負！<br><br>
       合計は <b>最大 ${yen(A.max)}</b>。毎日BIG WIN＋毎日チャレンジ全問正解の、完ぺきな月だけ届く金額！<br>月末にしめて、次の月のはじめにもらえるよ。</div></div>`, { lockMs: 400 });
   }
@@ -1855,6 +1988,23 @@ function calcAllowance(st, ym, today, cfg) {
     sfx.buzzer();
   }
 
+  // 月がかわって最初に開いた時に1回だけ、先月のふり返り（おこづかい・BIG WIN）と今月の作戦を見せる。数字の計算はおこづかいと同じ
+  function recapDue() {
+    const prev = addDays(todayStr().slice(0, 7) + '-01', -1).slice(0, 7);
+    // おこづかいのルール（2026-10 から）より前の月は出さない
+    if (prev < RECAP_FROM || S.recapSeen === prev || ALLOWANCE.on === false) return null;
+    return Object.keys(S.days).some((k) => k.startsWith(prev) && S.days[k].pts > 0) ? prev : null;
+  }
+  function monthRecap(prev) {
+    S.recapSeen = prev; save();
+    const a = allowanceFor(prev); const A = ALLOWANCE;
+    const pm = Number(prev.slice(5)); const nm = Number(todayStr().slice(5, 7));
+    sfx.fanfare(); confetti(160);
+    return overlay(`<div class="tut"><div class="tut-step">${nm}月 スタート！</div>${UPDATE_NOTE.img ? `<img class="wn-img" src="${esc(UPDATE_NOTE.img)}" alt="" onerror="this.remove()">` : ''}<div class="tut-t">${pm}月のふり返り</div>
+      <div class="tut-b">💰 ${pm}月のおこづかい <b>${yen(a.total)}</b><br>（基本 ${yen(a.base)} ＋ がんばりボーナス <b>+${yen(a.bonus)}</b>）<br>
+      🔥 BIG WIN <b>${a.bigs}日</b> ・ 勉強した日 ${a.studied}日${a.mvp ? ` ・ 🏅 週間MVP ${a.mvp}回` : ''}<br><br>
+      <b>${nm}月の作戦</b><br>🔥 BIG WIN 1日で +${yen(A.bigWin)}。がんばった日の分だけ増えるよ<br>🏅 週間MVP（+${yen(A.mvp)}）は <b>月〜金の${A.mvpDays}日 BIG WIN</b> で届く！ 土日は取りかえしのチャンス</div></div>`, { lockMs: 900 });
+  }
   // アップデートのお知らせ（UPDATE_NOTE.id が変わった時に1回だけ出す）
   function whatsNew() {
     sfx.fanfare(); confetti(120);
@@ -1912,7 +2062,11 @@ function calcAllowance(st, ym, today, cfg) {
     }
     render();
     sessionBegin();
-    if (S.seenUpdate !== UPDATE_NOTE.id) { S.seenUpdate = UPDATE_NOTE.id; save(); whatsNew(); }
+    // 先月のふり返り → アップデートのお知らせ の順に1つずつ出す
+    (async () => {
+      const rc = recapDue(); if (rc) await monthRecap(rc);
+      if (S.seenUpdate !== UPDATE_NOTE.id) { S.seenUpdate = UPDATE_NOTE.id; save(); await whatsNew(); }
+    })();
     flush();
     checkCheers();
     syncBank();
