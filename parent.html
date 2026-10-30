@@ -173,7 +173,7 @@ button.ghost { background: transparent; color: var(--sub); border: 1px solid var
 // 子どもごとのアプリ。上のボタンで切りかえる（?kid=star）。記録はアプリごとに別のスプレッドシート
 window.KIDS = [
   { id: 'hoop', label: '🏀 HOOP STUDY', who: '中学生', base: '', cfg: 'HOOP_CONFIG', pk: 'hoop_parent_key', voice: true },
-  { id: 'star', label: '🌟 STAR STUDY', who: '小4', base: 'star/', cfg: 'STAR_CONFIG', pk: 'star_parent_key', voice: false },
+  { id: 'star', label: '🌟 STAR STUDY', who: '小4', base: 'star/', cfg: 'STAR_CONFIG', pk: 'star_parent_key', voice: true },
 ];
 (function () {
   var q = new URLSearchParams(location.search).get('kid');
@@ -239,7 +239,7 @@ window.startParent = () => {
   const getKey = () => { try { return localStorage.getItem(PK) || ''; } catch (e) { return ''; } };
   const setKey = (k) => { try { k ? localStorage.setItem(PK, k) : localStorage.removeItem(PK); } catch (e) { /* noop */ } };
   const ICON = { mission: '🏀', quiz: '🎮', check: '✅', gacha: '🎰', undo: '↩️', cheer_read: '📣', test_set: '📅', goal_set: '🎯', voice: '💬', reset: '⚠️', timer: '⏱', trade: '🔄', complete: '👑', challenge: '📜', badge: '🏅', session: '📱' };
-  const QNAME = { calc: '🧮 計算ダッシュ', speak: '🎤 スピーキング', listen: '🎧 リスニング', spell: 'スペル', plural: '複数形', kanji: '漢字よみ', weak: '苦手つぶし', challenge: '👑 チャレンジ（上級）', verb: '🧩 動詞の形トレーニング', 'qa:社会': '社会 一問一答', 'qa:理科': '理科 一問一答' };
+  const QNAME = { calc: '🧮 計算ダッシュ', speak: '🎤 スピーキング', listen: '🎧 リスニング', spell: 'スペル', plural: '複数形', kanji: '漢字よみ', weak: '苦手つぶし', challenge: '👑 チャレンジ（上級）', verb: '🧩 動詞の形トレーニング', kwrite: '✍️ 漢字かき取り（紙・自己採点）', 'qa:社会': '社会 一問一答', 'qa:理科': '理科 一問一答' };
 
   function showLogin(msg) { $('#login').classList.remove('hidden'); $('#dash').classList.add('hidden'); $('#loginmsg').textContent = msg || ''; }
 
@@ -361,9 +361,11 @@ window.startParent = () => {
     const block = (title, arr, fmt) => arr.length ? `<div class="sub" style="margin:8px 0 6px">${title}</div><div class="chips">${arr.map(([k, n]) => `<span class="chip">${esc(fmt(k))}<b>${n}</b></span>`).join('')}</div>` : '';
     const pastOf = Object.fromEntries(PAST_FORMS.map((p) => [p[0], p[1]]));
     const thirdOf = Object.fromEntries(THIRD_FORMS.map((p) => [p[0], p[1]]));
+    // 漢字かき取りは HOOP STUDY だけ（STAR の data.js には無い）
+    const kwRead = typeof KANJI_WRITE === 'undefined' ? {} : Object.fromEntries(KANJI_WRITE.map((k) => [k[0], k[1]]));
     const wh = block('英単語スペル', top(weak.spell), (k) => k) + block('複数形', top(weak.plural), (k) => `${k}→${plur[k] || ''}`)
       + block('過去形', top(weak.past), (k) => `${k}→${pastOf[k] || ''}`) + block('3単現', top(weak.third), (k) => `${k}→${thirdOf[k] || ''}`)
-      + block('漢字の読み', top(weak.kanji), (k) => `${k}（${kanjiRead[k] || ''}）`) + block('難しい漢字（チャレンジ）', top(weak.hkanji), (k) => k) + block('一問一答', top(weak.qa), (k) => k)
+      + block('漢字の読み', top(weak.kanji), (k) => `${k}（${kanjiRead[k] || ''}）`) + block('漢字の書き（かき取りで書けなかった字）', top(weak.kwrite), (k) => `${k}（${kwRead[k] || ''}）`) + block('難しい漢字（チャレンジ）', top(weak.hkanji), (k) => k) + block('一問一答', top(weak.qa), (k) => k)
       + block('リスニング', top(weak.listen), (k) => k) + block('スピーキング', top(weak.speak), (k) => k) + block('計算', top(weak.calc), (k) => k);
     $('#weak').innerHTML = wh || '<div class="empty">苦手リストは空です（まちがえた問題が自動で入ります）</div>';
 
