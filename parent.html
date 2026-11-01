@@ -150,6 +150,8 @@ button.ghost { background: transparent; color: var(--sub); border: 1px solid var
       <section class="card" id="testcard"><h2>試合前チェック（テスト準備）</h2><div id="test"></div></section>
     </div>
 
+    <section class="card hidden" id="krcard" style="margin-top:12px"><h2>🇰🇷 かんこくご（IVE カードと連動）</h2><div id="kr"></div></section>
+
     <section class="card"><h2>📣 エールを送る</h2>
       <p class="sub">次にアプリを開いた時、大きく表示されます。チケットを付けるとガチャが回せます。</p>
       <div id="cheerlast" class="sub" style="margin:4px 0 8px"></div>
@@ -238,8 +240,8 @@ window.startParent = () => {
   const hm = (iso) => new Intl.DateTimeFormat('ja-JP', { timeZone: 'Asia/Tokyo', hour: '2-digit', minute: '2-digit' }).format(new Date(iso));
   const getKey = () => { try { return localStorage.getItem(PK) || ''; } catch (e) { return ''; } };
   const setKey = (k) => { try { k ? localStorage.setItem(PK, k) : localStorage.removeItem(PK); } catch (e) { /* noop */ } };
-  const ICON = { mission: '🏀', quiz: '🎮', check: '✅', gacha: '🎰', undo: '↩️', cheer_read: '📣', test_set: '📅', goal_set: '🎯', voice: '💬', reset: '⚠️', timer: '⏱', trade: '🔄', complete: '👑', challenge: '📜', badge: '🏅', session: '📱' };
-  const QNAME = { calc: '🧮 計算ダッシュ', speak: '🎤 スピーキング', listen: '🎧 リスニング', spell: 'スペル', plural: '複数形', kanji: '漢字よみ', weak: '苦手つぶし', challenge: '👑 チャレンジ（上級）', verb: '🧩 動詞の形トレーニング', kwrite: '✍️ 漢字かき取り（紙・自己採点）', 'qa:社会': '社会 一問一答', 'qa:理科': '理科 一問一答' };
+  const ICON = { mission: '🏀', quiz: '🎮', check: '✅', gacha: '🎰', undo: '↩️', cheer_read: '📣', test_set: '📅', goal_set: '🎯', voice: '💬', reset: '⚠️', timer: '⏱', trade: '🔄', complete: '👑', challenge: '📜', badge: '🏅', session: '📱', krcard: '📇', krcards: '📖', krname: '🏷️', krletter: '💌', krclear: '🏅', krlevel: '🎤' };
+  const QNAME = { calc: '🧮 計算ダッシュ', speak: '🎤 スピーキング', listen: '🎧 リスニング', spell: 'スペル', plural: '複数形', kanji: '漢字よみ', weak: '苦手つぶし', challenge: '👑 チャレンジ（上級）', verb: '🧩 動詞の形トレーニング', kwrite: '✍️ 漢字かき取り（紙・自己採点）', 'qa:社会': '社会 一問一答', 'qa:理科': '理科 一問一答', kr: '🇰🇷 韓国語クイズ', krrush: '⚡ 韓国語ラッシュ（2択）', krmatch: '🃏 韓国語カードあわせ', krspeak: '🗣️ 韓国語まねっこ' };
 
   function showLogin(msg) { $('#login').classList.remove('hidden'); $('#dash').classList.add('hidden'); $('#loginmsg').textContent = msg || ''; }
 
@@ -349,7 +351,7 @@ window.startParent = () => {
       const s = qs.filter((q) => q.detail.kind === k); if (!s.length) return '';
       const recent = s.slice(-10);
       const ok = recent.reduce((a, q) => a + q.detail.ok, 0), n = recent.reduce((a, q) => a + q.detail.n, 0);
-      return `<div class="qz" style="margin-bottom:12px"><span class="k">${esc(QNAME[k] || (k.startsWith('qa:') ? k.slice(3) + ' 一問一答' : k))}</span>　直近${recent.length}回の正答率 <b>${Math.round(ok / n * 100)}%</b>
+      return `<div class="qz" style="margin-bottom:12px"><span class="k">${esc(QNAME[k] || (k.startsWith('qa:') ? k.slice(3) + ' 一問一答' : k.startsWith('kr:') ? '🇰🇷 韓国語 ' + ((typeof KR_STAGES !== 'undefined' && KR_STAGES.find((s) => s.id === k.slice(3))) || { name: k.slice(3) }).name : k))}</span>　直近${recent.length}回の正答率 <b>${Math.round(ok / n * 100)}%</b>
         <div class="spark">${recent.map((q) => `<i style="height:${Math.max(6, q.detail.ok / q.detail.n * 100)}%" title="${q.date} ${q.detail.ok}/${q.detail.n}"></i>`).join('')}</div></div>`;
     }).join('') : '<div class="empty">まだプレイしていません</div>';
 
@@ -366,8 +368,24 @@ window.startParent = () => {
     const wh = block('英単語スペル', top(weak.spell), (k) => k) + block('複数形', top(weak.plural), (k) => `${k}→${plur[k] || ''}`)
       + block('過去形', top(weak.past), (k) => `${k}→${pastOf[k] || ''}`) + block('3単現', top(weak.third), (k) => `${k}→${thirdOf[k] || ''}`)
       + block('漢字の読み', top(weak.kanji), (k) => `${k}（${kanjiRead[k] || ''}）`) + block('漢字の書き（かき取りで書けなかった字）', top(weak.kwrite), (k) => `${k}（${kwRead[k] || ''}）`) + block('難しい漢字（チャレンジ）', top(weak.hkanji), (k) => k) + block('一問一答', top(weak.qa), (k) => k)
-      + block('リスニング', top(weak.listen), (k) => k) + block('スピーキング', top(weak.speak), (k) => k) + block('計算', top(weak.calc), (k) => k);
+      + block('リスニング', top(weak.listen), (k) => k) + block('スピーキング', top(weak.speak), (k) => k) + block('計算', top(weak.calc), (k) => k)
+      + block('韓国語（スタジオのクイズにだけ出ます）', top(weak.kr), (k) => k.replace(/^abc:/, ''));
     $('#weak').innerHTML = wh || '<div class="empty">苦手リストは空です（まちがえた問題が自動で入ります）</div>';
+
+    // かんこくご（STAR STUDY だけ。data.js に KR_STAGES がある子）
+    const krOn = typeof KR_STAGES !== 'undefined';
+    $('#krcard').classList.toggle('hidden', !krOn);
+    if (krOn) {
+      const K = st.kr || {}; const W = K.w || {}; const need = typeof KR_MASTER === 'number' ? KR_MASTER : 2;
+      const stages = KR_STAGES.map((s) => ({ s, done: s.words.filter((w) => (W[s.id === 'abc' ? 'abc:' + w[0] : w[0]] || 0) >= need).length, total: s.words.length }));
+      const words = stages.filter((x) => x.s.id !== 'abc');
+      const since = addDays(t, -6);
+      const cardDays = logs.filter((l) => l.type === 'krcard' && l.date >= since).length;
+      const krGames = logs.filter((l) => l.type === 'quiz' && l.subject === '韓国語' && l.date >= since).length;
+      $('#kr').innerHTML = `<div style="font-weight:800">おぼえた ことば ${words.reduce((a, x) => a + x.done, 0)}/${words.reduce((a, x) => a + x.total, 0)}</div>
+        <div class="sub" style="margin:4px 0 8px">直近7日：カードタイム ${cardDays}回（紙のカードを声に出して読んだ自己申告）・ゲーム ${krGames}回 ／ ラッシュのベスト ${Number(K.rushBest) || 0}問 ・ ファンレター ${Number(K.letter) || 0}まい。おこづかいの計算には入りません</div>
+        <div class="chips">${stages.map((x) => `<span class="chip">${esc(x.s.e + ' ' + x.s.name)}<b>${x.done}/${x.total}</b></span>`).join('')}</div>`;
+    }
 
     // 試合前チェック
     const T = st.test || { name: '', date: '', checks: {} };

@@ -59,7 +59,8 @@ function calcAllowance(st, ym, today, cfg) {
   function freshState() {
     return {
       v: 1, nick: '', sound: true, xp: 0, tickets: 1, days: {}, cards: {}, pulls: 0, pity: 0,
-      weak: { spell: {}, plural: {}, kanji: {}, qa: {}, past: {}, third: {}, hkanji: {}, speak: {}, listen: {}, calc: {} }, best: {}, lastPlay: {},
+      weak: { spell: {}, plural: {}, kanji: {}, qa: {}, past: {}, third: {}, hkanji: {}, speak: {}, listen: {}, calc: {}, kr: {} }, best: {}, lastPlay: {},
+      kr: { w: {}, clear: {}, name: '', nameKana: '', letter: 0, intro: 0, matchBest: 0, rushBest: 0, lv: 0 },
       missions: DEFAULT_MISSIONS.map((m) => ({ ...m })),
       test: { name: 'テスト', date: '', checks: {} },
       goals: {}, voices: [], voiceDays: {}, voiceWeek: '', cheerLog: [], startDate: todayStr(),
@@ -71,12 +72,14 @@ function calcAllowance(st, ym, today, cfg) {
   function migrate(s) {
     const f = freshState();
     for (const k in f) if (s[k] === undefined) s[k] = f[k];
-    for (const k of ['spell', 'plural', 'kanji', 'qa', 'past', 'third', 'hkanji', 'speak', 'listen', 'calc']) if (!s.weak[k]) s.weak[k] = {};
+    for (const k of ['spell', 'plural', 'kanji', 'qa', 'past', 'third', 'hkanji', 'speak', 'listen', 'calc', 'kr']) if (!s.weak[k]) s.weak[k] = {};
     // 2026-10-26 会話の質問を言いかえた（What do you like? → What animal do you like?）。苦手の記録を引きつぐ
     for (const k of ['listen', 'speak']) {
       const w = s.weak[k]; const o = 'What do you like?'; const n = 'What animal do you like?';
       if (w[o]) { w[n] = (w[n] || 0) + w[o]; delete w[o]; }
     }
+    if (!s.kr || typeof s.kr !== 'object') s.kr = f.kr;
+    for (const k in f.kr) if (s.kr[k] === undefined) s.kr[k] = f.kr[k];
     const firstDay = Object.keys(s.days || {}).sort()[0];
     if (firstDay && firstDay < s.startDate) s.startDate = firstDay;
     return s;
@@ -123,7 +126,7 @@ function calcAllowance(st, ym, today, cfg) {
   }
   function snapshot() {
     const r = RANKS[rankIdx(S.xp)];
-    return { ...S, summary: { rank: r[1], streak: streak(), cardKinds: Object.keys(S.cards).length, allowanceCfg: ALLOWANCE } };
+    return { ...S, summary: { rank: r[1], streak: streak(), cardKinds: Object.keys(S.cards).length, cardTotal: CARDS.length, krWords: krMastered(), krTotal: KR_WORDS.length, allowanceCfg: ALLOWANCE } };
   }
   let flushTimer = null;
   let flushing = false;
@@ -301,6 +304,8 @@ function calcAllowance(st, ym, today, cfg) {
     coin: () => { tone(988, 0.08, 'square', 0.08); tone(1319, 0.3, 'square', 0.08, 0.08); },
     fanfare: () => { [523, 659, 784, 1046].forEach((f, i) => tone(f, 0.18, 'square', 0.08, i * 0.12)); tone(1046, 0.6, 'triangle', 0.12, 0.5); tone(1318, 0.6, 'triangle', 0.08, 0.5); },
     drum: () => { for (let i = 0; i < 10; i++) noise(0.06, 0.18, i * 0.1, 300, 200); },
+    // 連続正解で 音が どんどん 上がる（ドレミ…の順）
+    combo: (n) => { const st = [0, 2, 4, 5, 7, 9, 11, 12, 14, 16, 17, 19, 21, 23, 24]; const f = 660 * Math.pow(2, st[Math.min(Math.max(n, 1) - 1, st.length - 1)] / 12); tone(f, 0.08, 'square', 0.07); tone(f * 1.5, 0.14, 'square', 0.07, 0.07); if (n >= 5) tone(f * 2, 0.18, 'triangle', 0.07, 0.12); },
     reveal: (r) => {
       const base = { N: 523, R: 659, SR: 784, SSR: 880, UR: 1046 }[r] || 523;
       tone(base, 0.15, 'square', 0.08); tone(base * 1.5, 0.3, 'square', 0.08, 0.12);
@@ -310,6 +315,7 @@ function calcAllowance(st, ym, today, cfg) {
 
   // ---------- 紙吹雪 ----------
   function confetti(n = 120) {
+    if (calmFx()) return;
     const cv = document.createElement('canvas'); cv.className = 'confetti';
     const dpr = window.devicePixelRatio || 1;
     cv.width = innerWidth * dpr; cv.height = innerHeight * dpr;
@@ -333,6 +339,58 @@ function calcAllowance(st, ym, today, cfg) {
       if (t < 2200) requestAnimationFrame(loop); else cv.remove();
     })(start);
   }
+
+  // ---------- ドパミン演出（2026-11-01「もっとドパガキ風に」。見せ方だけで、ポイント・チケット・おこづかいは変えない） ----------
+  // 全画面の 点滅は 使わない（FEVER も ゆっくり 色が 変わるだけ）。端末で「視差効果を減らす」を 選んでいる時は 飛び散る 演出を 出さない
+  const FEVER_AT = 5;
+  const calmFx = () => !!(window.matchMedia && matchMedia('(prefers-reduced-motion: reduce)').matches);
+  function buzz(p) { try { if (navigator.vibrate) navigator.vibrate(p); } catch (e) { /* noop */ } }
+  function fxNode(cls, html, css) {
+    const n = document.createElement('span'); n.className = 'fx ' + cls; n.innerHTML = html;
+    Object.keys(css).forEach((k) => n.style.setProperty(k, css[k]));
+    n.addEventListener('animationend', () => n.remove());
+    document.body.appendChild(n);
+    setTimeout(() => n.remove(), 2600);
+    return n;
+  }
+  // 押した ところから 絵文字が はじける
+  function burst(x, y, list, n = 10) {
+    if (calmFx()) return;
+    for (let i = 0; i < n; i++) {
+      const a = Math.random() * Math.PI * 2; const d = 50 + Math.random() * 90;
+      fxNode('fx-p', pick(list), { left: x + 'px', top: y + 'px', '--dx': Math.cos(a) * d + 'px', '--dy': Math.sin(a) * d + 'px', '--r': (Math.random() * 300 - 150) + 'deg', 'font-size': 14 + Math.random() * 14 + 'px' });
+    }
+  }
+  function floatText(x, y, text, cls = '') { fxNode('fx-t ' + cls, esc(text), { left: x + 'px', top: y + 'px' }); }
+  function emojiRain(list, n = 20) {
+    if (calmFx()) return;
+    for (let i = 0; i < n; i++) fxNode('fx-rain', pick(list), { left: Math.random() * 100 + 'vw', 'animation-delay': Math.random() * 0.7 + 's', 'font-size': 18 + Math.random() * 20 + 'px', '--r': (Math.random() * 500 - 250) + 'deg' });
+  }
+  // 正解の 手ごたえ（連続するほど 派手に。ms はその問題に かかった時間）
+  const COMBO_WORDS = { 2: 'ナイス！', 3: 'すごい！', 5: 'FEVER!!', 7: '최고!', 10: '대박!!', 15: 'レジェンド!!' };
+  function juiceHit(btn, combo, ms) {
+    const r = btn ? btn.getBoundingClientRect() : { left: innerWidth / 2, top: innerHeight / 2, width: 0, height: 0 };
+    const x = r.left + r.width / 2; const y = r.top + r.height / 2;
+    burst(x, y, combo >= FEVER_AT ? ['🌈', '💖', '⭐', '✨'] : combo >= 3 ? ['🔥', '✨', '⭐'] : ['✨', '💖', '⭐'], 8 + Math.min(combo, 6) * 2);
+    floatText(x, y - 14, '+1', 'plus');
+    if (COMBO_WORDS[combo]) floatText(innerWidth / 2, innerHeight * 0.1, COMBO_WORDS[combo], 'word');
+    else if (ms < 2500) floatText(innerWidth / 2, innerHeight * 0.1, '⚡ はやい！', 'fast');
+    buzz(combo >= FEVER_AT ? [15, 30, 15] : 15);
+  }
+  // 数字が ぐんぐん 増える
+  function countUp(node, to, suffix = '') {
+    if (!node) return;
+    const t0 = performance.now(); const dur = Math.min(1000, 180 + to * 70); let last = -1;
+    (function step(now) {
+      if (!node.isConnected) return;
+      const v = Math.round(Math.min(1, (now - t0) / dur) * to);
+      if (v !== last) { node.textContent = v + suffix; if (v > 0) tone(620 + v * 26, 0.04, 'square', 0.04); last = v; }
+      if (v < to) requestAnimationFrame(step);
+      else node.classList.add('done');
+    })(t0);
+  }
+  // 結果の 星（3つ まで じゅんばんに 落ちてくる）
+  const resultStars = (ok, n) => { const k = !n ? 0 : ok >= n ? 3 : ok / n >= 0.7 ? 2 : ok > 0 ? 1 : 0; return `<div class="res-stars">${[1, 2, 3].map((i) => `<i class="${i <= k ? 'on' : ''}" style="animation-delay:${0.15 + i * 0.22}s">★</i>`).join('')}</div>`; };
 
   // ---------- オーバーレイ ----------
   function overlay(html, opt = {}) {
@@ -363,26 +421,26 @@ function calcAllowance(st, ym, today, cfg) {
   </svg>`;
   function shootOv(pts, sub) {
     sfx.shoot();
-    setTimeout(() => { confetti(90); document.body.classList.add('shake-screen'); setTimeout(() => document.body.classList.remove('shake-screen'), 400); }, 620);
+    setTimeout(() => { confetti(90); emojiRain(['🌟', '💖', '✨', '⭐'], 18); buzz(30); document.body.classList.add('shake-screen'); setTimeout(() => document.body.classList.remove('shake-screen'), 400); }, 620);
     return overlay(`<div class="starpop">🌟</div>
       <div class="shot-word">${esc(pick(SHOT_WORDS))}</div>
       <div class="shot-pts">+${pts} PTS</div>
       ${sub ? `<div class="shot-sub">${esc(sub)}</div>` : ''}`, { autoClose: 2200, lockMs: 900 });
   }
   function winOv() {
-    sfx.buzzer(); setTimeout(() => { sfx.fanfare(); confetti(160); }, 500);
+    sfx.buzzer(); setTimeout(() => { sfx.fanfare(); confetti(160); emojiRain(['🏆', '🎟️', '🎉', '⭐'], 24); }, 500);
     return overlay(`<div class="lvup-title">WIN!!</div><div class="lvup-rank">🏆</div>
       <div class="lvup-name">${todayRival().e} ${esc(todayRival().name)}に かった！</div>
       <div class="reward-big">🎟️ ガチャチケット ゲット！</div>`, { lockMs: 1200 });
   }
   function bigWinOv() {
-    sfx.fanfare(); setTimeout(() => confetti(220), 200);
+    sfx.fanfare(); setTimeout(() => { confetti(220); emojiRain(['💰', '🔥', '🏆', '💖'], 30); buzz([30, 40, 30]); }, 200);
     return overlay(`<div class="lvup-title" style="font-size:56px">BIG WIN!!</div><div class="lvup-rank">🔥🏆🔥</div>
       <div class="lvup-name">べんきょう ${ALLOWANCE.bigWinMissions}つ クリア！</div>
       <div class="reward-big">💰 おこづかい +${ALLOWANCE.bigWin}円！</div>`, { lockMs: 1200 });
   }
   function levelUpOv(i) {
-    sfx.fanfare(); confetti(200);
+    sfx.fanfare(); confetti(200); emojiRain(['⭐', '🌟', '🎤', '💖'], 26);
     const r = RANKS[i];
     return overlay(`<div class="lvup-title">LEVEL UP!</div><div class="lvup-rank">${r[2]}</div>
       <div class="lvup-name">${esc(r[1])} に ランクアップ！</div>
@@ -421,9 +479,9 @@ function calcAllowance(st, ym, today, cfg) {
 
   // ---------- 画面 ----------
   let tab = 'home';
-  const TABS = [['home', '🏠', 'ホーム'], ['game', '🎮', 'ゲーム'], ['ranks', '⭐', 'ランク'], ['gacha', '🎰', 'ガチャ']];
+  const TABS = [['home', '🏠', 'ホーム'], ['game', '🎮', 'ゲーム'], ['korean', '<b class="ti-kr">한</b>', 'かんこくご'], ['ranks', '⭐', 'ランク'], ['gacha', '🎰', 'ガチャ']];
   function renderTabs() {
-    const dot = (id) => (id === 'gacha' && S.tickets > 0) || (id === 'voice' && !S.voiceDays[todayStr()]);
+    const dot = (id) => (id === 'gacha' && S.tickets > 0) || (id === 'voice' && !S.voiceDays[todayStr()]) || (id === 'korean' && !(S.days[todayStr()] || {}).krc);
     $('#tabbar').innerHTML = TABS.map(([id, ic, lb]) => `<button class="tab ${tab === id ? 'on' : ''}" data-tab="${id}"><span class="ti">${ic}</span>${lb}${dot(id) ? '<i class="dot"></i>' : ''}</button>`).join('');
   }
   // 上の帯：ランク・れんぞく日数・チケット・設定だけ（くわしい数字はランク表に置く）
@@ -466,7 +524,7 @@ function calcAllowance(st, ym, today, cfg) {
     const h2 = stepHead(2, x, 'ゲーム', `${SHORT_LEN}もん だけ！`);
     const h3 = stepHead(3, x, 'ガチャ', S.tickets > 0 ? `チケットが ${S.tickets}まい あるよ` : x.s3 ? 'きょうは まわしたよ' : `べんきょう ${need}つで チケットが もらえる`);
     return header() + (S.timer ? timerCard() : '') + coachBox() + cheer + `
-      <div class="today"><span class="td-h">きょう やること</span><span class="td-p"><b>${x.done}</b>/3</span></div>
+      <div class="today"><span class="td-h">きょう やること</span>${d.pts > 0 ? `<span class="td-pts">+${d.pts}P</span>` : ''}<span class="td-p"><b>${x.done}</b>/3</span></div>
       <section class="step ${h1.cls}">${h1.html}
         <div class="st-goal"><span class="dots">${dots}</span><span class="st-gt">${x.s1 ? `🎉 おこづかい +${ALLOWANCE.bigWin}円 ゲット！` : `${need}つで おこづかい <b>+${ALLOWANCE.bigWin}円</b>`}</span></div>
         <div class="mtiles">${S.missions.map((m) => missionTile(m, d)).join('')}</div>
@@ -476,6 +534,7 @@ function calcAllowance(st, ym, today, cfg) {
         ${S.tickets > 0 ? `<button class="bigbtn gacha" data-tab="gacha">🎁 ガチャを まわす</button>` : ''}
       </section>
       ${x.next === 0 ? `<div class="alldone">🎉 きょうは ぜんぶ クリア！<small>${st}日 れんぞく。また あしたね 🌙</small></div>` : ''}
+      ${krHomeCard()}
       ${moodCard()}
       ${allowanceCard()}
       ${S.timer ? '' : `<button class="tmlink" data-act="tstart">⏱ べんきょうタイマーを つかう</button>`}
@@ -486,6 +545,7 @@ function calcAllowance(st, ym, today, cfg) {
   function shortGames() {
     const more = [['listen', '🎧', 'リスニング'], ...(qaSubjects().includes('都道府県') ? [['qa:都道府県', '🗾', 'とどうふけん']] : [])];
     return `<button class="bigbtn short" data-act="short" data-kind="calc">🧮 けいさん ${SHORT_LEN}もん<small>さっと おわるよ ▶</small></button>
+      <button class="sbtn wide kr-short" data-act="short" data-kind="kr"><b class="ti-kr">한</b> かんこくご<small>${SHORT_LEN}もん</small></button>
       <div class="shorts">${more.map(([k, e, n]) => `<button class="sbtn" data-act="short" data-kind="${esc(k)}">${e} ${n}<small>${SHORT_LEN}もん</small></button>`).join('')}</div>`;
   }
   // 「きょうの きもち」：ボタンを おすだけで おうちに とどく（1日1回）。ことばで 書きたい時は 声の ページへ
@@ -498,7 +558,7 @@ function calcAllowance(st, ym, today, cfg) {
       <button class="mlink" data-tab="voice">✏️ ことばで おしえる ›</button></div>`;
   }
   // ---------- おまかせ（今やるといいゲームを1つ選ぶ。迷わずすぐ始められるように） ----------
-  function gameKinds() { return ['speak', 'listen', 'calc', 'kanji', ...qaSubjects().map((x) => 'qa:' + x)]; }
+  function gameKinds() { return ['speak', 'listen', 'calc', 'kanji', 'kr', ...qaSubjects().map((x) => 'qa:' + x)]; }
   const playedToday = (k) => ((S.days[todayStr()] || {}).qk || []).includes(k);
   function autoPick() {
     const d = S.days[todayStr()] || {};
@@ -514,7 +574,7 @@ function calcAllowance(st, ym, today, cfg) {
     const last = S.lastPlay[oldest];
     return { kind: oldest, why: !last ? 'まだ やったことが ない ゲーム！' : c.length ? `${diffDays(last, todayStr())}日ぶりの ゲーム` : 'もう1回、じこベストに ちょうせん！' };
   }
-  const KIND_ICON = { calc: '🧮', speak: '🎤', listen: '🎧', spell: '🔤', plural: '📦', kanji: '漢', weak: '🎯', challenge: '👑' };
+  const KIND_ICON = { calc: '🧮', speak: '🎤', listen: '🎧', spell: '🔤', plural: '📦', kanji: '漢', weak: '🎯', challenge: '👑', kr: '한' };
   const kindIcon = (k) => KIND_ICON[k] || ({ 理科: '🧪', 社会: '🏘️', 都道府県: '🗾', 英語: '🔤', 国語: '✍️' }[k.slice(3)] || '📚');
   // 画面に出す名前（記録に残る名前＝quizName はそのまま）
   const kindLabel = (k) => KIND_LABEL[k] || (k.startsWith('qa:') ? k.slice(3) + ' クイズ' : quizName(k));
@@ -532,6 +592,8 @@ function calcAllowance(st, ym, today, cfg) {
     d.qb = d.qb || {}; d.qb[kind] = Math.max(d.qb[kind] || 0, ok || 0);
     if (combo) d.mc = Math.max(d.mc || 0, combo);
     S.lastPlay[kind] = todayStr();
+    // ステージの クイズも「かんこくご」を やった日として数える（挑戦状・バッジ・おまかせ用）
+    if (kind.startsWith('kr:')) { S.lastPlay.kr = todayStr(); d.qb.kr = Math.max(d.qb.kr || 0, ok || 0); if (!d.qk.includes('kr')) d.qk.push('kr'); }
   }
   // ---------- コーチの挑戦状（1日1つ）とバッジ。どちらも楽しむためのもので、ポイント・チケット・おこづかいは増えない ----------
   const todayChal = () => CHALLENGES[(dayNum() + 3) % CHALLENGES.length];
@@ -561,6 +623,10 @@ function calcAllowance(st, ym, today, cfg) {
     if (t === 'timer') return Object.values(S.days).reduce((a, d) => a + (d.tm || 0), 0);
     if (t === 'cards') return Object.keys(S.cards).length;
     if (t === 'allgames') return gameKinds().every((k) => S.lastPlay[k]) ? 1 : 0;
+    if (t === 'krwords') return krMastered();
+    if (t === 'krstage') return Object.keys(S.kr.clear).length;
+    if (t === 'krname') return S.kr.name ? 1 : 0;
+    if (t === 'krletter') return S.kr.letter ? 1 : 0;
     return 0;
   }
   // 新しくクリアしたもの（挑戦状・バッジ）を見つけて、画面があいた時に1つずつお祝いする
@@ -573,6 +639,12 @@ function calcAllowance(st, ym, today, cfg) {
     if (d && !d.chal && chalValue(c, d) >= c.n) { d.chal = 1; S.chal = (S.chal || 0) + 1; changed = true; celebQ.push({ type: 'chal', c }); logEvent('challenge', c.text, '', 0, { id: c.id }); }
     const fresh = BADGES.filter((b) => !S.badges[b.id] && badgeValue(b) >= b.n);
     if (fresh.length) { fresh.forEach((b) => { S.badges[b.id] = t; logEvent('badge', b.name, '', 0, { id: b.id }); }); celebQ.push({ type: 'badge', list: fresh }); changed = true; }
+    // かんこくごの ステージの ことばを ぜんぶ おぼえた（お祝いだけ。チケット・ポイントは 増えない）
+    KR_STAGES.forEach((s) => {
+      const p = krProgress(s.id);
+      if (!S.kr.clear[s.id] && p.done >= p.total) { S.kr.clear[s.id] = t; logEvent('krclear', s.name, '韓国語', 0, { id: s.id }); celebQ.push({ type: 'krclear', s }); changed = true; }
+    });
+    { const v = krLevel(); if (v.i > (S.kr.lv || 0)) { S.kr.lv = v.i; logEvent('krlevel', v.l[1], '韓国語', 0, { n: v.n }); celebQ.push({ type: 'krlevel', l: v.l, n: v.n }); changed = true; } }
     if (changed) save();
     if (celebQ.length) { clearTimeout(celebTimer); celebTimer = setTimeout(showCelebs, 700); }
   }
@@ -584,6 +656,14 @@ function calcAllowance(st, ym, today, cfg) {
       await overlay(`<div class="stamp">ちょうせん<br>クリア</div><div class="lvup-name" style="font-size:22px;margin-top:12px">📜 ${esc(x.c.text)}</div>
         <div class="coach-mini" style="max-width:340px">${coachFace('fire')}<span>${esc(pick(['すごい！ あしたの ちょうせんも たのしみに してね ✨', 'ナイス！ その 集中力、本物の スターだよ 🌟', 'やりきったね！ GO! FIGHT! WIN! 📣']))}</span></div>
         <div class="note">ちょうせん クリア ぜんぶで ${S.chal}回</div>`, { lockMs: 1000, cls: 'solid' });
+    } else if (x.type === 'krlevel') {
+      emojiRain(['🎤', '💖', '⭐', '🌈'], 26);
+      await overlay(`<div class="lvup-title rainbow" style="font-size:40px">LEVEL UP!</div><div class="lvup-rank">${x.l[3]}</div><div class="lvup-name kr" style="font-size:44px">${esc(x.l[1])}</div>
+        <div class="shot-sub" style="opacity:1">${esc(x.l[2])}<br>かんこくごを ${x.n}こ おぼえたよ！</div>`, { lockMs: 1000, cls: 'solid' });
+    } else if (x.type === 'krclear') {
+      await overlay(`<div class="stamp kr">스테이지<br>클리어</div><div class="lvup-name" style="font-size:22px;margin-top:12px">${x.s.e} ${esc(x.s.name)}</div>
+        <div class="coach-mini" style="max-width:340px">${coachFace('fire')}<span>ことばを ぜんぶ おぼえたね！ 대박！ ほんものの カードでも 読んでみてね 📇</span></div>
+        <div class="note">おぼえた ことば ${krMastered()}/${KR_WORDS.length}</div>`, { lockMs: 1000, cls: 'solid' });
     } else {
       const one = x.list.length === 1;
       await overlay(`<div class="lvup-title" style="font-size:40px">BADGE GET!</div>
@@ -688,6 +768,7 @@ function calcAllowance(st, ym, today, cfg) {
         ${tile('listen', 'gc-listen', best('listen'))}
         ${tile('calc', 'gc-plural', best('calc'))}
         ${tile('kanji', 'gc-kanji', best('kanji'))}
+        ${tile('kr', 'gc-kr', best('kr'))}
         ${tile('weak', 'gc-weak', `${weakN}問 たまってる`)}
         ${qaTiles}
       </div>
@@ -814,7 +895,7 @@ function calcAllowance(st, ym, today, cfg) {
   }
   function render() {
     coachIdx = 0; // 画面が変わったら、コーチは「いま やること」から話す
-    const v = { home: viewHome, game: viewGame, test: viewTest, voice: viewVoice, gacha: viewGacha, set: viewSet, ranks: viewRanks }[tab] || viewHome;
+    const v = { home: viewHome, game: viewGame, korean: viewKorean, test: viewTest, voice: viewVoice, gacha: viewGacha, set: viewSet, ranks: viewRanks }[tab] || viewHome;
     $('#app').innerHTML = v();
     renderTabs();
     updateSyncLabel();
@@ -915,11 +996,30 @@ function calcAllowance(st, ym, today, cfg) {
   }
   const RCOL = { N: '#b8c0d6', R: '#2f7de1', SR: '#a855f7', SSR: '#ffc400', UR: 'linear-gradient(135deg,#ff3d7f,#ffd400,#2ee59d,#22d3ee,#a855f7)' };
   async function revealOv(card, tag, wait) {
-    sfx.drum();
-    await overlay(`<div class="gacha-ball shake" style="font-size:120px">${wait}</div><div class="shot-sub" style="opacity:1">ドキドキ…</div>`, { closeOnTap: false, autoClose: 1100 });
+    await new Promise((res) => {
+      overlay(`<div class="pack a-${card.r}">${wait}</div><div class="pack-tap">タップ連打！</div><div class="pack-dots"><i></i><i></i><i></i></div>`, {
+        closeOnTap: false,
+        onMount: (el, close) => {
+          const p = el.querySelector('.pack'); let n = 0; let done = false;
+          const open = () => { if (done) return; done = true; close(); res(); };
+          // 2回目から 光の色で レアリティが ちらっと わかる。押さなくても 5秒で 開く
+          const hit = (x, y) => {
+            n++; sfx.combo(n * 3); buzz(20 + n * 10);
+            p.classList.remove('hit'); void p.offsetWidth; p.classList.add('hit', 't' + Math.min(n, 3));
+            el.querySelectorAll('.pack-dots i').forEach((d, i) => d.classList.toggle('on', i < n));
+            burst(x, y, ['✨', '⭐', '💖'], 8 + n * 3);
+            if (n >= 3) setTimeout(open, 180);
+          };
+          el.addEventListener('click', (e) => hit(e.clientX, e.clientY));
+          setTimeout(open, 5000);
+        },
+      });
+    });
     const fl = document.createElement('div'); fl.className = 'flash'; fl.style.background = RCOL[card.r]; document.body.appendChild(fl); setTimeout(() => fl.remove(), 700);
-    sfx.reveal(card.r); confetti(card.r === 'N' ? 30 : card.r === 'R' ? 70 : 180);
-    await overlay(`<div class="reveal cc r-${card.r}" style="aspect-ratio:3/4"><div class="rr" style="color:${card.r === 'UR' ? '#ffd400' : RCOL[card.r]}">${card.r}</div><div class="e">${card.e}</div><div class="n">${esc(card.name)}</div><div class="d">${esc(card.d)}</div></div>
+    sfx.reveal(card.r); confetti(card.r === 'N' ? 40 : card.r === 'R' ? 90 : 200);
+    if (card.r !== 'N') emojiRain(card.r === 'R' ? ['⭐', '✨'] : ['🌈', '💎', '⭐', '💖'], card.r === 'R' ? 12 : 30);
+    if (['SR', 'SSR', 'UR'].includes(card.r)) { buzz([40, 40, 80]); document.body.classList.add('shake-screen'); setTimeout(() => document.body.classList.remove('shake-screen'), 400); }
+    await overlay(`${{ SR: '<div class="rare-call rainbow">SUPER RARE!</div>', SSR: '<div class="rare-call rainbow">SSR!!!</div>', UR: '<div class="rare-call rainbow">ULTRA RARE!!!!</div>' }[card.r] || ''}<div class="reveal cc r-${card.r}" style="aspect-ratio:3/4"><div class="rr" style="color:${card.r === 'UR' ? '#ffd400' : RCOL[card.r]}">${card.r}</div><div class="e">${card.e}</div><div class="n">${esc(card.name)}</div><div class="d">${esc(card.d)}</div></div>
       <div class="newtag" style="margin-top:16px">${tag}</div>`, { lockMs: 900 });
   }
   async function onPull() {
@@ -1062,6 +1162,7 @@ function calcAllowance(st, ym, today, cfg) {
   }
   function pickW(list, n, kind) { const wk = S.weak[kind] || {}; const weak = shuffle(list.filter((w) => wk[w[0]])).slice(0, 1); return shuffle(weak.concat(shuffle(list.filter((w) => !weak.includes(w))).slice(0, n - weak.length))); }
   function buildQuestions(kind, short) {
+    if (kind === 'kr' || kind.startsWith('kr:')) return buildKr(kind, short);
     // ホームの「② ゲーム 5もん」：まちがえた問題は1問まで（できる問題を多めに）
     if (short) {
       if (kind === 'listen') return buildListenShort();
@@ -1103,9 +1204,11 @@ function calcAllowance(st, ym, today, cfg) {
     return qs;
   }
   function quizName(kind) {
-    return { calc: '計算ダッシュ', speak: 'スピーキング', listen: 'リスニング', spell: 'スペル・シュート', plural: '複数形チャレンジ', kanji: '漢字よみ速攻', weak: '苦手つぶし', challenge: 'チャレンジ（上級）' }[kind] || (kind.startsWith('qa:') ? kind.slice(3) + ' 一問一答' : kind);
+    if (kind.startsWith('kr:')) { const s = krStageById(kind.slice(3)); return 'かんこくご ' + (s ? s.name : ''); }
+    return { kr: 'かんこくご', calc: '計算ダッシュ', speak: 'スピーキング', listen: 'リスニング', spell: 'スペル・シュート', plural: '複数形チャレンジ', kanji: '漢字よみ速攻', weak: '苦手つぶし', challenge: 'チャレンジ（上級）' }[kind] || (kind.startsWith('qa:') ? kind.slice(3) + ' 一問一答' : kind);
   }
   function quizSubject(kind) {
+    if (kind === 'kr' || kind.startsWith('kr:')) return '韓国語';
     if (kind === 'calc') return '算数';
     if (kind === 'qa:都道府県') return '社会';
     return kind === 'kanji' ? '国語' : kind === 'weak' || kind === 'challenge' ? '全教科' : kind.startsWith('qa:') ? (SUBJECTS.includes(kind.slice(3)) ? kind.slice(3) : '全教科') : '英語';
@@ -1116,9 +1219,12 @@ function calcAllowance(st, ym, today, cfg) {
     if (v.toLowerCase() === q.answer.toLowerCase()) return 'case';
     return 'ng';
   }
-  function startQuiz(kind, short) {
-    const qs = buildQuestions(kind, short);
+  // words を わたすと、その ことばだけで クイズにする（かんこくごの「きょうの レッスン」）
+  function startQuiz(kind, short, words) {
+    const qs = words ? shuffle(words).map(mkKr) : buildQuestions(kind, short);
     if (!qs.length) { toast('苦手リストは空っぽ！ すごい！'); return; }
+    // 読み上げ：かんこくごの 問題は 韓国語の声で
+    const sayQ = (q, slow) => (q.lang === 'ko' ? sayKo(q.say, slow) : sayEn(q.say, slow));
     const names = { [kind]: quizName(kind) };
     const CLOCK = kind === 'challenge' ? 15 : SHOT_CLOCK;
     const st = { i: 0, answered: 0, ok: 0, combo: 0, maxCombo: 0, pts: 0, miss: [], timer: null, left: CLOCK, locked: false, ended: false, t0: Date.now() };
@@ -1151,11 +1257,11 @@ function calcAllowance(st, ym, today, cfg) {
     }
     function show() {
       const q = qs[st.i];
-      st.locked = false;
+      st.locked = false; st.qt0 = Date.now();
       q$('.qprog i').style.width = (st.i / qs.length) * 100 + '%';
       q$('.qprompt').textContent = `${st.i + 1}/${qs.length} ・ ${q.prompt}`;
       q$('.qmain').innerHTML = q.main; q$('.qmain').classList.toggle('long', !!q.long);
-      if (q.say) sayEn(q.say);
+      if (q.say && !q.noAuto) sayQ(q);
       q$('.qhint').textContent = q.hint || '';
       q$('.judge').textContent = ''; q$('.judge').className = 'judge';
       q$('.answer').textContent = '';
@@ -1163,13 +1269,14 @@ function calcAllowance(st, ym, today, cfg) {
       q$('.qform').classList.toggle('hidden', !isText);
       q$('.choices').classList.toggle('hidden', isText);
       if (isText) { input.value = ''; input.focus(); }
-      else q$('.choices').innerHTML = q.choices.map((c) => `<button class="choice" data-c="${esc(c)}">${esc(c)}</button>`).join('');
+      else q$('.choices').innerHTML = q.choices.map((c) => `<button class="choice${q.lang === 'ko' ? ' kr-ch' : ''}" data-c="${esc(c)}">${q.labels ? q.labels[c] : esc(c)}</button>`).join('');
       tick();
     }
     function setCombo() {
       const c = q$('.combo');
-      c.textContent = st.combo >= 3 ? `🔥 ON FIRE ×${st.combo}` : st.combo > 0 ? `${st.combo} COMBO` : '';
-      c.className = 'combo' + (st.combo >= 3 ? ' fire' : '');
+      c.textContent = st.combo >= FEVER_AT ? `🌈 FEVER ×${st.combo}` : st.combo >= 3 ? `🔥 ON FIRE ×${st.combo}` : st.combo > 0 ? `${st.combo} COMBO` : '';
+      c.className = 'combo' + (st.combo >= FEVER_AT ? ' fever-t' : st.combo >= 3 ? ' fire' : '');
+      el.classList.toggle('fever', st.combo >= FEVER_AT);
     }
     function answer(val, btn) {
       if (st.locked || st.ended) return;
@@ -1183,15 +1290,20 @@ function calcAllowance(st, ym, today, cfg) {
       if (res === 'ok') {
         st.ok++; st.combo++; st.maxCombo = Math.max(st.maxCombo, st.combo);
         const p = 1; st.pts += p;
-        j.textContent = st.combo >= 3 ? `🔥 SWISH! +${p}` : `NICE! +${p}`; j.className = 'judge ok';
+        j.textContent = st.combo >= 3 ? `🔥 ${pick(SHOT_WORDS)}` : `NICE! +${p}`; j.className = 'judge ok';
         if (wk[q.key]) { wk[q.key]--; if (wk[q.key] <= 0) delete wk[q.key]; }
-        sfx.ok(); if (st.combo >= 3) confetti(25);
+        sfx.combo(st.combo); if (st.combo >= 3) confetti(25);
         if (btn) btn.classList.add('ok');
+        juiceHit(btn, st.combo, Date.now() - st.qt0);
         // リスニングは正解でも意味を見せる（聞いた英語と意味を結びつける）
         if (q.say) q$('.answer').innerHTML = listenLine(q);
+        // かんこくご：答えが ばれるので 先に読まなかった問題は、正解のあとに 読む
+        if (q.lang === 'ko' && q.noAuto) sayQ(q);
+        if (q.type === 'kr') krHit(q.key, true);
       } else {
         st.combo = 0;
         wk[q.key] = (wk[q.key] || 0) + 1;
+        if (q.type === 'kr') krHit(q.key, false);
         if (q.type === 'calc') { const ks = Object.keys(wk); if (ks.length > 30) delete wk[ks[0]]; }
         st.miss.push(q);
         j.textContent = res === 'time' ? '⏰ ショットクロック！' : res === 'case' ? 'おしい！ 大文字に注意' : 'MISS…'; j.className = 'judge ng';
@@ -1199,19 +1311,22 @@ function calcAllowance(st, ym, today, cfg) {
         q$('.answer').innerHTML = `正解：${esc(q.answer)}${listenLine(q)}${tip ? `<div class="rule">💡 ${esc(tip)}</div>` : ''}`;
         res === 'time' ? sfx.buzzer() : sfx.ng();
         if (btn) btn.classList.add('ng');
+        buzz(60); q$('.qmain').classList.add('shake-x'); setTimeout(() => q$('.qmain') && q$('.qmain').classList.remove('shake-x'), 400);
         el.querySelectorAll('.choice').forEach((b) => { if (b.dataset.c === q.answer) b.classList.add('ok'); });
         // まちがえたら、ゆっくりもう一度読み上げる
-        if (q.say) setTimeout(() => { if (!st.ended) sayEn(q.say, true); }, 600);
+        if (q.say) setTimeout(() => { if (!st.ended) sayQ(q, true); }, 600);
       }
       save();
       setCombo();
-      const wait = res === 'ok' ? (q.say ? 1800 : 750) : q.say ? 4200 : ruleTip(q) ? 3200 : 1700;
+      // テンポよく 次へ（かんこくごは 音を 聞く時間だけ 待つ）
+      const wait = res === 'ok' ? (q.lang === 'ko' ? 1150 : q.say ? 1800 : 550) : q.lang === 'ko' ? Math.max(2600, q.say.length * 250) : q.say ? 4200 : ruleTip(q) ? 3200 : 1500;
       setTimeout(() => { if (st.ended) return; st.i++; if (st.i < qs.length) show(); else finish(false); }, wait);
     }
     function finish(quit) {
       if (st.ended) return;
       st.ended = true;
       clearInterval(st.timer);
+      el.classList.remove('fever'); // 結果は 読みやすい 背景で
       if (window.speechSynthesis) speechSynthesis.cancel();
       const n = quit ? st.answered : qs.length;
       if (quit && n === 0) { el.remove(); return; }
@@ -1233,33 +1348,35 @@ function calcAllowance(st, ym, today, cfg) {
       if (!r) { save(); logEvent('quiz', names[kind], subject, 0, info); }
       const tips = [...new Set(st.miss.map(ruleTip).filter(Boolean))];
       const tot = st.pts + (r && r.tipoff ? 1 : 0);
-      if (perfect || allOk) { sfx.fanfare(); confetti(220); } else if (st.ok >= n * 0.7) { sfx.coin(); confetti(80); } else sfx.tap();
+      if (perfect || allOk) { sfx.fanfare(); confetti(220); emojiRain(['🌈', '💯', '⭐', '💖'], 28); } else if (st.ok >= n * 0.7) { sfx.coin(); confetti(80); } else sfx.tap();
       el.querySelector('.quiz').innerHTML = `<div class="qbody result">
         <div style="font-family:var(--display);font-weight:800;font-size:18px">${esc(kindLabel(kind))}</div>
-        <div class="big">${st.ok}<span style="font-size:28px">/${n}</span></div>
-        <div class="lvup-title" style="font-size:${perfect || allOk ? 40 : 30}px">${perfect || allOk ? 'PERFECT!!' : st.ok >= n * 0.7 ? 'GREAT!' : 'NICE TRY!'}</div>
+        ${resultStars(st.ok, n)}
+        <div class="big"><span class="count-up" data-n="${st.ok}">0</span><span style="font-size:28px">/${n}</span></div>
+        <div class="lvup-title ${perfect || allOk ? 'rainbow' : ''}" style="font-size:${perfect || allOk ? 40 : 30}px">${perfect || allOk ? 'PERFECT!!' : st.ok >= n * 0.7 ? 'GREAT!' : 'NICE TRY!'}</div>
         <div class="shot-pts" style="opacity:1">+${tot} PTS</div>
         ${st.maxCombo >= 3 ? `<div class="note">最大 ${st.maxCombo} 連続正解 🔥</div>` : ''}
         ${ticket ? '<div class="newtag">全問正解ボーナス 🎟️ +1</div>' : ''}
         ${weakTicket ? '<div class="newtag">🎯 苦手つぶしボーナス 🎟️ +1</div>' : ''}
         ${perfect && kind === 'challenge' && (d.cp || 0) <= ALLOWANCE.perfectPerDay ? `<div class="reward-big">💰 チャレンジ全問正解！ おこづかい +${ALLOWANCE.perfect}円</div>` : ''}
-        ${st.miss.length ? `<ul>${st.miss.map((q) => `<li>${['kanji', 'qa', 'hkanji', 'past', 'third', 'listen', 'calc'].includes(q.type) ? esc(q.key) + ' → ' + esc(q.answer) : esc(q.answer)}</li>`).join('')}</ul><div class="note">↑ 紙に3回書いて覚えよう ✍️（苦手つぶしにも出るよ）</div>` : ''}
+        ${st.miss.length ? `<ul>${st.miss.map((q) => `<li>${q.type === 'kr' ? q.missHtml : ['kanji', 'qa', 'hkanji', 'past', 'third', 'listen', 'calc'].includes(q.type) ? esc(q.key) + ' → ' + esc(q.answer) : esc(q.answer)}</li>`).join('')}</ul><div class="note">${kind === 'kr' || kind.startsWith('kr:') ? '↑ カードで さがして、声に出して 読んでみよう 📇（次の クイズにも 出るよ）' : '↑ 紙に3回書いて覚えよう ✍️（苦手つぶしにも出るよ）'}</div>` : ''}
         ${coachQuizLine(perfect || allOk, st.ok, n)}
         ${tips.length ? `<div class="rulebox"><b>💡 ルールのおさらい</b>${tips.map((t) => `<div>・${esc(t)}</div>`).join('')}</div>` : ''}
         ${paperNudge()}
-        ${short ? (S.tickets > 0 ? '<button class="bigbtn gacha" data-q="gacha">つぎは ③ ガチャ！ 🎁</button>' : '<button class="btn big" style="width:100%;margin-top:12px" data-q="home">ホームへ もどる</button>') : ''}
+        ${short && !words ? (S.tickets > 0 ? '<button class="bigbtn gacha" data-q="gacha">つぎは ③ ガチャ！ 🎁</button>' : '<button class="btn big" style="width:100%;margin-top:12px" data-q="home">ホームへ もどる</button>') : ''}
         <div class="row" style="width:100%;margin-top:14px"><button class="btn ghost" style="flex:1" data-q="again">${short ? `もう${SHORT_LEN}もん` : 'もう1回'}</button><button class="btn" style="flex:1" data-q="close">とじる</button></div>
       </div>`;
+      countUp(el.querySelector('.count-up'), st.ok);
       el.addEventListener('click', async (e) => {
         const a = e.target.closest('[data-q]'); if (!a) return;
         el.remove();
         if (r) await afterEffects(r); else render();
-        if (a.dataset.q === 'again') startQuiz(kind, short);
+        if (a.dataset.q === 'again') startQuiz(kind, short, words);
         else if (a.dataset.q === 'gacha' || a.dataset.q === 'home') { tab = a.dataset.q; render(); scrollTo(0, 0); }
       });
     }
     el.addEventListener('click', (e) => {
-      const lb = e.target.closest('[data-listen]'); if (lb) { const q = qs[st.i]; if (q && q.say) sayEn(q.say, lb.dataset.listen === 'slow'); return; }
+      const lb = e.target.closest('[data-listen]'); if (lb) { const q = qs[st.i]; if (q && q.say) sayQ(q, lb.dataset.listen === 'slow'); return; }
       const c = e.target.closest('.choice'); if (c) { answer(c.dataset.c, c); return; }
       const qz = e.target.closest('[data-q="quit"]');
       if (qz) { if (confirm('やめる？（ここまでの正解は得点になるよ）')) finish(true); }
@@ -1323,10 +1440,13 @@ function calcAllowance(st, ym, today, cfg) {
   }
   // お手本の読み上げ（端末の英語の声）
   let enVoice = null;
+  let koVoice = null; let voicesKnown = false; // 端末の 声の一覧が 読めたか（読めない間は「声あり」と考える）
   function pickVoice() {
     if (!window.speechSynthesis) return;
     const vs = speechSynthesis.getVoices();
     enVoice = vs.find((v) => /^en[-_]US/i.test(v.lang) && /Samantha|Ava|Allison|Google US/i.test(v.name)) || vs.find((v) => /^en[-_]US/i.test(v.lang)) || vs.find((v) => /^en/i.test(v.lang)) || null;
+    koVoice = vs.find((v) => /^ko/i.test(v.lang)) || null;
+    voicesKnown = vs.length > 0;
   }
   if (window.speechSynthesis) { pickVoice(); speechSynthesis.onvoiceschanged = pickVoice; }
   function sayEn(text, slow) {
@@ -1341,13 +1461,26 @@ function calcAllowance(st, ym, today, cfg) {
       speechSynthesis.speak(u);
     });
   }
-  // 英語を1回聞き取る。もう一度ボタンを押す・黙る・9秒たつ のどれかで終わる
+  // 韓国語の読み上げ（端末の 韓国語の声。入っていない端末では 音が出ない → krNoVoice で画面に案内する）
+  const krNoVoice = () => !window.speechSynthesis || (voicesKnown && !koVoice);
+  function sayKo(text, slow) {
+    return new Promise((res) => {
+      if (!window.speechSynthesis) { res(); return; }
+      speechSynthesis.cancel();
+      const u = new SpeechSynthesisUtterance(text);
+      u.lang = 'ko-KR'; if (koVoice) u.voice = koVoice; u.rate = slow ? 0.55 : typeof SPEECH_RATE === 'number' ? SPEECH_RATE : 0.9;
+      const to = setTimeout(res, 9000);
+      u.onend = u.onerror = () => { clearTimeout(to); res(); };
+      speechSynthesis.speak(u);
+    });
+  }
+  // 英語を1回聞き取る（lang を わたすと その言語で）。もう一度ボタンを押す・黙る・9秒たつ のどれかで終わる
   let spkRec = null;
-  function hearEnglish(onInterim) {
+  function hearEnglish(onInterim, lang = 'en-US') {
     return new Promise((res) => {
       let r;
       try { r = new SpeechRec(); } catch (e) { res({ alts: [], error: 'init' }); return; }
-      r.lang = 'en-US'; r.interimResults = true; r.continuous = false; r.maxAlternatives = 3;
+      r.lang = lang; r.interimResults = true; r.continuous = false; r.maxAlternatives = 3;
       let alts = []; let done = false;
       const fin = (x) => { if (done) return; done = true; clearTimeout(cap); spkRec = null; try { r.abort(); } catch (e) { /* noop */ } res(x); };
       r.onresult = (e) => {
@@ -1584,6 +1717,590 @@ function calcAllowance(st, ym, today, cfg) {
     show();
   }
 
+  // ---------- かんこくご スタジオ（本人の IVE ハングル単語カードと 色で つながる。聞く → クイズ → 声に出す） ----------
+  // おこづかいの 計算には 入らない（基本ミッションに しない）。点は ほかの ゲームと おなじ 1問 1P、全問正解の 🎟️ も おなじ 上限（1日2回）の中
+  // まちがえた ことばは このスタジオの クイズにだけ 出す（学校の「苦手つぶし」に まざらないように）
+  const KR_ALL = KR_STAGES.flatMap((s) => s.words.map(([ko, kana, ja, o]) => ({ ko, kana, ja, st: s.id, key: s.id === 'abc' ? 'abc:' + ko : ko, ...(o || {}) })));
+  const KR_BY_KEY = Object.fromEntries(KR_ALL.map((w) => [w.key, w]));
+  const KR_WORDS = KR_ALL.filter((w) => w.st !== 'abc'); // 「おぼえた ことば」に 数えるのは ハングルの 文字以外
+  const KR_WOD_STAGES = ['hello', 'idol', 'food', 'taste', 'drink', 'color']; // 「きょうの かんこくご」に 出す ステージ
+  const krStageById = (id) => KR_STAGES.find((s) => s.id === id);
+  const krWordsOf = (id) => KR_ALL.filter((w) => w.st === id);
+  const krN = (w) => S.kr.w[w.key] || 0;
+  const krKnown = (w) => krN(w) >= KR_MASTER;
+  const krMastered = () => KR_WORDS.filter(krKnown).length;
+  const krProgress = (id) => { const ws = krWordsOf(id); return { done: ws.filter(krKnown).length, total: ws.length }; };
+  const krPct = (a, b) => (b ? Math.min(100, (a / b) * 100) : 100);
+  const krSizeCls = (ko) => (ko.length > 9 ? ' xl' : ko.length > 5 ? ' lg' : '');
+  const krToday = () => { const p = KR_WORDS.filter((w) => KR_WOD_STAGES.includes(w.st)); return p[dayNum() % p.length]; };
+  function krLevel() { const n = krMastered(); let i = 0; KR_LEVELS.forEach((l, j) => { if (n >= l[0]) i = j; }); return { n, i, l: KR_LEVELS[i], nx: KR_LEVELS[i + 1] }; }
+  // いまの ステージ＝順番に見て、まだ おぼえていない ことばが ある 最初の ステージ（ハングルの ひみつは 別あつかい）
+  function krCurrentStage() { return KR_STAGES.find((s) => s.id !== 'abc' && krProgress(s.id).done < krProgress(s.id).total) || KR_STAGES[KR_STAGES.length - 1]; }
+  function krHit(key, ok) { const w = KR_BY_KEY[key]; if (!w) return; const n = krN(w); S.kr.w[key] = ok ? Math.min(3, n + 1) : Math.max(0, n - 1); }
+  // ステージを えらばない時の ことば＝さわった ことば＋いまの ステージ（10こに 足りなければ 次の ステージも）
+  function krPool() {
+    const set = new Set(KR_WORDS.filter((w) => S.kr.w[w.key] != null));
+    const order = KR_STAGES.filter((s) => s.id !== 'abc');
+    for (let i = Math.max(0, order.indexOf(krCurrentStage())); i < order.length && (i === order.indexOf(krCurrentStage()) || set.size < QUIZ_LEN); i++) krWordsOf(order[i].id).forEach((w) => set.add(w));
+    return [...set];
+  }
+  // きょうの レッスン：いまの ステージで まだ おぼえていない ことばを 5こ（カードで 見て → クイズ）
+  function krLessonWords() {
+    const order = KR_STAGES.filter((s) => s.id !== 'abc');
+    const out = [];
+    for (let i = order.indexOf(krCurrentStage()); i < order.length && out.length < SHORT_LEN; i++) {
+      krWordsOf(order[i].id).filter((w) => !krKnown(w)).sort((a, b) => krN(a) - krN(b)).forEach((w) => { if (out.length < SHORT_LEN) out.push(w); });
+    }
+    return out.length ? out : shuffle(KR_WORDS).slice(0, SHORT_LEN);
+  }
+  // ---------- クイズの 問題（おぼえるほど むずかしくなる：カタカナつきで 意味 → 聞いて 意味・読み方 → 日本語から ハングル） ----------
+  function mkKr(w) {
+    const n = krN(w);
+    let mode = w.st === 'abc' ? 'read' : n <= 0 ? 'see' : pick(n === 1 ? ['hear', 'read', 'see'] : ['ja2ko', 'hear', 'read']);
+    if (mode === 'hear' && krNoVoice()) mode = 'read';
+    const same = krWordsOf(w.st).filter((x) => x.key !== w.key);
+    const pool = same.length >= 3 ? same : KR_WORDS.filter((x) => x.key !== w.key);
+    const big = `<div class="kr kr-q${krSizeCls(w.ko)}">${esc(w.ko)}</div>`;
+    const mini = '<button class="kr-mini" data-listen="1" aria-label="聞く">🔊</button>';
+    const base = { type: 'kr', lang: 'ko', key: w.key, sub: '韓国語', say: w.ko, ja: w.ja && w.ja !== w.kana ? `${w.kana}・${w.ja}` : w.kana, missHtml: `<span class="kr">${esc(w.ko)}</span>（${esc(w.kana)}）${w.ja && w.ja !== w.kana ? ' → ' + esc(w.ja) : ''}` };
+    const uniq = (a) => [...new Set(a)];
+    if (mode === 'read') return { ...base, prompt: 'どう 読む？', noAuto: true, main: big, answer: w.kana, choices: choicesFor(w.kana, uniq(pool.map((x) => x.kana))) };
+    if (mode === 'ja2ko') {
+      const choices = choicesFor(w.ko, uniq(pool.map((x) => x.ko)));
+      const labels = Object.fromEntries(choices.map((c) => [c, `<span class="kr">${esc(c)}</span>`]));
+      return { ...base, prompt: 'かんこくごで なんと いう？', noAuto: true, main: esc(w.ja), long: true, answer: w.ko, choices, labels };
+    }
+    const choices = choicesFor(w.ja, uniq(pool.map((x) => x.ja)));
+    if (mode === 'hear') return { ...base, prompt: '聞いて、いみは？', main: listenMain(), long: true, answer: w.ja, choices };
+    return { ...base, prompt: 'いみは？', main: `${big}${w.kana !== w.ja ? `<div class="kr-kana">${esc(w.kana)}</div>` : ''}${mini}`, answer: w.ja, choices };
+  }
+  function buildKr(kind, short) {
+    const id = kind.startsWith('kr:') ? kind.slice(3) : '';
+    const pool = id ? krWordsOf(id) : krPool();
+    return sampleItems(pool, Math.min(short ? SHORT_LEN : QUIZ_LEN, pool.length), 'kr', (w) => w.key, short ? 1 : 3).map(mkKr);
+  }
+
+  // ---------- 画面 ----------
+  let krStage = null; // null＝スタジオの トップ。ステージの id／'name'／'letter'
+  const krB = { c: 0, v: 0, f: 0 }; // ハングルブロックで えらんでいる 番号
+  const krLt = { to: 0, off: {} }; // ファンレターの あて名（-1 は みんな）と 使わない 文
+  let krReadTok = 0;
+  function krStopReading() { krReadTok++; if (window.speechSynthesis) speechSynthesis.cancel(); }
+  function krHomeCard() {
+    const w = krToday();
+    return `<div class="kr-home"><button class="kr-home-m" data-tab="korean"><small><b class="ti-kr">한</b> きょうの かんこくご</small><b class="kr${krSizeCls(w.ko)}">${esc(w.ko)}</b><span>${esc(w.kana)}${w.ja !== w.kana ? ` ＝ ${esc(w.ja)}` : ''}</span><em>かんこくご スタジオへ ›</em></button>
+      <button class="kr-say" data-act="krsay" data-ko="${esc(w.ko)}" aria-label="聞く">🔊</button></div>`;
+  }
+  // 端末に 韓国語の声が ない時の 案内（カタカナは いつでも 見られる）
+  function krVoiceNote() {
+    if (!krNoVoice()) return '';
+    return '<div class="kr-warn">🔇 この スマホには かんこくごの 声が 入っていないみたい。おうちの人に たのんで、スマホの 設定で 韓国語の 音声を 入れてもらうと 聞けるよ（カタカナは いつでも 見られるよ）</div>';
+  }
+  function krIntro() {
+    S.kr.intro = 1; save();
+    sfx.fanfare(); confetti(100);
+    return overlay(`<div class="tut wn"><div class="tut-step">안녕하세요！</div><div class="tut-e"><b class="ti-kr big">한</b></div><div class="tut-t">かんこくご スタジオ</div>
+      <div class="tut-b"><b>① IVE の カードを 用意！</b><br>ステージと カードは おなじ 色だよ<br><b>② スワイプして クイズ！</b><br>⚡ ラッシュは 30びょうの しょうぶ<br><b>③ カードを 声に出して 読む！</b><br>カードタイムは 1日1回 <b>+2P</b></div></div>`, { lockMs: 800 });
+  }
+  function viewKorean() {
+    if (krStage === 'name') return viewKrName();
+    if (krStage === 'letter') return viewKrLetter();
+    if (krStage) return viewKrStage(krStage);
+    const { n, l, nx } = krLevel();
+    const w = krToday(); const d = S.days[todayStr()] || {}; const cur = krCurrentStage();
+    const stage = (s) => { const p = krProgress(s.id); const hit = s.id === cur.id;
+      return `<button class="kr-st ${hit ? 'now' : ''} ${S.kr.clear[s.id] ? 'clear' : ''}" data-act="krstage" data-id="${s.id}" style="--c:${s.color}"><span class="kr-st-e">${s.e}</span><span class="kr-st-n">${esc(s.name)}</span><span class="kr-st-p">${S.kr.clear[s.id] ? '🏅 ' : ''}${p.done}/${p.total}${hit ? ' ・ いまここ' : ''}</span><span class="xpbar"><i style="width:${krPct(p.done, p.total)}%"></i></span></button>`; };
+    const fun = (act, e, nm, desc, sub) => `<button class="tile gc-kr" data-act="${act}"><span class="t-e">${e}</span><span class="t-n">${nm}</span><span class="t-d">${desc}</span><span class="t-b">${sub || ''}</span></button>`;
+    return header() + `
+      <div class="pg-h">かんこくご</div>
+      <div class="pg-s">IVE の カードと いっしょに れんしゅう！</div>
+      <div class="kr-lv"><span class="kr-lv-e">${l[3]}</span><span class="kr-lv-t"><b class="kr">${esc(l[1])}</b> <small>${esc(l[2])}</small><span class="xpbar"><i style="width:${nx ? krPct(n - l[0], nx[0] - l[0]) : 100}%"></i></span><small>おぼえた ことば <b>${n}</b>/${KR_WORDS.length}${nx ? ` ・ つぎの レベルまで あと ${nx[0] - n}こ` : ''}</small></span></div>
+      ${krVoiceNote()}
+      <button class="bigbtn kr" data-act="krlesson">▶ きょうの レッスン<small>${cur.e} ${esc(cur.name)} ・ スワイプで ${SHORT_LEN}こ 見て クイズ</small></button>
+      <button class="bigbtn rush" data-act="krrush">⚡ 30びょう ラッシュ<small>2択を どんどん！ ${S.kr.rushBest ? `ベスト ${S.kr.rushBest}問` : 'どこまで いける？'}</small></button>
+      ${d.krc ? '<div class="kr-ct done"><span>📇</span><span><b>カードタイム クリア！ ✓</b><small>あしたも 1まい えらんでね</small></span></div>'
+        : '<button class="kr-ct" data-act="krcardtime"><span>📇</span><span><b>カードタイム</b><small>ほんものの カードを 1まい えらんで、3回 声に出して 読んだら おす</small></span><em>+2P</em></button>'}
+      <div class="kr-word"><small>きょうの ことば</small><b class="kr${krSizeCls(w.ko)}">${esc(w.ko)}</b><span>${esc(w.kana)}${w.ja !== w.kana ? ` ＝ ${esc(w.ja)}` : ''}</span><button class="kr-say" data-act="krsay" data-ko="${esc(w.ko)}" aria-label="聞く">🔊</button></div>
+      <div class="sec-title"><h2>ステージ</h2><span>カードと おなじ 色だよ</span></div>
+      <div class="kr-map">${KR_STAGES.map(stage).join('')}</div>
+      <div class="sec-title"><h2>おたのしみ</h2></div>
+      <div class="tiles">
+        ${fun('krnameopen', '🏷️', 'なまえメーカー', 'じぶんの なまえを ハングルに', S.kr.name ? `<span class="kr">${esc(S.kr.name)}</span>` : 'NEW')}
+        ${fun('krletteropen', '💌', 'ファンレター', 'かんこくごで お手紙を 作る', S.kr.letter ? `${S.kr.letter}まい 作った` : 'NEW')}
+        ${fun('krmatch', '🃏', 'カードあわせ', 'ハングルと いみを あわせる', S.kr.matchBest ? `ベスト ${S.kr.matchBest}びょう` : 'NEW')}
+        ${fun('krspeak', '🗣️', 'まねっこ', '聞いて、まねして 言う', '')}
+      </div>`;
+  }
+  function krRow(w) {
+    return `<button class="kr-row" data-act="krsay" data-ko="${esc(w.ko)}"><span class="kr-row-m ${krKnown(w) ? 'on' : ''}">${krKnown(w) ? '★' : krN(w) > 0 ? '☆' : '・'}</span><span class="kr-row-t"><b class="kr">${esc(w.ko)}</b><small>${esc(w.kana)}${w.ja && w.ja !== w.kana ? ` ＝ ${esc(w.ja)}` : ''}${w.b ? ' ✨' : ''}</small>${w.n ? `<small class="kr-n">💡 ${esc(w.n)}</small>` : ''}</span><span class="kr-row-s">🔊</span></button>`;
+  }
+  function viewKrStage(id) {
+    const s = krStageById(id); const p = krProgress(id);
+    return header() + `
+      <div class="sec-title"><h2>${s.e} ${esc(s.name)}</h2><button class="btn ghost" data-act="krback">← もどる</button></div>
+      <div class="kr-hint" style="--c:${s.color}"><i></i><span>${esc(s.card)}</span></div>
+      <div class="kr-prog"><span class="xpbar"><i style="width:${krPct(p.done, p.total)}%"></i></span><small>おぼえた ${p.done}/${p.total}${S.kr.clear[id] ? ' 🏅 クリア！' : ''}</small></div>
+      ${id === 'abc' ? krBuilder() : ''}
+      <div class="kr-acts">
+        <button class="kr-act main" data-act="krcards" data-id="${id}"><span>📖</span>カードで おぼえる</button>
+        <button class="kr-act main" data-act="krquiz" data-id="${id}"><span>❓</span>クイズ</button>
+        ${id === 'abc' ? '' : `<button class="kr-act" data-act="krspeak" data-id="${id}"><span>🗣️</span>まねっこ</button>`}
+        <button class="kr-act" data-act="krmatch" data-id="${id}"><span>🃏</span>カードあわせ</button>
+      </div>
+      <p class="note kr-legend">★ おぼえた　☆ もう少し　✨ カードに ない ボーナス　タップで 聞けるよ</p>
+      <div class="kr-list">${krWordsOf(id).map(krRow).join('')}</div>`;
+  }
+  // ハングルブロック：子音＋母音（＋下の文字）で 1文字できる。文字コードは ルールどおりに 計算する
+  function krSyllable() {
+    const c = KR_CONS[krB.c]; const v = KR_VOWELS[krB.v]; const f = KR_FINALS[krB.f];
+    return { ch: String.fromCharCode(0xac00 + (c[1] * 21 + v[1]) * 28 + f[1]), kana: KR_KANA_ROW[c[2]][v[2]] + f[2] };
+  }
+  function krBuilder() {
+    const { ch, kana } = krSyllable();
+    const keys = (arr, g) => arr.map((x, i) => `<button class="kr-key ${krB[g] === i ? 'on' : ''}" data-act="krb" data-g="${g}" data-i="${i}"><b class="kr">${x[0]}</b><small>${g === 'f' ? '' : esc(x[3] || x[2]) || 'なし'}</small></button>`).join('');
+    return `<div class="kr-build">
+      <div class="kr-build-out"><button class="kr-say" data-act="krsay" data-ko="${ch}" aria-label="聞く">🔊</button><b class="kr">${ch}</b><span>${esc(kana)}</span></div>
+      <p class="note">ボタンを おすと 文字が できるよ。<b>가</b> ＝ ㄱ（k）＋ ㅏ（a）。下に ㄴ を つけると <b>간</b>（カン）</p>
+      <div class="kr-bk"><small>① 子音（しいん）</small><div class="kr-keys">${keys(KR_CONS, 'c')}</div></div>
+      <div class="kr-bk"><small>② 母音（ぼいん）</small><div class="kr-keys">${keys(KR_VOWELS, 'v')}</div></div>
+      <div class="kr-bk"><small>③ 下の 文字（パッチム）</small><div class="kr-keys">${keys(KR_FINALS, 'f')}</div></div>
+    </div>`;
+  }
+  // ---------- なまえメーカー：かな → ハングル ----------
+  const krHira = (s) => String(s).replace(/[ァ-ヶ]/g, (c) => String.fromCharCode(c.charCodeAt(0) - 0x60));
+  const krKata = (s) => String(s).replace(/[ぁ-ゖ]/g, (c) => String.fromCharCode(c.charCodeAt(0) + 0x60));
+  const krHasFinal = (s) => (s.charCodeAt(s.length - 1) - 0xac00) % 28 !== 0;
+  // 「〜です」の 読み（下の文字が ある 名前は 이에요。ン・ッは つなげて 読む）
+  const krMeKana = (kata, fin) => (!fin ? kata + 'エヨ' : kata.endsWith('ン') ? kata.slice(0, -1) + 'ニエヨ' : kata.endsWith('ッ') ? kata.slice(0, -1) + 'シエヨ' : kata + 'イエヨ');
+  const KR_ROW = { u: 'うくすつぬふむゆるぐずづぶぷゅ', o: 'おこそとのほもよろをごぞどぼぽょ', i: 'いきしちにひみりぎじぢびぴ' };
+  const krRowOf = (c) => Object.keys(KR_ROW).find((k) => KR_ROW[k].includes(c)) || '';
+  // 長音は 書かない（韓国の 外来語表記法）：ゆうな→유나、こうた→고타、おおの→오노、にいな→니나。れい・あおい・みう は そのまま
+  const krDropLong = (s) => [...s].filter((c, i, a) => { const r = krRowOf(a[i - 1] || ''); return !((c === 'う' && (r === 'u' || r === 'o')) || (c === 'お' && r === 'o') || (c === 'い' && r === 'i')); }).join('');
+  // 空白で 区切った ことばは、それぞれ「ことばの はじめ」として 変換する
+  function krFromKana(src) {
+    const parts = krHira(src).replace(/[・ー－]/g, '').split(/[\s　]+/).filter(Boolean).map(krOneWord);
+    return !parts.length || parts.includes(null) ? null : parts.join(' ');
+  }
+  function krOneWord(w) {
+    const s = krDropLong(w);
+    let out = '';
+    for (let i = 0; i < s.length; ) {
+      if (s[i] === 'ん' || s[i] === 'っ') {
+        // 前の 文字の 下に つける（ん＝ㄴ、っ＝ㅅ）。いちばん前なら とばす
+        if (out && !krHasFinal(out)) out = out.slice(0, -1) + String.fromCharCode(out.charCodeAt(out.length - 1) + (s[i] === 'ん' ? 4 : 19));
+        i++; continue;
+      }
+      const key = KR_KANA[s.slice(i, i + 2)] ? s.slice(i, i + 2) : s[i];
+      const v = KR_KANA[key];
+      if (!v) return null; // 漢字や アルファベットなど
+      out += Array.isArray(v) ? v[out ? 1 : 0] : v;
+      i += key.length;
+    }
+    return out || null;
+  }
+  function viewKrName() {
+    const nm = S.kr.name; const kata = krKata(S.kr.nameKana);
+    return header() + `
+      <div class="sec-title"><h2>🏷️ なまえメーカー</h2><button class="btn ghost" data-act="krback">← もどる</button></div>
+      <div class="kr-box"><p class="note" style="margin-top:0">なまえを <b>ひらがな</b>か <b>カタカナ</b>で 入れてね</p>
+        <div class="kr-namein"><input class="inp" id="krnamein" maxlength="12" autocomplete="off" placeholder="れい：さくら" value="${esc(S.kr.nameKana || (krFromKana(S.nick) ? S.nick : ''))}"><button class="btn" data-act="krnamego">ハングルに！</button></div></div>
+      ${nm ? `<div class="kr-namecard"><small>わたしの なまえは</small><b class="kr">${esc(nm)}</b><span>${esc(kata)}</span><button class="kr-say" data-act="krsay" data-ko="${esc(nm)}" aria-label="聞く">🔊</button>
+        <div class="kr-me"><b class="kr">저는 ${esc(nm)}${krHasFinal(nm) ? '이에요' : '예요'}.</b><small>チョヌン ${esc(krMeKana(kata, krHasFinal(nm)))} ＝ わたしは ${esc(kata)}です</small><button class="kr-say sm" data-act="krsay" data-ko="저는 ${esc(nm)}${krHasFinal(nm) ? '이에요' : '예요'}." aria-label="聞く">🔊</button></div></div>
+        <button class="bigbtn kr" data-act="krletteropen">💌 ファンレターを 作る</button>` : ''}
+      <p class="note">おうちの人や 友だちの なまえでも ためしてみてね。最後に 作った なまえが ファンレターに 入るよ。</p>`;
+  }
+  // ---------- ファンレター ----------
+  function krLetterLines() {
+    const nm = S.kr.name; const kata = krKata(S.kr.nameKana); const fin = krHasFinal(nm); const m = KR_MEMBERS[krLt.to];
+    const v = { to: m ? `${m[0]} 언니,` : '아이브 언니들,', toK: m ? `${m[1]} オンニ` : 'アイブ オンニドゥル', toJ: m ? `${m[1]} お姉さん` : 'IVE の お姉さんたち', me: nm + (fin ? '이에요' : '예요'), meK: krMeKana(kata, fin), meJ: kata };
+    return KR_LETTER.map((l, i) => ({ i, ko: fillLine(l[0], v), kana: fillLine(l[1], v), ja: fillLine(l[2], v) }));
+  }
+  function viewKrLetter() {
+    const back = '<button class="btn ghost" data-act="krback">← もどる</button>';
+    if (!S.kr.name) return header() + `<div class="sec-title"><h2>💌 ファンレター</h2>${back}</div><div class="kr-box">さいしょに じぶんの なまえを ハングルに しよう！<button class="btn big" style="margin-top:12px" data-act="krnameopen">🏷️ なまえメーカーへ</button></div>`;
+    const who = [[-1, 'みんな'], ...KR_MEMBERS.map((m, i) => [i, m[1]])];
+    const lines = krLetterLines();
+    return header() + `
+      <div class="sec-title"><h2>💌 ファンレター</h2>${back}</div>
+      <div class="kr-chips">${who.map(([i, n]) => `<button class="kr-chip ${krLt.to === i ? 'on' : ''}" data-act="krto" data-i="${i}">${esc(n)}</button>`).join('')}</div>
+      <p class="note">✓ を はずすと その文を 入れないよ。だれに 書くか えらんでね</p>
+      <div class="kr-paper">${lines.map((l) => `<div class="kr-pl ${krLt.off[l.i] ? 'off' : ''}"><button class="kr-tick" data-act="krline" data-i="${l.i}" aria-label="この文を 入れる">${krLt.off[l.i] ? '' : '✓'}</button><div class="kr-pl-t"><b class="kr">${esc(l.ko)}</b><small>${esc(l.kana)}</small><small>${esc(l.ja)}</small></div><button class="kr-say sm" data-act="krsay" data-ko="${esc(l.ko)}" aria-label="聞く">🔊</button></div>`).join('')}</div>
+      <button class="btn big" style="margin-top:12px" data-act="krread">🔊 ぜんぶ 読む</button>
+      <button class="bigbtn kr" data-act="krdone">✍️ 紙に 書き写したら おす！<small>おうちの人に 見せてね</small></button>
+      <p class="note">本当に 送りたくなったら、おうちの人と いっしょに やろうね。</p>`;
+  }
+  // ---------- カードで おぼえる（ショート動画みたいに 上へ スワイプ。音は 自動で 流れる。💖 で おぼえた！） ----------
+  const KR_REEL_BG = ['linear-gradient(160deg,#ff4fa3,#7c3aed)', 'linear-gradient(160deg,#22a6f0,#7c3aed)', 'linear-gradient(160deg,#ff8a3d,#ff3d7f)', 'linear-gradient(160deg,#10b98f,#2563eb)', 'linear-gradient(160deg,#a855f7,#ec4899)'];
+  function startKrCards(words, then) {
+    if (!words.length) return;
+    const st = { seen: {}, liked: {}, ended: false, lastTap: 0 };
+    const stageOf = (w) => krStageById(w.st);
+    const el = document.createElement('div'); el.className = 'ov kr-reel-ov';
+    el.innerHTML = `<div class="kr-reel">${words.map((w, i) => `<section class="kr-reel-c" data-i="${i}" style="background:${KR_REEL_BG[i % KR_REEL_BG.length]}">
+        <div class="kr-reel-t"><b class="kr${krSizeCls(w.ko)}">${esc(w.ko)}</b><span class="kr-reel-k">${esc(w.kana)}</span>${w.ja && w.ja !== w.kana ? `<span class="kr-reel-j">${esc(w.ja)}</span>` : ''}${w.n ? `<small>💡 ${esc(w.n)}</small>` : ''}</div>
+        <div class="kr-reel-side"><button data-k="like" data-i="${i}"><span class="kr-heart">🤍</span><small>おぼえた</small></button><button data-k="say" data-i="${i}"><span>🔊</span><small>聞く</small></button><button data-k="slow" data-i="${i}"><span>🐢</span><small>ゆっくり</small></button></div>
+        <div class="kr-reel-foot"><i style="background:${stageOf(w).color}"></i>${esc(stageOf(w).name)} ・ ${i + 1}/${words.length}${w.b ? ' ・ ✨ボーナス' : ''}</div>
+        ${i === 0 ? '<div class="kr-reel-up">⬆ 上へ スワイプ</div>' : ''}
+      </section>`).join('')}
+      <section class="kr-reel-c end" data-i="end"><div class="kr-reel-t"><span class="kr-reel-e">🎉</span><b class="kr-reel-done"></b><small>クイズで 正解すると「★ おぼえた」に なるよ</small><button class="bigbtn kr" data-k="quiz">❓ クイズに ちょうせん！</button><button class="btn ghost" style="width:100%;margin-top:10px" data-k="close">とじる</button></div></section>
+    </div><button class="kr-reel-x" data-k="close" aria-label="とじる">✕</button>`;
+    document.body.appendChild(el);
+    const reel = el.querySelector('.kr-reel');
+    const like = (i, x, y) => {
+      const w = words[i]; if (!w) return;
+      const h = el.querySelector(`[data-k="like"][data-i="${i}"] .kr-heart`);
+      if (!st.liked[i]) { st.liked[i] = 1; S.kr.w[w.key] = Math.max(krN(w), 1); save(); h.textContent = '💖'; h.classList.add('on'); sfx.combo(Object.keys(st.liked).length); buzz(15); }
+      const r = h.getBoundingClientRect();
+      burst(x == null ? r.left + r.width / 2 : x, y == null ? r.top + r.height / 2 : y, ['💖', '💗', '✨'], 12);
+    };
+    const finish = () => {
+      if (st.ended) return; st.ended = true;
+      if (obs) obs.disconnect();
+      if (window.speechSynthesis) speechSynthesis.cancel();
+      save();
+      const seen = Object.keys(st.seen).length;
+      if (seen) logEvent('krcards', '韓国語カード', '韓国語', 0, { kind: 'krcards', n: words.length, seen, liked: Object.keys(st.liked).length });
+    };
+    // いま 画面に 出ている カードを 読み上げる
+    const obs = 'IntersectionObserver' in window ? new IntersectionObserver((es) => {
+      es.forEach((e) => {
+        if (!e.isIntersecting || st.ended) return;
+        const c = e.target; const key = c.dataset.i;
+        c.classList.add('on');
+        if (key === 'end') { el.querySelector('.kr-reel-done').textContent = `${Object.keys(st.seen).length}こ 見たよ！`; sfx.coin(); confetti(90); return; }
+        st.seen[key] = 1;
+        if (key === '0' && !st.first) { st.first = 1; return; }
+        if (S.sound) sayKo(words[Number(key)].ko);
+      });
+    }, { root: reel, threshold: 0.6 }) : null;
+    if (obs) el.querySelectorAll('.kr-reel-c').forEach((c) => obs.observe(c));
+    else { el.querySelectorAll('.kr-reel-c').forEach((c) => c.classList.add('on')); st.seen[0] = 1; el.querySelector('.kr-reel-done').textContent = 'ぜんぶ 見たよ！'; }
+    el.addEventListener('click', (e) => {
+      const b = e.target.closest('[data-k]');
+      if (b) {
+        const k = b.dataset.k; const i = Number(b.dataset.i);
+        if (k === 'like') like(i);
+        else if (k === 'say') sayKo(words[i].ko);
+        else if (k === 'slow') sayKo(words[i].ko, true);
+        else if (k === 'close') { finish(); el.remove(); render(); }
+        else if (k === 'quiz') { finish(); el.remove(); render(); then(); }
+        return;
+      }
+      // カードを 2回 タップでも 💖
+      const c = e.target.closest('.kr-reel-c'); if (!c || c.dataset.i === 'end') return;
+      const now = Date.now();
+      if (now - st.lastTap < 320) like(Number(c.dataset.i), e.clientX, e.clientY);
+      st.lastTap = now;
+    });
+    sfx.tap();
+    // 最初の 1枚は タップの 直後に 読む（iPhone は さいしょの 音に タップが いる）
+    st.seen[0] = 1; el.querySelector('.kr-reel-c').classList.add('on');
+    if (S.sound) sayKo(words[0].ko);
+  }
+  // ---------- 30びょう ラッシュ：2択を どんどん。まちがえると 2びょう へる。ポイントは 1回 10Pまで・1日2回まで（それ以降は 記録だけ） ----------
+  const KR_RUSH = { sec: 30, penalty: 2, maxPts: 10 };
+  // ラッシュ・カードあわせ・まねっこは すぐ終わるので、ポイントが つくのは それぞれ 1日2回まで（それ以降は 記録だけ。ポイントの ふえ方を ほかの ゲームと そろえる）
+  const KR_POINT_ROUNDS = 2;
+  function krRoundPts(field, pts) { const d = day(); d[field] = (d[field] || 0) + 1; return d[field] <= KR_POINT_ROUNDS ? pts : 0; }
+  function startKrRush() {
+    const all = krPool().filter((w) => w.ko.length <= 10 && w.ja);
+    const pool = all.length >= 4 ? all : KR_WORDS.filter((w) => w.ko.length <= 10);
+    const st = { ok: 0, miss: [], combo: 0, maxCombo: 0, ended: false, locked: false, end: Date.now() + KR_RUSH.sec * 1000, t0: Date.now(), w: null, lastSec: 99, timer: null };
+    const el = document.createElement('div'); el.className = 'ov kr-rush';
+    el.innerHTML = `<div class="quiz"><div class="qhead"><button class="qclose" data-u="quit">✕ やめる</button><div class="qprog kr-rush-bar"><i></i></div><div class="combo kr-rush-sc">0</div></div>
+      <div class="qbody"><div class="kr-rush-t"></div><div class="kr-rush-q"></div><div class="kr-rush-c"></div><div class="kr-rush-cb"></div></div></div>`;
+    document.body.appendChild(el);
+    const q$ = (x) => el.querySelector(x);
+    function next() {
+      let w; do { w = pick(pool); } while (w === st.w && pool.length > 1);
+      st.w = w; st.locked = false;
+      const others = shuffle(pool.filter((x) => x.st === w.st && x.ja !== w.ja));
+      const other = (others[0] || pick(KR_WORDS.filter((x) => x.ja && x.ja !== w.ja))).ja;
+      const two = shuffle([w.ja, other]);
+      q$('.kr-rush-q').innerHTML = `<b class="kr${krSizeCls(w.ko)}">${esc(w.ko)}</b>${krN(w) === 0 && w.kana !== w.ja ? `<span>${esc(w.kana)}</span>` : ''}`;
+      q$('.kr-rush-q').classList.remove('in'); void q$('.kr-rush-q').offsetWidth; q$('.kr-rush-q').classList.add('in');
+      q$('.kr-rush-c').innerHTML = two.map((c) => `<button class="kr-rush-b" data-u="a" data-c="${esc(c)}">${esc(c)}</button>`).join('');
+      if (S.sound) sayKo(w.ko);
+    }
+    function pick1(val, b) {
+      if (st.locked || st.ended) return;
+      st.locked = true;
+      const w = st.w;
+      if (val === w.ja) {
+        st.ok++; st.combo++; st.maxCombo = Math.max(st.maxCombo, st.combo);
+        // ラッシュは 2択なので「おぼえた」には しない（見たことがある に するだけ）
+        S.kr.w[w.key] = Math.max(krN(w), 1);
+        b.classList.add('ok'); sfx.combo(st.combo); juiceHit(b, st.combo, 9999);
+        el.classList.toggle('fever', st.combo >= FEVER_AT);
+        q$('.kr-rush-sc').textContent = st.ok;
+        q$('.kr-rush-cb').textContent = st.combo >= FEVER_AT ? `🌈 FEVER ×${st.combo}` : st.combo >= 2 ? `🔥 ${st.combo} COMBO` : '';
+        setTimeout(() => { if (!st.ended) next(); }, 180);
+      } else {
+        st.combo = 0; st.miss.push(w); st.end -= KR_RUSH.penalty * 1000;
+        S.weak.kr[w.key] = (S.weak.kr[w.key] || 0) + 1;
+        b.classList.add('ng'); sfx.ng(); buzz(60);
+        el.classList.remove('fever'); q$('.kr-rush-cb').textContent = '';
+        el.querySelectorAll('.kr-rush-b').forEach((x) => { if (x.dataset.c === w.ja) x.classList.add('ok'); });
+        const r = b.getBoundingClientRect(); floatText(r.left + r.width / 2, r.top, `-${KR_RUSH.penalty}びょう`, 'minus');
+        q$('.kr-rush-q').classList.add('miss'); setTimeout(() => q$('.kr-rush-q') && q$('.kr-rush-q').classList.remove('miss'), 400);
+        setTimeout(() => { if (!st.ended) next(); }, 650);
+      }
+    }
+    function finish(quit) {
+      if (st.ended) return; st.ended = true;
+      clearInterval(st.timer);
+      if (window.speechSynthesis) speechSynthesis.cancel();
+      el.classList.remove('fever');
+      if (quit && !st.ok) { save(); el.remove(); render(); return; }
+      // まちがいの分は 引く（当てずっぽうで 点が入らないように）。点が つかなかった回は 回数に 数えない
+      const net = Math.min(KR_RUSH.maxPts, Math.max(0, st.ok - st.miss.length));
+      const over = (day().krr || 0) >= KR_POINT_ROUNDS;
+      const pts = net > 0 ? krRoundPts('krr', net) : 0;
+      const record = !quit && st.ok > (S.kr.rushBest || 0);
+      if (record) S.kr.rushBest = st.ok;
+      markPlayed('krrush', st.ok, st.maxCombo);
+      const info = { kind: 'krrush', n: st.ok + st.miss.length, ok: st.ok, maxCombo: st.maxCombo, miss: st.miss.map((w) => w.key), sec: Math.round((Date.now() - st.t0) / 1000), quit: quit || undefined };
+      const r = pts > 0 ? addPoints(pts, 'quiz', '30びょう ラッシュ', '韓国語', info) : null;
+      if (!r) { save(); logEvent('quiz', '30びょう ラッシュ', '韓国語', 0, info); }
+      if (record) { sfx.fanfare(); confetti(220); emojiRain(['🌈', '💖', '⭐', '🎉'], 26); } else { sfx.coin(); confetti(90); }
+      q$('.quiz').innerHTML = `<div class="qbody result"><div style="font-family:var(--display);font-weight:800;font-size:18px">⚡ 30びょう ラッシュ</div><div class="big count-up" data-n="${st.ok}">0</div>
+        <div class="lvup-title rainbow" style="font-size:${record ? 40 : 30}px">${record ? 'NEW RECORD!!' : st.ok >= 10 ? 'GREAT!' : 'NICE TRY!'}</div>
+        <div class="shot-pts" style="opacity:1">${r ? `+${pts + (r.tipoff ? 1 : 0)} PTS` : over ? 'きょうの ポイントは ゲットずみ（1日2回まで）' : '+0 PTS'}</div>
+        <div class="note">正解 ${st.ok} − まちがい ${st.miss.length} ・ ベスト ${S.kr.rushBest || st.ok}問 ・ 最大 ${st.maxCombo} 連続 🔥</div>
+        ${st.miss.length ? `<ul class="kr-ul">${[...new Set(st.miss)].map((w) => `<li><span class="kr">${esc(w.ko)}</span>（${esc(w.kana)}）→ ${esc(w.ja)}</li>`).join('')}</ul>` : ''}
+        <div class="row" style="width:100%;margin-top:14px"><button class="btn ghost" style="flex:1" data-u="again">もう1回</button><button class="btn" style="flex:1" data-u="close">とじる</button></div></div>`;
+      countUp(q$('.count-up'), st.ok);
+      st.after = async (again) => { el.remove(); if (r) await afterEffects(r); else render(); if (again) startKrRush(); };
+    }
+    el.addEventListener('click', (e) => {
+      const b = e.target.closest('[data-u]'); if (!b) return;
+      const k = b.dataset.u;
+      if (k === 'a') pick1(b.dataset.c, b);
+      else if (k === 'quit') { if (st.ended) return; if (confirm('やめる？')) finish(true); }
+      else if (st.after) st.after(k === 'again');
+    });
+    sfx.buzzer();
+    next();
+    st.timer = setInterval(() => {
+      const ms = st.end - Date.now(); const sec = Math.ceil(ms / 1000);
+      if (ms <= 0) { q$('.kr-rush-t').textContent = '0'; finish(false); return; }
+      q$('.kr-rush-t').textContent = sec;
+      q$('.kr-rush-bar i').style.width = Math.max(0, (ms / (KR_RUSH.sec * 1000)) * 100) + '%';
+      const low = sec <= 5; el.classList.toggle('low', low);
+      if (low && sec !== st.lastSec) tone(1200, 0.05, 'square', 0.07);
+      st.lastSec = sec;
+    }, 100);
+  }
+  // ---------- カードあわせ（神経衰弱）：ハングルと いみの ペアを さがす。1ペア 1P ----------
+  function startKrMatch(id) {
+    const pool = id ? krWordsOf(id) : krPool();
+    const label = (w) => (w.ja && w.ja !== w.kana ? w.ja : w.kana);
+    const fit = pool.filter((w) => w.ko.length <= 7 && label(w).length <= 9);
+    const ws = [];
+    // 読み・意味が おなじ ことばが 同じ回に 入らないように 6ペアを えらぶ
+    for (const w of shuffle(fit.length >= 4 ? fit : pool)) { if (ws.length < 6 && !ws.some((x) => label(x) === label(w))) ws.push(w); }
+    const tiles = shuffle(ws.flatMap((w, p) => [{ p, w, ko: true }, { p, w, ko: false }]));
+    const st = { open: [], found: 0, flips: 0, busy: false, ended: false, t0: Date.now() };
+    const el = document.createElement('div'); el.className = 'ov';
+    el.style.background = 'radial-gradient(circle at 50% 30%, #3a1d5c, #0d0618)';
+    el.innerHTML = `<div class="quiz"><div class="qhead"><button class="qclose" data-m="quit">✕ やめる</button><div class="qprog"><i></i></div><div class="combo">0/${ws.length}</div></div>
+      <div class="qbody"><div class="qprompt">ハングルと いみの ペアを さがそう</div><div class="kr-match">${tiles.map((x, i) => `<button class="kr-tile" data-m="tile" data-i="${i}"><span>?</span></button>`).join('')}</div></div></div>`;
+    document.body.appendChild(el);
+    const q$ = (x) => el.querySelector(x);
+    const face = (i) => { const x = tiles[i]; return x.ko ? `<b class="kr">${esc(x.w.ko)}</b>` : `<span>${esc(label(x.w))}</span>`; };
+    function tap(i, b) {
+      if (st.busy || st.ended || b.classList.contains('open')) return;
+      b.classList.add('open'); b.innerHTML = face(i); st.flips++; sfx.tap();
+      if (tiles[i].ko) sayKo(tiles[i].w.ko);
+      st.open.push([i, b]);
+      if (st.open.length < 2) return;
+      const [[a, ba], [c, bc]] = st.open; st.open = [];
+      if (tiles[a].p === tiles[c].p) {
+        ba.classList.add('hit'); bc.classList.add('hit'); st.found++; sfx.ok();
+        const w = tiles[a].w; S.kr.w[w.key] = Math.max(krN(w), 1);
+        q$('.combo').textContent = `${st.found}/${ws.length}`; q$('.qprog i').style.width = (st.found / ws.length) * 100 + '%';
+        if (st.found === ws.length) setTimeout(() => finish(false), 500);
+      } else {
+        st.busy = true;
+        setTimeout(() => { [ba, bc].forEach((x) => { x.classList.remove('open'); x.innerHTML = '<span>?</span>'; }); st.busy = false; }, 1000);
+      }
+    }
+    function finish(quit) {
+      if (st.ended) return; st.ended = true;
+      if (window.speechSynthesis) speechSynthesis.cancel();
+      if (quit && !st.found) { save(); el.remove(); return; }
+      const sec = Math.round((Date.now() - st.t0) / 1000);
+      const record = !quit && (!S.kr.matchBest || sec < S.kr.matchBest);
+      if (record) S.kr.matchBest = sec;
+      markPlayed('krmatch', st.found);
+      const pts = krRoundPts('krm', st.found);
+      const info = { kind: 'krmatch', n: ws.length, ok: st.found, sec, flips: st.flips, quit: quit || undefined };
+      const r = pts > 0 ? addPoints(pts, 'quiz', 'カードあわせ', '韓国語', info) : null;
+      if (!r) { save(); logEvent('quiz', 'カードあわせ', '韓国語', 0, info); }
+      if (!quit) { sfx.fanfare(); confetti(160); }
+      q$('.quiz').innerHTML = `<div class="qbody result"><div style="font-family:var(--display);font-weight:800;font-size:18px">🃏 カードあわせ</div><div class="big">${sec}<span style="font-size:24px">びょう</span></div>
+        <div class="lvup-title" style="font-size:32px">${record ? 'NEW RECORD!' : quit ? 'NICE TRY!' : 'CLEAR!'}</div><div class="shot-pts" style="opacity:1">${r ? `+${pts + (r.tipoff ? 1 : 0)} PTS` : 'きょうの ポイントは ゲットずみ（1日2回まで）'}</div>
+        <ul class="kr-ul">${ws.map((w) => `<li><span class="kr">${esc(w.ko)}</span>（${esc(w.kana)}）${w.ja !== w.kana ? ` → ${esc(w.ja)}` : ''}</li>`).join('')}</ul>
+        <div class="row" style="width:100%;margin-top:14px"><button class="btn ghost" style="flex:1" data-m="again">もう1回</button><button class="btn" style="flex:1" data-m="close">とじる</button></div></div>`;
+      st.after = async (again) => { el.remove(); if (r) await afterEffects(r); else render(); if (again) startKrMatch(id); };
+    }
+    el.addEventListener('click', (e) => {
+      const b = e.target.closest('[data-m]'); if (!b) return;
+      const k = b.dataset.m;
+      if (k === 'tile') tap(Number(b.dataset.i), b);
+      else if (k === 'quit') { if (confirm('やめる？（ここまでの ペアは 得点に なるよ）')) { finish(true); if (!st.after) render(); } }
+      else if (k === 'again' || k === 'close') { if (st.after) st.after(k === 'again'); }
+    });
+    sfx.tap();
+  }
+  // ---------- まねっこ：お手本を 聞いて 声に出す（聞き取れる端末は 自動で はんてい。むりな時は 自分で はんてい） ----------
+  const krClean = (s) => String(s).replace(/[^가-힣]/g, '');
+  function krScore(target, heard) {
+    const a = krClean(target); const b = krClean(heard);
+    if (!a || !b) return 0;
+    const L = Array.from({ length: a.length + 1 }, () => new Array(b.length + 1).fill(0));
+    for (let i = a.length - 1; i >= 0; i--) for (let j = b.length - 1; j >= 0; j--) L[i][j] = a[i] === b[j] ? L[i + 1][j + 1] + 1 : Math.max(L[i + 1][j], L[i][j + 1]);
+    return L[0][0] / a.length;
+  }
+  let krAuto = !!SpeechRec;
+  const KR_SPEAK_PASS = 0.6;
+  function startKrSpeak(id) {
+    const pool = (id ? krWordsOf(id) : krPool());
+    const items = sampleItems(pool, Math.min(5, pool.length), 'kr', (w) => w.key);
+    const st = { i: 0, ok: 0, miss: [], tries: 0, cleared: false, busy: false, ended: false, t0: Date.now() };
+    const el = document.createElement('div'); el.className = 'ov';
+    el.style.background = 'radial-gradient(circle at 50% 30%, #0f3b4f, #05070d)';
+    el.innerHTML = `<div class="quiz spk"><div class="qhead"><button class="qclose" data-n="quit">✕ やめる</button><div class="qprog"><i></i></div><div class="combo"></div></div>
+      <div class="qbody"><div class="spk-mode">🗣️ 聞いて、まねして 言おう</div><div class="kr-speak"></div>
+        <div class="row spk-listen"><button class="btn ghost" data-n="play">🔊 お手本</button><button class="btn ghost" data-n="slow">🐢 ゆっくり</button></div>
+        <button class="spk-mic" data-n="mic"><span class="mic-i">🎤</span><span class="mic-t">おして 話す</span></button>
+        <div class="spk-heard"></div><div class="judge"></div>
+        <div class="row kr-next" style="width:100%"></div></div></div>`;
+    document.body.appendChild(el);
+    const q$ = (x) => el.querySelector(x);
+    const cur = () => items[st.i];
+    function show() {
+      const w = cur();
+      st.tries = 0; st.cleared = false; st.busy = false; st.t1 = Date.now();
+      q$('.qprog i').style.width = (st.i / items.length) * 100 + '%';
+      q$('.combo').textContent = `${st.i + 1}/${items.length}`;
+      q$('.kr-speak').innerHTML = `<b class="kr${krSizeCls(w.ko)}">${esc(w.ko)}</b><span>${esc(w.kana)}</span>${w.ja && w.ja !== w.kana ? `<small>${esc(w.ja)}</small>` : ''}`;
+      q$('.judge').textContent = ''; q$('.judge').className = 'judge';
+      q$('.spk-heard').textContent = krAuto ? '' : '声に出して 言えたら「言えた！」を おしてね';
+      q$('.spk-mic').classList.toggle('hidden', !krAuto); q$('.spk-mic').classList.remove('rec');
+      q$('.kr-next').innerHTML = krAuto ? '' : `<button class="btn" style="flex:1" data-n="self">言えた！ ✓</button>`;
+      if (S.sound) sayKo(w.ko);
+    }
+    function clear() {
+      if (!st.cleared) { st.cleared = true; st.ok++; }
+      q$('.judge').textContent = pick(['대박!', '최고!', 'NICE!', '화이팅!']); q$('.judge').className = 'judge ok kr'; sfx.ok(); confetti(30);
+      q$('.spk-mic').classList.add('hidden');
+      q$('.kr-next').innerHTML = `<button class="btn" style="flex:1" data-n="next">${st.i + 1 < items.length ? 'つぎへ ▶' : 'けっかを 見る 🏁'}</button>`;
+    }
+    async function mic() {
+      if (st.busy) { if (spkRec) { try { spkRec.stop(); } catch (e) { /* noop */ } } return; }
+      st.busy = true;
+      if (window.speechSynthesis) speechSynthesis.cancel();
+      const b = q$('.spk-mic'); b.classList.add('rec'); q$('.mic-t').textContent = '聞いてるよ…（おわったら おす）';
+      q$('.spk-heard').textContent = '';
+      const r = await hearEnglish((txt) => { q$('.spk-heard').textContent = `🎧 ${txt}`; }, 'ko-KR');
+      b.classList.remove('rec'); q$('.mic-t').textContent = 'おして 話す'; st.busy = false;
+      if (st.ended) return;
+      if (['not-allowed', 'service-not-allowed', 'init', 'start', 'audio-capture', 'language-not-supported'].includes(r.error)) {
+        krAuto = false; q$('.spk-mic').classList.add('hidden');
+        q$('.spk-heard').textContent = 'この スマホでは 聞き取りが 使えなかったよ。声に出して 言えたら「言えた！」を おしてね';
+        q$('.kr-next').innerHTML = '<button class="btn" style="flex:1" data-n="self">言えた！ ✓</button>';
+        return;
+      }
+      if (!r.alts.length) { q$('.spk-heard').textContent = '聞こえなかった… もう少し 大きな声で、もう1回！'; return; }
+      const best = Math.max(...r.alts.map((h) => krScore(cur().ko, h)));
+      q$('.spk-heard').textContent = `聞こえた：「${r.alts[0]}」`;
+      if (best >= KR_SPEAK_PASS) { clear(); return; }
+      st.tries++;
+      q$('.judge').textContent = 'おしい！'; q$('.judge').className = 'judge ng'; sfx.ng();
+      if (st.tries >= 2) q$('.kr-next').innerHTML = '<button class="btn ghost" style="flex:1" data-n="next">パス ▶</button>';
+    }
+    function next() {
+      if (!st.cleared) st.miss.push(cur());
+      st.i++;
+      if (st.i < items.length) show(); else finish(false);
+    }
+    function finish(quit) {
+      if (st.ended) return; st.ended = true;
+      if (window.speechSynthesis) speechSynthesis.cancel();
+      if (spkRec) try { spkRec.abort(); } catch (e) { /* noop */ }
+      const n = quit ? st.i + (st.cleared ? 1 : 0) : items.length;
+      if (quit && !st.ok) { save(); el.remove(); render(); return; }
+      markPlayed('krspeak', st.ok);
+      const pts = st.ok > 0 ? krRoundPts('krs', st.ok) : 0;
+      const info = { kind: 'krspeak', n, ok: st.ok, miss: st.miss.map((w) => w.key), sec: Math.round((Date.now() - st.t0) / 1000), quit: quit || undefined, mode: krAuto ? 'auto' : 'self' };
+      const r = pts > 0 ? addPoints(pts, 'quiz', 'まねっこ', '韓国語', info) : null;
+      if (!r) { save(); logEvent('quiz', 'まねっこ', '韓国語', 0, info); }
+      if (st.ok >= n) { sfx.fanfare(); confetti(160); } else sfx.coin();
+      q$('.quiz').innerHTML = `<div class="qbody result"><div style="font-family:var(--display);font-weight:800;font-size:18px">🗣️ まねっこ</div><div class="big">${st.ok}<span style="font-size:28px">/${n}</span></div>
+        <div class="lvup-title" style="font-size:30px">${st.ok >= n ? 'PERFECT!!' : 'NICE TRY!'}</div><div class="shot-pts" style="opacity:1">${r ? `+${pts + (r.tipoff ? 1 : 0)} PTS` : st.ok > 0 ? 'きょうの ポイントは ゲットずみ（1日2回まで）' : '+0 PTS'}</div>
+        ${coachQuizLine(st.ok >= n, st.ok, n)}
+        <div class="row" style="width:100%;margin-top:14px"><button class="btn ghost" style="flex:1" data-n="again">もう1回</button><button class="btn" style="flex:1" data-n="close">とじる</button></div></div>`;
+      st.after = async (again) => { el.remove(); if (r) await afterEffects(r); else render(); if (again) startKrSpeak(id); };
+    }
+    el.addEventListener('click', (e) => {
+      const b = e.target.closest('[data-n]'); if (!b) return;
+      const k = b.dataset.n;
+      if (k === 'again' || k === 'close') { if (st.after) st.after(k === 'again'); return; }
+      if (st.ended) return;
+      if (k === 'quit') { if (confirm('やめる？（ここまでの クリアは 得点に なるよ）')) finish(true); }
+      else if (k === 'play') sayKo(cur().ko);
+      else if (k === 'slow') sayKo(cur().ko, true);
+      else if (k === 'mic') mic();
+      else if (k === 'self') { if (Date.now() - st.t1 > 400) clear(); } // 「つぎへ」の 連打で 次のカードが クリアに ならないように
+      else if (k === 'next') next();
+    });
+    sfx.tap();
+    show();
+  }
+  // ---------- 操作 ----------
+  async function krAction(act, a) {
+    const id = a.dataset.id;
+    if (act === 'krsay') { krReadTok++; sayKo(a.dataset.ko); }
+    else if (act === 'krback') { krStopReading(); krStage = null; sfx.tap(); render(); scrollTo(0, 0); }
+    else if (act === 'krstage') { krStage = id; sfx.tap(); render(); scrollTo(0, 0); }
+    else if (act === 'krnameopen') { krStage = 'name'; sfx.tap(); render(); scrollTo(0, 0); }
+    else if (act === 'krletteropen') { krStage = 'letter'; sfx.tap(); render(); scrollTo(0, 0); }
+    else if (act === 'krlesson') { sfx.tap(); const ws = krLessonWords(); startKrCards(ws, () => startQuiz('kr', true, ws)); }
+    else if (act === 'krcards') { sfx.tap(); const ws = krWordsOf(id); startKrCards(ws.filter((w) => !krKnown(w)).length ? ws.filter((w) => !krKnown(w)) : ws, () => startQuiz('kr:' + id)); }
+    else if (act === 'krquiz') { sfx.tap(); startQuiz('kr:' + id); }
+    else if (act === 'krspeak') startKrSpeak(id);
+    else if (act === 'krmatch') startKrMatch(id);
+    else if (act === 'krrush') startKrRush();
+    else if (act === 'krb') { krB[a.dataset.g] = Number(a.dataset.i); sfx.tap(); render(); sayKo(krSyllable().ch); }
+    else if (act === 'krcardtime') {
+      const d = day(); if (d.krc) return;
+      d.krc = 1;
+      const r = addPoints(2, 'krcard', 'カードタイム', '韓国語', { kind: 'krcard' });
+      sfx.coin(); confetti(90); toast('📇 カードタイム クリア！ +2P');
+      await afterEffects(r);
+    } else if (act === 'krnamego') {
+      const raw = ($('#krnamein').value || '').trim();
+      const ko = krFromKana(raw);
+      if (!ko) { toast('ひらがなか カタカナで 入れてね', 2600); return; }
+      S.kr.name = ko; S.kr.nameKana = krHira(raw).replace(/[・]/g, '').replace(/[\s　]+/g, ' '); save();
+      logEvent('krname', 'なまえメーカー', '韓国語', 0, {});
+      sfx.fanfare(); confetti(120); render(); sayKo(ko);
+    } else if (act === 'krto') { krLt.to = Number(a.dataset.i); sfx.tap(); render(); }
+    else if (act === 'krline') { const i = Number(a.dataset.i); krLt.off[i] = !krLt.off[i]; sfx.tap(); render(); }
+    else if (act === 'krread') {
+      const tok = ++krReadTok;
+      for (const l of krLetterLines()) { if (krLt.off[l.i]) continue; if (tok !== krReadTok) return; await sayKo(l.ko); await sleep(200); }
+    } else if (act === 'krdone') {
+      krStopReading();
+      S.kr.letter = (S.kr.letter || 0) + 1; save();
+      logEvent('krletter', 'ファンレター', '韓国語', 0, { to: krLt.to });
+      sfx.fanfare(); confetti(180);
+      await overlay(`<div style="font-size:72px">💌</div><div class="lvup-name" style="margin:10px 0">사랑해요！</div><div class="shot-sub" style="opacity:1">かんこくごの お手紙が 書けたね！<br>おうちの人に 見せてみてね</div>`, { lockMs: 900 });
+      render();
+    }
+  }
+
   // ---------- おうちからのエール ----------
   async function checkCheers() {
     const j = await api({ action: 'cheers' });
@@ -1674,9 +2391,10 @@ function calcAllowance(st, ym, today, cfg) {
   }
   document.addEventListener('click', (e) => {
     const t = e.target.closest('[data-tab]');
-    if (t) { stopDictation(); tab = t.dataset.tab; sfx.tap(); render(); scrollTo(0, 0); return; }
+    if (t) { stopDictation(); tab = t.dataset.tab; krStage = null; krStopReading(); sfx.tap(); render(); scrollTo(0, 0); if (tab === 'korean' && !S.kr.intro) krIntro(); return; }
     const a = e.target.closest('[data-act]'); if (!a) return;
     const act = a.dataset.act;
+    if (act.startsWith('kr')) { krAction(act, a); return; }
     if (act === 'mission') onMission(a.dataset.id);
     else if (act === 'check') onCheck(a.dataset.id);
     else if (act === 'quiz') { sfx.tap(); startQuiz(a.dataset.kind); }
