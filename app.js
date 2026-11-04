@@ -64,7 +64,7 @@ function calcAllowance(st, ym, today, cfg) {
       test: { name: '後期期末テスト', date: '', checks: {} },
       goals: {}, voices: [], voiceDays: {}, voiceWeek: '', cheerLog: [], startDate: todayStr(),
       milestones: {}, cheersSeen: [], lastCheer: null, lastSync: 0, syncError: null,
-      timer: null, moneySeen: null, complete: '', beat: {}, badges: {}, chal: 0, recapSeen: '',
+      timer: null, moneySeen: null, complete: '', beat: {}, badges: {}, chal: 0, recapSeen: '', boss: 0,
       device: rid(20), created: Date.now(), updated: Date.now(),
     };
   }
@@ -302,6 +302,8 @@ function calcAllowance(st, ym, today, cfg) {
     coin: () => { tone(988, 0.08, 'square', 0.08); tone(1319, 0.3, 'square', 0.08, 0.08); },
     fanfare: () => { [523, 659, 784, 1046].forEach((f, i) => tone(f, 0.18, 'square', 0.08, i * 0.12)); tone(1046, 0.6, 'triangle', 0.12, 0.5); tone(1318, 0.6, 'triangle', 0.08, 0.5); },
     drum: () => { for (let i = 0; i < 10; i++) noise(0.06, 0.18, i * 0.1, 300, 200); },
+    // 連続正解で音がどんどん上がる（ドレミ…の順）
+    combo: (n) => { const st = [0, 2, 4, 5, 7, 9, 11, 12, 14, 16, 17, 19, 21, 23, 24]; const f = 660 * Math.pow(2, st[Math.min(Math.max(n, 1) - 1, st.length - 1)] / 12); tone(f, 0.08, 'square', 0.07); tone(f * 1.5, 0.14, 'square', 0.07, 0.07); if (n >= 5) tone(f * 2, 0.18, 'triangle', 0.07, 0.12); },
     reveal: (r) => {
       const base = { N: 523, R: 659, SR: 784, SSR: 880, UR: 1046 }[r] || 523;
       tone(base, 0.15, 'square', 0.08); tone(base * 1.5, 0.3, 'square', 0.08, 0.12);
@@ -311,6 +313,7 @@ function calcAllowance(st, ym, today, cfg) {
 
   // ---------- 紙吹雪 ----------
   function confetti(n = 120) {
+    if (calmFx()) return;
     const cv = document.createElement('canvas'); cv.className = 'confetti';
     const dpr = window.devicePixelRatio || 1;
     cv.width = innerWidth * dpr; cv.height = innerHeight * dpr;
@@ -334,6 +337,58 @@ function calcAllowance(st, ym, today, cfg) {
       if (t < 2200) requestAnimationFrame(loop); else cv.remove();
     })(start);
   }
+
+  // ---------- ドパミン演出（2026-11-05「長女のアプリもドパガキ風に」。見せ方だけで、ポイント・チケット・おこづかいは変えない） ----------
+  // 全画面の点滅は使わない（ZONE もゆっくり色が変わるだけ）。端末で「視差効果を減らす」を選んでいる時は飛び散る演出を出さない
+  const FEVER_AT = 5;
+  const calmFx = () => !!(window.matchMedia && matchMedia('(prefers-reduced-motion: reduce)').matches);
+  function buzz(p) { try { if (navigator.vibrate) navigator.vibrate(p); } catch (e) { /* noop */ } }
+  function fxNode(cls, html, css) {
+    const n = document.createElement('span'); n.className = 'fx ' + cls; n.innerHTML = html;
+    Object.keys(css).forEach((k) => n.style.setProperty(k, css[k]));
+    n.addEventListener('animationend', () => n.remove());
+    document.body.appendChild(n);
+    setTimeout(() => n.remove(), 2600);
+    return n;
+  }
+  // 押したところから絵文字がはじける
+  function burst(x, y, list, n = 10) {
+    if (calmFx()) return;
+    for (let i = 0; i < n; i++) {
+      const a = Math.random() * Math.PI * 2; const d = 50 + Math.random() * 90;
+      fxNode('fx-p', pick(list), { left: x + 'px', top: y + 'px', '--dx': Math.cos(a) * d + 'px', '--dy': Math.sin(a) * d + 'px', '--r': (Math.random() * 300 - 150) + 'deg', 'font-size': 14 + Math.random() * 14 + 'px' });
+    }
+  }
+  function floatText(x, y, text, cls = '') { fxNode('fx-t ' + cls, esc(text), { left: x + 'px', top: y + 'px' }); }
+  function emojiRain(list, n = 20) {
+    if (calmFx()) return;
+    for (let i = 0; i < n; i++) fxNode('fx-rain', pick(list), { left: Math.random() * 100 + 'vw', 'animation-delay': Math.random() * 0.7 + 's', 'font-size': 18 + Math.random() * 20 + 'px', '--r': (Math.random() * 500 - 250) + 'deg' });
+  }
+  // 正解の手ごたえ（連続するほど派手に。ms はその問題にかかった時間）
+  const COMBO_WORDS = { 2: 'ナイッシュー！', 3: 'SWISH!', 5: 'ZONE IN!!', 7: '3 POINT!', 10: 'BUZZER BEATER!!', 15: 'LEGEND!!' };
+  function juiceHit(btn, combo, ms) {
+    const r = btn ? btn.getBoundingClientRect() : { left: innerWidth / 2, top: innerHeight / 2, width: 0, height: 0 };
+    const x = r.left + r.width / 2; const y = r.top + r.height / 2;
+    burst(x, y, combo >= FEVER_AT ? ['🔥', '🏀', '⭐', '🏆'] : combo >= 3 ? ['🔥', '✨', '🏀'] : ['✨', '🏀', '⭐'], 8 + Math.min(combo, 6) * 2);
+    floatText(x, y - 14, '+1', 'plus');
+    if (COMBO_WORDS[combo]) floatText(innerWidth / 2, innerHeight * 0.1, COMBO_WORDS[combo], 'word');
+    else if (ms < 2500) floatText(innerWidth / 2, innerHeight * 0.1, '⚡ はやい！', 'fast');
+    buzz(combo >= FEVER_AT ? [15, 30, 15] : 15);
+  }
+  // 数字がぐんぐん増える
+  function countUp(node, to, suffix = '') {
+    if (!node) return;
+    const t0 = performance.now(); const dur = Math.min(1000, 180 + to * 70); let last = -1;
+    (function step(now) {
+      if (!node.isConnected) return;
+      const v = Math.round(Math.min(1, (now - t0) / dur) * to);
+      if (v !== last) { node.textContent = v + suffix; if (v > 0) tone(620 + v * 26, 0.04, 'square', 0.04); last = v; }
+      if (v < to) requestAnimationFrame(step);
+      else node.classList.add('done');
+    })(t0);
+  }
+  // 結果の星（3つまで順番に落ちてくる）
+  const resultStars = (ok, n) => { const k = !n ? 0 : ok >= n ? 3 : ok / n >= 0.7 ? 2 : ok > 0 ? 1 : 0; return `<div class="res-stars">${[1, 2, 3].map((i) => `<i class="${i <= k ? 'on' : ''}" style="animation-delay:${0.15 + i * 0.22}s">★</i>`).join('')}</div>`; };
 
   // ---------- オーバーレイ ----------
   function overlay(html, opt = {}) {
@@ -364,20 +419,20 @@ function calcAllowance(st, ym, today, cfg) {
   </svg>`;
   function shootOv(pts, sub) {
     sfx.shoot();
-    setTimeout(() => { confetti(90); document.body.classList.add('shake-screen'); setTimeout(() => document.body.classList.remove('shake-screen'), 400); }, 620);
+    setTimeout(() => { confetti(90); emojiRain(['🏀', '🔥', '✨', '⭐'], 18); buzz(30); document.body.classList.add('shake-screen'); setTimeout(() => document.body.classList.remove('shake-screen'), 400); }, 620);
     return overlay(`<div class="court">${HOOP_SVG}<div class="ball">🏀</div></div>
       <div class="shot-word">${esc(pick(SHOT_WORDS))}</div>
       <div class="shot-pts">+${pts} PTS</div>
       ${sub ? `<div class="shot-sub">${esc(sub)}</div>` : ''}`, { autoClose: 2200, lockMs: 900 });
   }
   function winOv() {
-    sfx.buzzer(); setTimeout(() => { sfx.fanfare(); confetti(160); }, 500);
+    sfx.buzzer(); setTimeout(() => { sfx.fanfare(); confetti(160); emojiRain(['🏆', '🎟️', '🏀', '⭐'], 24); }, 500);
     return overlay(`<div class="lvup-title">WIN!!</div><div class="lvup-rank">🏆</div>
       <div class="lvup-name">${todayRival().e} ${esc(todayRival().name)}に勝った！</div>
       <div class="shot-sub" style="opacity:1">ガチャチケット +1 🎟️</div>`, { lockMs: 1200 });
   }
   function bigWinOv() {
-    sfx.fanfare(); setTimeout(() => confetti(220), 200);
+    sfx.fanfare(); setTimeout(() => { confetti(220); emojiRain(['💰', '🔥', '🏆', '🏀'], 30); buzz([30, 40, 30]); }, 200);
     return overlay(`<div class="lvup-title" style="font-size:56px">BIG WIN!!</div><div class="lvup-rank">🔥🏆🔥</div>
       <div class="lvup-name">基本ミッション${ALLOWANCE.bigWinMissions}本クリア！</div>
       <div class="reward-big">💰 おこづかい +${ALLOWANCE.bigWin}円 アップ！</div>${mvpNote()}`, { lockMs: 1200 });
@@ -392,7 +447,7 @@ function calcAllowance(st, ym, today, cfg) {
     return '';
   }
   function levelUpOv(i) {
-    sfx.fanfare(); confetti(200);
+    sfx.fanfare(); confetti(200); emojiRain(['⭐', '🏀', '🏆', '🔥'], 26);
     const r = RANKS[i];
     return overlay(`<div class="lvup-title">LEVEL UP!</div><div class="lvup-rank">${r[2]}</div>
       <div class="lvup-name">${esc(r[1])} に昇格！</div>
@@ -478,6 +533,11 @@ function calcAllowance(st, ym, today, cfg) {
   function autoPick() {
     const d = S.days[todayStr()] || {};
     const n = weakTotal();
+    const vw = PAST_FORMS.filter((w) => S.weak.past[w[0]]).length + THIRD_FORMS.filter((w) => S.weak.third[w[0]]).length;
+    const rushLeft = (d.rush || 0) < RUSH.rounds;
+    if (rushLeft && vw >= 3 && !playedToday('rush:verb')) return { kind: 'rush:verb', why: `過去形・3単現の苦手が${vw}個。まず${RUSH.sec}秒で形に慣れよう` };
+    const mathLast = [S.lastPlay['qa:数学'], S.lastPlay['rush:qa:数学']].filter(Boolean).sort().pop();
+    if (rushLeft && qaSubjects().includes('数学') && (!mathLast || diffDays(mathLast, todayStr()) >= 3)) return { kind: 'rush:qa:数学', why: `目標は数学90点！ まず${RUSH.sec}秒だけ` };
     if (n >= WEAK_BONUS_MIN && !d.wkt) return { kind: 'weak', why: `苦手が${n}問。${WEAK_SET}問ぜんぶ正解で 🎟️ +1` };
     // 社会は重点教科（前期の通知表から）。その日まだなら英語より先に出す
     if (qaSubjects().includes(FOCUS_SUBJECT) && !playedToday('qa:' + FOCUS_SUBJECT)) return { kind: 'qa:' + FOCUS_SUBJECT, why: `今日の${FOCUS_SUBJECT}、まだだよ（10問・3分）` };
@@ -490,13 +550,13 @@ function calcAllowance(st, ym, today, cfg) {
     return { kind: oldest, why: !last ? 'まだやったことがないゲーム！' : c.length ? `${diffDays(last, todayStr())}日ぶりのゲーム` : 'もう1回、自己ベストに挑戦！' };
   }
   const KIND_ICON = { speak: '🎤', listen: '🎧', spell: '🔤', plural: '📦', kanji: '漢', weak: '🎯', challenge: '👑', verb: '🧩', kwrite: '✍️' };
-  const kindIcon = (k) => KIND_ICON[k] || ({ 理科: '🧪', 社会: '🗾', 数学: '📐', 国語: '✍️' }[k.slice(3)] || '📚');
+  const kindIcon = (k) => (k.startsWith('rush:') ? '⚡' : KIND_ICON[k]) || ({ 理科: '🧪', 社会: '🗾', 数学: '📐', 国語: '✍️' }[k.slice(3)] || '📚');
   function heroButton() {
     const p = autoPick();
     return `<button class="hero" data-act="omakase" data-kind="${esc(p.kind)}"><span class="hero-k">▶ おまかせ</span>
       <span class="hero-t">${kindIcon(p.kind)} ${esc(quizName(p.kind))}</span><span class="hero-s">${esc(p.why)}</span><span class="hero-a">START</span></button>`;
   }
-  function playKind(kind) { if (kind === 'speak') startSpeak(); else startQuiz(kind); }
+  function playKind(kind) { if (kind === 'speak') startSpeak(); else if (kind.startsWith('rush:')) startRush(kind.slice(5)); else startQuiz(kind); }
   function markPlayed(kind, ok, combo) {
     const d = day(); d.qk = d.qk || [];
     if (!d.qk.includes(kind)) d.qk.push(kind);
@@ -532,6 +592,8 @@ function calcAllowance(st, ym, today, cfg) {
     if (t === 'timer') return Object.values(S.days).reduce((a, d) => a + (d.tm || 0), 0);
     if (t === 'cards') return Object.keys(S.cards).length;
     if (t === 'allgames') return gameKinds().every((k) => S.lastPlay[k]) ? 1 : 0;
+    if (t === 'boss') return S.boss || 0;
+    if (t === 'rushbest') return Math.max(0, ...Object.keys(S.best).filter((k) => k.startsWith('rush:')).map((k) => S.best[k]));
     return 0;
   }
   // 新しくクリアしたもの（挑戦状・バッジ）を見つけて、画面があいた時に1つずつお祝いする
@@ -600,7 +662,7 @@ function calcAllowance(st, ym, today, cfg) {
     const best = bestStreak(); const weekend = idx >= 5;
     const owned = Object.keys(S.cards).length; const ms = COLLECTION_MILESTONES.find((m) => m > owned);
     const vw = PAST_FORMS.filter((w) => S.weak.past[w[0]]).length + THIRD_FORMS.filter((w) => S.weak.third[w[0]]).length;
-    const v = { name: S.nick || 'キミ', streak: st, next: st + 1, left, weak: weakTotal(), days: S.test.date ? diffDays(t, S.test.date) : '', min: timerMin(), wb, mvpLeft, mvp: ALLOWANCE.mvp, winLeft, best, vw, tk: S.tickets, ms, colLeft: ms ? ms - owned : 0 };
+    const v = { rush: RUSH.sec, name: S.nick || 'キミ', streak: st, next: st + 1, left, weak: weakTotal(), days: S.test.date ? diffDays(t, S.test.date) : '', min: timerMin(), wb, mvpLeft, mvp: ALLOWANCE.mvp, winLeft, best, vw, tk: S.tickets, ms, colLeft: ms ? ms - owned : 0 };
     const L = COACH_LINES; const out = [];
     const add = (k, mood) => (L[k] || []).forEach((s) => out.push({ text: fillLine(s, v), mood }));
     if (S.timer) add('timer', 'happy');
@@ -611,6 +673,8 @@ function calcAllowance(st, ym, today, cfg) {
     if (ALLOWANCE.on !== false && ALLOWANCE.mvp && !bigToday && mvpLeft >= 1 && mvpLeft <= 2 && mvpLeft <= 7 - idx) add('mvpNear', 'fire');
     // 平日で、週間MVPが金曜までの BIG WIN だけで届く時（あと3〜5日）
     if (ALLOWANCE.on !== false && ALLOWANCE.mvp && !bigToday && idx <= 4 && mvpLeft >= 3 && mvpLeft <= 5 - idx) add('mvpWeek', 'fire');
+    // 日曜は記録が切れやすい（10/18・10/25・11/1）ので、短いラッシュ1回を先にすすめる
+    if (idx === 6 && !played(t)) add('sunday', 'fire');
     // 土日は記録が落ちやすいので、紙の勉強がまだなら先に言う
     if (weekend && !paperDone(d)) add('weekend', 'wink');
     if (ALLOWANCE.on !== false && ALLOWANCE.mvp && mvpLeft <= 0 && bigToday) add('mvpDone', 'fire');
@@ -625,7 +689,10 @@ function calcAllowance(st, ym, today, cfg) {
     else if (d.win) add('winDone', 'wink');
     if (STREAK_BONUS[st] || [3, 5, 7, 10, 14, 21, 30, 50, 100].includes(st)) add('streakUp', 'fire');
     if (v.weak >= 5) add('weak', 'think');
+    const rushLeft = (d.rush || 0) < RUSH.rounds;
+    if (rushLeft && vw >= 3 && !playedToday('rush:verb')) add('rushVerb', 'fire');
     if (vw >= 3) add('verbTip', 'think');
+    if (rushLeft && qaSubjects().includes('数学') && !playedToday('qa:数学') && !playedToday('rush:qa:数学')) add('mathGoal', 'think');
     // チケットが残っている時は、コレクションの次の節目までの残りを見せる
     if (S.tickets > 0 && ms) add('gacha', 'wink');
     if (!(d.m || []).includes('kanji') && S.missions.some((m) => m.id === 'kanji') && !playedToday('kwrite')) add('kwrite', 'wink');
@@ -673,11 +740,13 @@ function calcAllowance(st, ym, today, cfg) {
     // おまかせがスピーキングを選んでいる時は、同じボタンを2つ並べない
     const speakCard = autoPick().kind === 'speak' ? '' : `<button class="speakcard" data-act="speak"><span class="sp-e">🎤</span><span class="sp-t"><b>スピーキング</b><small>お手本を聞いて、英語で話そう ・ 5問</small></span><span class="sp-b">${best('speak', SPEAK_LEN)}</span></button>`;
     return header() + paperNudge() + heroButton() + speakCard + `
+      <div class="sec-title"><h2>⚡ ${RUSH.sec}秒ラッシュ</h2><span>2択をどんどん</span></div>
+      <div class="rush-tiles">${rushTiles()}</div>
       <div class="sec-title"><h2>ゲームをえらぶ</h2><span>1問 1P</span></div>
       <div class="tiles">
         ${tile('listen', 'gc-listen', best('listen'))}
         ${tile('challenge', 'gc-challenge', `全問正解 +${ALLOWANCE.perfect}円`)}
-        ${tile('weak', 'gc-weak', `苦手 ${weakN}問 ・ ${WEAK_SET}問ずつ`)}
+        ${tile('weak', 'gc-weak', `👾 ボス戦 ・ 苦手 ${weakN}問`)}
         ${tile('spell', 'gc-spell', best('spell'))}
         ${tile('plural', 'gc-plural', best('plural'))}
         ${tile('verb', 'gc-verb', S.best.verb != null ? best('verb') : 'NEW ・ 4択で練習')}
@@ -916,11 +985,29 @@ function calcAllowance(st, ym, today, cfg) {
   }
   const RCOL = { N: '#b8c0d6', R: '#2f7de1', SR: '#a855f7', SSR: '#ffc400', UR: 'linear-gradient(135deg,#ff3d7f,#ffd400,#2ee59d,#22d3ee,#a855f7)' };
   async function revealOv(card, tag, wait) {
-    sfx.drum();
-    await overlay(`<div class="gacha-ball shake" style="font-size:120px">${wait}</div><div class="shot-sub" style="opacity:1">ドキドキ…</div>`, { closeOnTap: false, autoClose: 1100 });
+    await new Promise((res) => {
+      overlay(`<div class="pack a-${card.r}">${wait}</div><div class="pack-tap">タップ連打！</div><div class="pack-dots"><i></i><i></i><i></i></div>`, {
+        closeOnTap: false,
+        onMount: (el, close) => {
+          const p = el.querySelector('.pack'); let n = 0; let done = false;
+          const open = () => { if (done) return; done = true; close(); res(); };
+          // 2回目から光の色でレアリティがちらっと分かる。押さなくても5秒で開く
+          el.addEventListener('click', (e) => {
+            n++; sfx.combo(n * 3); buzz(20 + n * 10);
+            p.classList.remove('hit'); void p.offsetWidth; p.classList.add('hit', 't' + Math.min(n, 3));
+            el.querySelectorAll('.pack-dots i').forEach((d, i) => d.classList.toggle('on', i < n));
+            burst(e.clientX, e.clientY, ['✨', '⭐', '🏀'], 8 + n * 3);
+            if (n >= 3) setTimeout(open, 180);
+          });
+          setTimeout(open, 5000);
+        },
+      });
+    });
     const fl = document.createElement('div'); fl.className = 'flash'; fl.style.background = RCOL[card.r]; document.body.appendChild(fl); setTimeout(() => fl.remove(), 700);
-    sfx.reveal(card.r); confetti(card.r === 'N' ? 30 : card.r === 'R' ? 70 : 180);
-    await overlay(`<div class="reveal cc r-${card.r}" style="aspect-ratio:3/4"><div class="rr" style="color:${card.r === 'UR' ? '#ffd400' : RCOL[card.r]}">${card.r}</div><div class="e">${card.e}</div><div class="n">${esc(card.name)}</div><div class="d">${esc(card.d)}</div></div>
+    sfx.reveal(card.r); confetti(card.r === 'N' ? 40 : card.r === 'R' ? 90 : 200);
+    if (card.r !== 'N') emojiRain(card.r === 'R' ? ['⭐', '✨'] : ['🔥', '💎', '⭐', '🏆'], card.r === 'R' ? 12 : 30);
+    if (['SR', 'SSR', 'UR'].includes(card.r)) { buzz([40, 40, 80]); document.body.classList.add('shake-screen'); setTimeout(() => document.body.classList.remove('shake-screen'), 400); }
+    await overlay(`${{ SR: '<div class="rare-call rainbow">SUPER RARE!</div>', SSR: '<div class="rare-call rainbow">SSR!!!</div>', UR: '<div class="rare-call rainbow">ULTRA RARE!!!!</div>' }[card.r] || ''}<div class="reveal cc r-${card.r}" style="aspect-ratio:3/4"><div class="rr" style="color:${card.r === 'UR' ? '#ffd400' : RCOL[card.r]}">${card.r}</div><div class="e">${card.e}</div><div class="n">${esc(card.name)}</div><div class="d">${esc(card.d)}</div></div>
       <div class="newtag" style="margin-top:16px">${tag}</div>`, { lockMs: 900 });
   }
   async function onPull() {
@@ -1115,6 +1202,7 @@ function calcAllowance(st, ym, today, cfg) {
     return qs;
   }
   function quizName(kind) {
+    if (kind.startsWith('rush:')) return `${RUSH.sec}秒ラッシュ ${rushName(kind.slice(5))}`;
     return { speak: 'スピーキング', listen: 'リスニング', spell: 'スペル・シュート', plural: '複数形チャレンジ', kanji: '漢字よみ速攻', weak: '苦手つぶし', challenge: 'チャレンジ（上級）', verb: '動詞の形トレーニング', kwrite: '漢字かき取り' }[kind] || (kind.startsWith('qa:') ? kind.slice(3) + ' 一問一答' : kind);
   }
   function quizSubject(kind) {
@@ -1148,6 +1236,7 @@ function calcAllowance(st, ym, today, cfg) {
     el.innerHTML = `<div class="quiz">
       <div class="qhead"><button class="qclose" data-q="quit">✕ やめる</button><div class="qprog"><i></i></div><div class="combo"></div></div>
       <div class="qbody">
+        ${kind === 'weak' ? '<div class="boss"><span class="boss-e">👾</span><span class="boss-bar"><i></i></span><span class="boss-hp"></span></div>' : ''}
         <div class="shotclock"><svg width="76" height="76"><circle cx="38" cy="38" r="33" stroke="#26324f" stroke-width="7" fill="none"/><circle class="ring" cx="38" cy="38" r="33" stroke="#ff5a5a" stroke-width="7" fill="none" stroke-linecap="round" stroke-dasharray="207.3" stroke-dashoffset="0"/></svg><b>24</b></div>
         <div class="qprompt"></div><div class="qmain"></div><div class="qhint"></div>
         <form class="qform" style="width:100%" autocomplete="off"><input class="qinput" autocapitalize="off" autocorrect="off" spellcheck="false" autocomplete="off" enterkeyhint="send"><button class="btn big" style="margin-top:10px">SHOOT 🏀</button></form>
@@ -1172,7 +1261,8 @@ function calcAllowance(st, ym, today, cfg) {
     }
     function show() {
       const q = qs[st.i];
-      st.locked = false;
+      st.locked = false; st.qt0 = Date.now(); st.bossI = st.i;
+      bossDraw();
       if (setOf) {
         const si = Math.floor(st.i / setOf); const sn = Math.min(setOf, qs.length - si * setOf);
         q$('.qprog i').style.width = ((st.i % setOf) / sn) * 100 + '%';
@@ -1193,10 +1283,24 @@ function calcAllowance(st, ym, today, cfg) {
       else q$('.choices').innerHTML = q.choices.map((c) => `<button class="choice" data-c="${esc(c)}">${esc(c)}</button>`).join('');
       tick();
     }
+    // 苦手つぶしはボス戦：正解でボスの HP が減る（見せ方だけ）。セットごとに1体
+    function bossState() {
+      const si = setOf ? Math.floor((st.bossI || 0) / setOf) : 0;
+      const size = setOf ? Math.min(setOf, qs.length - si * setOf) : qs.length;
+      return { size, left: Math.max(0, size - (st.ok - (st.setOk || 0))) };
+    }
+    function bossDraw(hit) {
+      const b = q$('.boss'); if (!b) return;
+      const { left, size } = bossState();
+      b.querySelector('i').style.width = (left / size) * 100 + '%';
+      b.querySelector('.boss-hp').textContent = `HP ${left}`;
+      if (hit) { b.classList.remove('hit'); void b.offsetWidth; b.classList.add('hit'); }
+    }
     function setCombo() {
       const c = q$('.combo');
-      c.textContent = st.combo >= 3 ? `🔥 ON FIRE ×${st.combo}` : st.combo > 0 ? `${st.combo} COMBO` : '';
-      c.className = 'combo' + (st.combo >= 3 ? ' fire' : '');
+      c.textContent = st.combo >= FEVER_AT ? `🔥 ZONE ×${st.combo}` : st.combo >= 3 ? `🔥 ON FIRE ×${st.combo}` : st.combo > 0 ? `${st.combo} COMBO` : '';
+      c.className = 'combo' + (st.combo >= FEVER_AT ? ' fever-t' : st.combo >= 3 ? ' fire' : '');
+      el.classList.toggle('fever', st.combo >= FEVER_AT);
     }
     function answer(val, btn) {
       if (st.locked || st.ended) return;
@@ -1210,11 +1314,13 @@ function calcAllowance(st, ym, today, cfg) {
       if (res === 'ok') {
         st.ok++; st.combo++; st.maxCombo = Math.max(st.maxCombo, st.combo);
         const p = 1; st.pts += p;
-        j.textContent = st.combo >= 3 ? `🔥 SWISH! +${p}` : `NICE! +${p}`; j.className = 'judge ok';
+        j.textContent = st.combo >= 3 ? `🔥 ${pick(SHOT_WORDS)}` : `NICE! +${p}`; j.className = 'judge ok';
         // 動詞の形（4択の練習）では苦手を消さない。消えるのは苦手つぶし・チャレンジで書いて正解した時
         if (wk[q.key] && !q.drill) { wk[q.key]--; if (wk[q.key] <= 0) delete wk[q.key]; }
-        sfx.ok(); if (st.combo >= 3) confetti(25);
+        sfx.combo(st.combo); if (st.combo >= 3) confetti(25);
         if (btn) btn.classList.add('ok');
+        juiceHit(btn, st.combo, Date.now() - st.qt0);
+        bossDraw(true);
         // リスニングは正解でも意味を見せる（聞いた英語と意味を結びつける）
         if (q.say) q$('.answer').innerHTML = listenLine(q);
       } else {
@@ -1227,13 +1333,14 @@ function calcAllowance(st, ym, today, cfg) {
         q$('.answer').innerHTML = `正解：${esc(q.answer)}${listenLine(q)}${tip ? `<div class="rule">💡 ${esc(tip)}</div>` : ''}`;
         res === 'time' ? sfx.buzzer() : sfx.ng();
         if (btn) btn.classList.add('ng');
+        buzz(60); q$('.qmain').classList.add('shake-x'); setTimeout(() => q$('.qmain') && q$('.qmain').classList.remove('shake-x'), 400);
         el.querySelectorAll('.choice').forEach((b) => { if (b.dataset.c === q.answer) b.classList.add('ok'); });
         // まちがえたら、ゆっくりもう一度読み上げる
         if (q.say) setTimeout(() => { if (!st.ended) sayEn(q.say, true); }, 600);
       }
       save();
       setCombo();
-      const wait = res === 'ok' ? (q.say ? 1800 : 750) : q.say ? 4200 : ruleTip(q) ? 3200 : 1700;
+      const wait = res === 'ok' ? (q.say ? 1800 : 550) : q.say ? 4200 : ruleTip(q) ? 3200 : 1500; // テンポよく次へ
       setTimeout(() => { if (st.ended) return; st.i++; if (st.i >= qs.length) finish(false); else if (setOf && st.i % setOf === 0) setBreak(); else show(); }, wait);
     }
     // セットの区切り。ここで終わっても「途中でやめた」にはならない（5問以上ぜんぶ正解ならチケットもそのまま）
@@ -1251,13 +1358,14 @@ function calcAllowance(st, ym, today, cfg) {
         <button class="btn big" data-set="next">もう1セット（あと${left}問）▶</button>
         <button class="btn ghost" data-set="end" style="margin-top:10px">ここで終わる</button></div>`, {
         closeOnTap: false, cls: 'solid',
-        onMount: (o, close) => { o.addEventListener('click', (e) => { const b = e.target.closest('[data-set]'); if (!b) return; sfx.tap(); close(); if (b.dataset.set === 'next') show(); else finish(false, true); }); },
+        onMount: (o, close) => { o.addEventListener('click', (e) => { const b = e.target.closest('[data-set]'); if (!b) return; sfx.tap(); close(); if (b.dataset.set === 'next') { st.setOk = st.ok; show(); } else finish(false, true); }); },
       });
     }
     function finish(quit, early) {
       if (st.ended) return;
       st.ended = true;
       clearInterval(st.timer);
+      el.classList.remove('fever'); // 結果は読みやすい背景で
       if (window.speechSynthesis) speechSynthesis.cancel();
       const n = quit || early ? st.answered : qs.length;
       if (quit && n === 0) { el.remove(); return; }
@@ -1269,6 +1377,8 @@ function calcAllowance(st, ym, today, cfg) {
       let weakTicket = !!st.weakTicket; // セットの区切りで先に渡した分
       if (kind === 'weak' && !quit && n >= WEAK_BONUS_MIN && st.ok === n && !d.wkt) { d.wkt = 1; S.tickets++; weakTicket = true; }
       const allOk = !quit && n > 0 && st.ok === n; // 見出し・コーチのことば用（チケットの判定には使わない）
+      const bossDown = kind === 'weak' && !quit && bossState().left === 0;
+      if (bossDown) S.boss = (S.boss || 0) + 1;
       if (kind !== 'weak') S.best[kind] = Math.max(S.best[kind] || 0, st.ok);
       markPlayed(kind, st.ok, st.maxCombo);
       const subject = quizSubject(kind);
@@ -1278,11 +1388,12 @@ function calcAllowance(st, ym, today, cfg) {
       if (!r) { save(); logEvent('quiz', names[kind], subject, 0, info); }
       const tips = [...new Set(st.miss.map(ruleTip).filter(Boolean))];
       const tot = st.pts + (r && r.tipoff ? 1 : 0);
-      if (perfect || allOk) { sfx.fanfare(); confetti(220); } else if (st.ok >= n * 0.7) { sfx.coin(); confetti(80); } else sfx.tap();
+      if (perfect || allOk) { sfx.fanfare(); confetti(220); emojiRain(['🔥', '💯', '🏀', '🏆'], 28); } else if (st.ok >= n * 0.7) { sfx.coin(); confetti(80); } else sfx.tap();
       el.querySelector('.quiz').innerHTML = `<div class="qbody result">
         <div style="font-family:var(--display);font-weight:800;font-size:18px">${esc(names[kind])}</div>
-        <div class="big">${st.ok}<span style="font-size:28px">/${n}</span></div>
-        <div class="lvup-title" style="font-size:${perfect || allOk ? 40 : 30}px">${perfect || allOk ? 'PERFECT!!' : st.ok >= n * 0.7 ? 'GREAT!' : 'NICE TRY!'}</div>
+        ${resultStars(st.ok, n)}
+        <div class="big"><span class="count-up">0</span><span style="font-size:28px">/${n}</span></div>
+        <div class="lvup-title ${perfect || allOk ? 'rainbow' : ''}" style="font-size:${perfect || allOk ? 40 : 30}px">${bossDown ? 'BOSS DOWN!!' : kind === 'weak' ? `👾 あと HP ${bossState().left}` : perfect || allOk ? 'PERFECT!!' : st.ok >= n * 0.7 ? 'GREAT!' : 'NICE TRY!'}</div>
         <div class="shot-pts" style="opacity:1">+${tot} PTS</div>
         ${st.maxCombo >= 3 ? `<div class="note">最大 ${st.maxCombo} 連続正解 🔥</div>` : ''}
         ${ticket ? '<div class="newtag">全問正解ボーナス 🎟️ +1</div>' : ''}
@@ -1295,6 +1406,7 @@ function calcAllowance(st, ym, today, cfg) {
         ${paperNudge()}
         <div class="row" style="width:100%;margin-top:14px"><button class="btn ghost" style="flex:1" data-q="again">${kind === 'weak' ? 'もう1セット' : 'もう1回'}</button><button class="btn" style="flex:1" data-q="close">とじる</button></div>
       </div>`;
+      countUp(el.querySelector('.count-up'), st.ok);
       el.addEventListener('click', async (e) => {
         const a = e.target.closest('[data-q]'); if (!a) return;
         el.remove();
@@ -1364,14 +1476,127 @@ function calcAllowance(st, ym, today, cfg) {
     // 先にミッションを SHOOT（結果画面のまま閉じられても、ミッションは入るように）
     if (hasM && !done) await onMission('kanji');
     if (ok === qs.length) { sfx.fanfare(); confetti(160); } else sfx.coin();
+    let goBoss = false;
     await overlay(`<div class="qbody result" style="max-width:420px">
       <div style="font-family:var(--display);font-weight:800;font-size:18px">✍️ 漢字かき取り</div>
       <div class="big">${ok}<span style="font-size:28px">/${qs.length}</span></div>
       <div class="lvup-title" style="font-size:30px">${ok === qs.length ? 'PERFECT!!' : ok >= qs.length * 0.7 ? 'GREAT!' : 'NICE TRY!'}</div>
       ${miss.length ? `<ul>${miss.map((w) => `<li>${esc(w[1])} → ${esc(w[0])}</li>`).join('')}</ul><div class="note">↑ 紙にあと3回書いて覚えよう ✍️（次のかき取りで先に出るよ）</div>` : ''}
       <div class="coach-mini">${coachFace(ok === qs.length ? 'fire' : 'wink')}<span>${esc(ok === qs.length ? '全部書けた！ 漢字もエース級だ 🔥' : '書いた分だけ覚えるぞ。まちがえた字こそ宝物だ')}</span></div>
-      <div class="newtag">${!hasM ? '漢字ミッションがリストにないので、記録だけしたよ' : done ? '今日の漢字ミッションは もう IN ✓ 練習ナイス！' : '✍️ 漢字ミッション IN！'}</div></div>`, { lockMs: 900, cls: 'solid kw' });
+      <div class="newtag">${!hasM ? '漢字ミッションがリストにないので、記録だけしたよ' : done ? '今日の漢字ミッションは もう IN ✓ 練習ナイス！' : '✍️ 漢字ミッション IN！'}</div>
+      ${weakTotal() ? `<button class="btn rush-next" data-kwnext="1">👾 つぎは ボス戦 ${WEAK_SET}問 ▶</button>` : ''}</div>`, { lockMs: 900, cls: 'solid kw', onMount: (o, close) => { o.addEventListener('click', (e) => { if (e.target.closest('[data-kwnext]')) { goBoss = true; close(); } }); } });
     render();
+    if (goBoss) startQuiz('weak');
+  }
+
+  // ---------- 24秒ラッシュ：2択をどんどん。まちがえると2秒へる（2026-11-05） ----------
+  // 点は 正解−まちがい（1回 10Pまで）。ポイントがつくのはラッシュ全部で1日2回まで（それ以降は記録だけ。ポイントの増え方をほかのゲームとそろえる）
+  // まちがえた問題は苦手リストに入る。2択なので、正解しても苦手は消さない（消えるのは苦手つぶしで正解した時）
+  const RUSH = { sec: 24, penalty: 2, maxPts: 10, rounds: 2 };
+  const rushModes = () => [['verb', '🧩', '動詞の形'], ['kanji', '漢', '漢字よみ'], ...qaSubjects().map((s) => ['qa:' + s, kindIcon('qa:' + s), s])];
+  const rushName = (m) => (rushModes().find((x) => x[0] === m) || [m, '', m])[2];
+  const rushSubject = (m) => (m === 'verb' ? '英語' : m === 'kanji' ? '国語' : SUBJECTS.includes(m.slice(3)) ? m.slice(3) : '全教科');
+  const rushTiles = () => rushModes().map(([m, e, n], i) => `<button class="rush-tile ${i === 0 ? 'main' : ''}" data-act="rush" data-mode="${esc(m)}"><span>${e}</span><b>${esc(n)}</b><small>${S.best['rush:' + m] != null ? `ベスト ${S.best['rush:' + m]}問` : 'NEW'}</small></button>`).join('');
+  // 苦手をときどき混ぜる
+  function rushPick(list, kind, keyOf) { const wk = S.weak[kind] || {}; const weak = list.filter((x) => wk[keyOf(x)]); return weak.length && Math.random() < 0.5 ? pick(weak) : pick(list); }
+  function rushItem(mode) {
+    let q;
+    if (mode === 'verb') q = Math.random() < 0.6 ? mkVerbPast(rushPick(PAST_FORMS, 'past', (w) => w[0])) : mkVerbThird(rushPick(THIRD_FORMS, 'third', (w) => w[0]));
+    else if (mode === 'kanji') q = mkKanji(rushPick(BANK.kanji, 'kanji', (x) => x.q));
+    else q = mkQa(rushPick(BANK.qa.filter((x) => x.s === mode.slice(3)), 'qa', (x) => x.q));
+    const others = q.choices.filter((c) => c !== q.answer);
+    return { ...q, other: others.length ? pick(others) : '—' };
+  }
+  function startRush(mode) {
+    if (!rushModes().some((x) => x[0] === mode)) { toast('問題が見つからなかったよ'); render(); return; }
+    const kind = 'rush:' + mode;
+    const st = { ok: 0, miss: [], combo: 0, maxCombo: 0, ended: false, locked: false, end: Date.now() + RUSH.sec * 1000, t0: Date.now(), q: null, lastSec: 99, timer: null };
+    const el = document.createElement('div'); el.className = 'ov rush';
+    el.innerHTML = `<div class="quiz"><div class="qhead"><button class="qclose" data-u="quit">✕ やめる</button><div class="qprog rush-bar"><i></i></div><div class="combo rush-sc">0</div></div>
+      <div class="qbody"><div class="rush-t"></div><div class="rush-q"></div><div class="rush-c"></div><div class="rush-cb"></div></div></div>`;
+    document.body.appendChild(el);
+    const q$ = (x) => el.querySelector(x);
+    function next() {
+      let q; let tries = 0;
+      do { q = rushItem(mode); tries++; } while (st.q && q.key === st.q.key && tries < 6);
+      st.q = q; st.locked = false;
+      q$('.rush-q').innerHTML = `<div class="rush-m ${q.long ? 'long' : ''}">${q.main}</div>`;
+      q$('.rush-q').classList.remove('in'); void q$('.rush-q').offsetWidth; q$('.rush-q').classList.add('in');
+      q$('.rush-c').innerHTML = shuffle([q.answer, q.other]).map((c) => `<button class="rush-b" data-u="a" data-c="${esc(c)}">${esc(c)}</button>`).join('');
+    }
+    function pick1(val, b) {
+      if (st.locked || st.ended) return;
+      st.locked = true;
+      const q = st.q;
+      if (val === q.answer) {
+        st.ok++; st.combo++; st.maxCombo = Math.max(st.maxCombo, st.combo);
+        b.classList.add('ok'); sfx.combo(st.combo); juiceHit(b, st.combo, 9999);
+        el.classList.toggle('fever', st.combo >= FEVER_AT);
+        q$('.rush-sc').textContent = st.ok;
+        q$('.rush-cb').textContent = st.combo >= FEVER_AT ? `🔥 ZONE ×${st.combo}` : st.combo >= 2 ? `${st.combo} COMBO` : '';
+        setTimeout(() => { if (!st.ended) next(); }, 180);
+      } else {
+        st.combo = 0; st.miss.push(q); st.end -= RUSH.penalty * 1000;
+        const wk = S.weak[q.type];
+        if (wk && (wk[q.key] || (st.added || 0) < 3)) { if (!wk[q.key]) st.added = (st.added || 0) + 1; wk[q.key] = (wk[q.key] || 0) + 1; }
+        b.classList.add('ng'); sfx.ng(); buzz(60);
+        el.classList.remove('fever'); q$('.rush-cb').textContent = '';
+        el.querySelectorAll('.rush-b').forEach((x) => { if (x.dataset.c === q.answer) x.classList.add('ok'); });
+        const r = b.getBoundingClientRect(); floatText(r.left + r.width / 2, r.top, `-${RUSH.penalty}秒`, 'minus');
+        q$('.rush-q').classList.add('miss'); setTimeout(() => q$('.rush-q') && q$('.rush-q').classList.remove('miss'), 400);
+        setTimeout(() => { if (!st.ended) next(); }, 650);
+      }
+    }
+    function finish(quit) {
+      if (st.ended) return; st.ended = true;
+      clearInterval(st.timer);
+      el.classList.remove('fever');
+      if (quit && !st.ok && !st.miss.length) { save(); el.remove(); render(); return; }
+      const d = day();
+      // まちがいの分は引く（当てずっぽうで点が入らないように）。点がつかなかった回は回数に数えない
+      const net = Math.min(RUSH.maxPts, Math.max(0, st.ok - st.miss.length));
+      const over = (d.rush || 0) >= RUSH.rounds;
+      const pts = net > 0 && !over ? net : 0;
+      if (pts > 0) d.rush = (d.rush || 0) + 1;
+      const record = !quit && st.ok > (S.best[kind] || 0);
+      if (record) S.best[kind] = st.ok;
+      markPlayed(kind, st.ok, st.maxCombo);
+      const info = { kind, n: st.ok + st.miss.length, ok: st.ok, maxCombo: st.maxCombo, miss: st.miss.map((q) => q.key), sec: Math.round((Date.now() - st.t0) / 1000), quit: quit || undefined };
+      const item = `${RUSH.sec}秒ラッシュ ${rushName(mode)}`;
+      const r = pts > 0 ? addPoints(pts, 'quiz', item, rushSubject(mode), info) : null;
+      if (!r) { save(); logEvent('quiz', item, rushSubject(mode), 0, info); }
+      if (record) { sfx.fanfare(); confetti(220); emojiRain(['🔥', '🏀', '⭐', '🏆'], 26); } else { sfx.coin(); confetti(90); }
+      q$('.quiz').innerHTML = `<div class="qbody result"><div style="font-family:var(--display);font-weight:800;font-size:18px">⚡ ${esc(item)}</div><div class="big count-up">0</div>
+        <div class="lvup-title rainbow" style="font-size:${record ? 40 : 30}px">${record ? 'NEW RECORD!!' : st.ok >= 10 ? 'GREAT!' : 'NICE TRY!'}</div>
+        <div class="shot-pts ${r ? '' : 'small'}" style="opacity:1">${r ? `+${pts + (r.tipoff ? 1 : 0)} PTS` : over && net > 0 ? '今日のポイントはゲットずみ（1日2回まで）' : '+0 PTS'}</div>
+        <div class="note">正解 ${st.ok} − まちがい ${st.miss.length} ・ ベスト ${S.best[kind] || st.ok}問 ・ 最大 ${st.maxCombo} 連続 🔥</div>
+        ${st.miss.length ? `<ul class="rush-ul">${[...new Map(st.miss.map((q) => [q.key, q])).values()].map((q) => `<li>${esc(q.key)} → ${esc(q.answer)}</li>`).join('')}</ul>` : ''}
+        ${st.miss.length && weakTotal() ? '<button class="btn rush-next" data-u="boss">👾 まちがえた問題を ボス戦で倒す ▶</button>' : ''}
+        ${paperNudge()}
+        <div class="row" style="width:100%;margin-top:14px"><button class="btn ghost" style="flex:1" data-u="again">もう1回</button><button class="btn" style="flex:1" data-u="close">とじる</button></div></div>`;
+      countUp(q$('.count-up'), st.ok);
+      st.after = async (k) => { el.remove(); if (r) await afterEffects(r); else render(); if (k === 'again') startRush(mode); else if (k === 'boss') startQuiz('weak'); };
+    }
+    el.addEventListener('click', (e) => {
+      const b = e.target.closest('[data-u]');
+      // 結果画面の「ミッションへ」（画面の移動は共通の処理がする）
+      if (!b) { if (st.after && e.target.closest('[data-tab]')) st.after('close'); return; }
+      const k = b.dataset.u;
+      if (k === 'a') pick1(b.dataset.c, b);
+      else if (k === 'quit') { if (!st.ended && confirm('やめる？')) finish(true); }
+      else if (st.after) st.after(k);
+    });
+    sfx.buzzer();
+    next();
+    st.timer = setInterval(() => {
+      const ms = st.end - Date.now(); const sec = Math.ceil(ms / 1000);
+      if (ms <= 0) { q$('.rush-t').textContent = '0'; finish(false); return; }
+      q$('.rush-t').textContent = sec;
+      q$('.rush-bar i').style.width = Math.max(0, (ms / (RUSH.sec * 1000)) * 100) + '%';
+      const low = sec <= 5; el.classList.toggle('low', low);
+      if (low && sec !== st.lastSec) tone(1200, 0.05, 'square', 0.07);
+      st.lastSec = sec;
+    }, 100);
   }
 
   // ---------- スピーキング（お手本を聞く → 英語で話す → 聞き取れた単語を色分け） ----------
@@ -1776,6 +2001,7 @@ function calcAllowance(st, ym, today, cfg) {
     else if (act === 'quiz') { sfx.tap(); startQuiz(a.dataset.kind); }
     else if (act === 'speak') { sfx.tap(); startSpeak(); }
     else if (act === 'omakase') { sfx.tap(); playKind(a.dataset.kind); }
+    else if (act === 'rush') { sfx.tap(); startRush(a.dataset.mode); }
     else if (act === 'chal') {
       const c = todayChal(); sfx.tap();
       if ((S.days[todayStr()] || {}).chal) toast('今日の挑戦状はクリアずみ！ 明日もお楽しみに 🏅');
@@ -1876,7 +2102,7 @@ function calcAllowance(st, ym, today, cfg) {
   function winLine(d, left) {
     if (d.win) return '<div class="winmsg win">🏆 今日はWIN！ ナイスゲーム！</div>';
     if (left > 0 && paperDone(d)) {
-      const p = autoPick(); const reach = p.kind === 'speak' ? 4 : 6;
+      const p = autoPick(); const reach = p.kind === 'speak' ? 4 : p.kind.startsWith('rush:') ? 3 : 6;
       return `<button class="winmsg go" data-act="omakase" data-kind="${esc(p.kind)}">あと <b>${left}</b> 点で WIN！ ${left <= reach ? 'ゲーム1回で届くよ' : 'ゲームで点をかせごう'} 🎮<span class="wg-k">▶ ${kindIcon(p.kind)} ${esc(quizName(p.kind))}</span></button>`;
     }
     return `<div class="winmsg">${left > 0 ? `あと ${left} 点で WIN → ガチャチケット！` : '紙のミッション1本（または⏱タイマー10分）で WIN！'}</div>`;

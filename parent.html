@@ -243,6 +243,7 @@ window.startParent = () => {
   const ICON = { mission: '🏀', quiz: '🎮', check: '✅', gacha: '🎰', undo: '↩️', cheer_read: '📣', test_set: '📅', goal_set: '🎯', voice: '💬', reset: '⚠️', timer: '⏱', trade: '🔄', complete: '👑', challenge: '📜', badge: '🏅', session: '📱', krcard: '📇', krcards: '📖', krname: '🏷️', krletter: '💌', krclear: '🏅', krlevel: '🎤' };
   const QNAME = { calc: '🧮 計算ダッシュ', speak: '🎤 スピーキング', listen: '🎧 リスニング', spell: 'スペル', plural: '複数形', kanji: '漢字よみ', weak: '苦手つぶし', challenge: '👑 チャレンジ（上級）', verb: '🧩 動詞の形トレーニング', kwrite: '✍️ 漢字かき取り（紙・自己採点）', 'qa:社会': '社会 一問一答', 'qa:理科': '理科 一問一答', kr: '🇰🇷 韓国語クイズ', krrush: '⚡ 韓国語ラッシュ（2択）', krmatch: '🃏 韓国語カードあわせ', krspeak: '🗣️ 韓国語まねっこ' };
 
+  const RUSH_NAME = { verb: '動詞の形', kanji: '漢字よみ', calc: '計算', pref: '都道府県', en: '英語' };
   function showLogin(msg) { $('#login').classList.remove('hidden'); $('#dash').classList.add('hidden'); $('#loginmsg').textContent = msg || ''; }
 
   async function load() {
@@ -351,7 +352,7 @@ window.startParent = () => {
       const s = qs.filter((q) => q.detail.kind === k); if (!s.length) return '';
       const recent = s.slice(-10);
       const ok = recent.reduce((a, q) => a + q.detail.ok, 0), n = recent.reduce((a, q) => a + q.detail.n, 0);
-      return `<div class="qz" style="margin-bottom:12px"><span class="k">${esc(QNAME[k] || (k.startsWith('qa:') ? k.slice(3) + ' 一問一答' : k.startsWith('kr:') ? '🇰🇷 韓国語 ' + ((typeof KR_STAGES !== 'undefined' && KR_STAGES.find((s) => s.id === k.slice(3))) || { name: k.slice(3) }).name : k))}</span>　直近${recent.length}回の正答率 <b>${Math.round(ok / n * 100)}%</b>
+      return `<div class="qz" style="margin-bottom:12px"><span class="k">${esc(QNAME[k] || (k.startsWith('qa:') ? k.slice(3) + ' 一問一答' : k.startsWith('kr:') ? '🇰🇷 韓国語 ' + ((typeof KR_STAGES !== 'undefined' && KR_STAGES.find((s) => s.id === k.slice(3))) || { name: k.slice(3) }).name : k.startsWith('rush:') ? '⚡ ラッシュ（2択）' + (RUSH_NAME[k.slice(5)] || k.slice(5).replace('qa:', '')) : k))}</span>　直近${recent.length}回の正答率 <b>${Math.round(ok / n * 100)}%</b>
         <div class="spark">${recent.map((q) => `<i style="height:${Math.max(6, q.detail.ok / q.detail.n * 100)}%" title="${q.date} ${q.detail.ok}/${q.detail.n}"></i>`).join('')}</div></div>`;
     }).join('') : '<div class="empty">まだプレイしていません</div>';
 

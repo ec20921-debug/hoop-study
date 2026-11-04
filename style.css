@@ -604,3 +604,100 @@ button.winmsg.go b { color: var(--yellow); font-size: 18px; }
 .qbody.result { min-height: 0; overflow-y: auto; justify-content: flex-start; overscroll-behavior: contain; padding-bottom: 8px; }
 .qbody.result > :first-child { margin-top: auto; }
 .qbody.result > :last-child { margin-bottom: auto; }
+
+/* ---------- ドパミン演出（点滅はしない。色はゆっくり変える） ---------- */
+.fx { position: fixed; z-index: 70; pointer-events: none; left: 0; top: 0; }
+.fx-p { line-height: 1; animation: fxp .75s cubic-bezier(.15,.7,.3,1) forwards; }
+@keyframes fxp { 0% { transform: translate(-50%, -50%) scale(.4); opacity: 1; } 100% { transform: translate(calc(-50% + var(--dx)), calc(-50% + var(--dy))) rotate(var(--r)) scale(1); opacity: 0; } }
+.fx-t { font-family: var(--display); font-weight: 900; transform: translate(-50%, -50%); white-space: nowrap; text-shadow: 0 2px 0 #0008, 0 0 14px #ff7a1aaa; }
+.fx-t.plus { font-size: 30px; color: var(--yellow); animation: fxup .8s ease-out forwards; }
+.fx-t.minus { font-size: 24px; color: #ff6b6b; animation: fxup .8s ease-out forwards; }
+.fx-t.fast { font-size: 24px; color: var(--cyan); animation: fxword .8s cubic-bezier(.2,1.6,.4,1) forwards; }
+.fx-t.word { font-size: 38px; color: #fff; animation: fxword 1s cubic-bezier(.2,1.6,.4,1) forwards; }
+@keyframes fxup { 0% { transform: translate(-50%, -50%) scale(.6); opacity: 0; } 25% { transform: translate(-50%, -80%) scale(1.25); opacity: 1; } 100% { transform: translate(-50%, -190%) scale(1); opacity: 0; } }
+@keyframes fxword { 0% { transform: translate(-50%, -50%) scale(.3) rotate(-8deg); opacity: 0; } 30% { transform: translate(-50%, -50%) scale(1.2) rotate(3deg); opacity: 1; } 70% { transform: translate(-50%, -50%) scale(1); opacity: 1; } 100% { transform: translate(-50%, -80%) scale(1); opacity: 0; } }
+.fx-rain { top: -40px; line-height: 1; animation: fxrain 1.9s linear forwards; }
+@keyframes fxrain { 0% { transform: translateY(0) rotate(0); opacity: 1; } 85% { opacity: 1; } 100% { transform: translateY(110vh) rotate(var(--r)); opacity: 0; } }
+
+/* ZONE：背景の色がゆっくりまわる */
+.ov.fever { background: linear-gradient(135deg, #ff7a1a, #e0234e, #7c3aed, #ff9d00) !important; background-size: 400% 400% !important; animation: feverbg 5s ease infinite; }
+@keyframes feverbg { 0%,100% { background-position: 0% 50%; } 50% { background-position: 100% 50%; } }
+.ov.fever .qmain, .ov.fever .qprompt { text-shadow: 0 2px 8px #0008; }
+.ov.fever .choice:not(.ok):not(.ng) { background: #0a0e1ae6; }
+.combo.fever-t { color: #fff; font-size: 17px; text-shadow: 0 0 12px #fff; animation: pop .3s; }
+.qmain.shake-x { animation: shakex .35s; }
+@keyframes shakex { 0%,100% { transform: translateX(0); } 20% { transform: translateX(-10px); } 40% { transform: translateX(9px); } 60% { transform: translateX(-6px); } 80% { transform: translateX(4px); } }
+.choice { transition: transform .08s; }
+.choice:active { transform: scale(.95); }
+.choice.ok { animation: chok .35s cubic-bezier(.2,1.8,.4,1); }
+@keyframes chok { 0% { transform: scale(.9); } 50% { transform: scale(1.08); } 100% { transform: scale(1); } }
+
+/* 結果 */
+.res-stars { display: flex; justify-content: center; gap: 6px; margin: 2px 0; }
+.res-stars i { font-style: normal; font-size: 44px; line-height: 1; color: #ffffff2e; }
+.res-stars i.on { color: var(--yellow); text-shadow: 0 0 18px #ffd400; animation: stardrop .5s cubic-bezier(.2,1.8,.4,1) both; }
+@keyframes stardrop { 0% { transform: translateY(-40px) scale(.2) rotate(-90deg); opacity: 0; } 100% { transform: translateY(0) scale(1) rotate(0); opacity: 1; } }
+.rainbow { background: linear-gradient(90deg, #ff7a1a, #ffd400, #2ee59d, #22d3ee, #a855f7, #ff7a1a); background-size: 200% auto; -webkit-background-clip: text; background-clip: text; color: transparent; animation: rainbowtxt 2.4s linear infinite; }
+@keyframes rainbowtxt { to { background-position: 200% center; } }
+.count-up.done { animation: pop .3s; }
+
+/* ガチャ：連打で開ける */
+.pack { position: relative; display: inline-block; font-size: 130px; line-height: 1; filter: drop-shadow(0 12px 22px #000a); transition: transform .12s; }
+.pack::before { content: ""; position: absolute; left: 50%; top: 50%; width: 180px; height: 180px; border-radius: 50%; transform: translate(-50%, -50%); background: radial-gradient(circle, var(--a, #ffffff55), transparent 68%); z-index: -1; opacity: var(--o, 0); transition: opacity .2s; }
+.pack.hit { animation: packhit .2s; }
+@keyframes packhit { 0%,100% { transform: scale(1) rotate(0); } 30% { transform: scale(1.18) rotate(-10deg); } 70% { transform: scale(1.1) rotate(10deg); } }
+.pack.t1 { --o: .7; }
+.pack.t2 { --o: 1; font-size: 150px; }
+.pack.t3 { --o: 1; font-size: 170px; }
+.pack.a-N { --a: #d7dcea99; } .pack.a-R { --a: #4f9dffcc; } .pack.a-SR { --a: #c084fce6; } .pack.a-SSR { --a: #ffd400f0; } .pack.a-UR { --a: #ff5ec4f5; }
+.pack-tap { margin-top: 18px; font-family: var(--display); font-weight: 900; font-size: 26px; color: #fff; animation: pulse .7s ease-in-out infinite; }
+@keyframes pulse { 0%,100% { transform: scale(1); } 50% { transform: scale(1.1); } }
+.pack-dots { display: flex; gap: 8px; justify-content: center; margin-top: 10px; }
+.pack-dots i { width: 14px; height: 14px; border-radius: 50%; background: #ffffff33; }
+.pack-dots i.on { background: var(--yellow); box-shadow: 0 0 10px var(--yellow); }
+.rare-call { font-family: var(--display); font-weight: 900; font-size: 36px; margin-bottom: 12px; animation: pop .5s cubic-bezier(.2,1.8,.4,1); }
+
+/* ボス戦（苦手つぶし） */
+.boss { display: flex; align-items: center; gap: 8px; width: 100%; padding: 8px 12px; border-radius: 14px; background: #0006; border: 1px solid #ff5a5a66; }
+.boss-e { font-size: 30px; line-height: 1; }
+.boss-bar { flex: 1; height: 14px; border-radius: 99px; background: #26324f; overflow: hidden; }
+.boss-bar > i { display: block; height: 100%; width: 100%; background: linear-gradient(90deg, #ff5a5a, #ff9d00); border-radius: 99px; transition: width .35s; }
+.boss-hp { font-family: var(--display); font-weight: 800; font-size: 14px; white-space: nowrap; }
+.boss.hit .boss-e { animation: bosshit .35s; }
+@keyframes bosshit { 0%,100% { transform: scale(1) rotate(0); } 30% { transform: scale(1.5) rotate(-18deg); } 60% { transform: scale(.85) rotate(14deg); } }
+
+/* 24秒ラッシュ */
+.ov.rush { background: radial-gradient(circle at 50% 30%, #1b2a55, #05070d); }
+.rush-bar > i { background: linear-gradient(90deg, var(--yellow), var(--orange)); transition: width .1s linear; }
+.rush.low .rush-bar > i { background: #ff5a5a; }
+.rush-sc { font-size: 26px; color: var(--yellow); min-width: 54px; }
+.rush-t { font-family: var(--display); font-weight: 900; font-size: 34px; color: #ffffffcc; }
+.rush.low .rush-t { color: #ff6b6b; animation: pulse .5s ease-in-out infinite; }
+.rush-q { display: flex; flex-direction: column; align-items: center; gap: 4px; min-height: 120px; justify-content: center; text-align: center; width: 100%; }
+.rush-m { font-family: var(--display); font-weight: 800; font-size: 40px; line-height: 1.25; overflow-wrap: anywhere; }
+.rush-m.long { font-family: var(--body); font-weight: 900; font-size: 22px; line-height: 1.5; }
+.rush-q.in { animation: rushin .22s cubic-bezier(.2,1.6,.4,1); }
+@keyframes rushin { 0% { transform: scale(.6) rotate(-4deg); } 100% { transform: scale(1) rotate(0); } }
+.rush-q.miss { animation: shakex .35s; }
+.rush-c { display: grid; gap: 10px; width: 100%; }
+.rush-b { min-height: 68px; padding: 10px; border-radius: 18px; font-size: 20px; font-weight: 900; color: #fff; background: linear-gradient(135deg, #ff7a1a, #c2410c); box-shadow: 0 5px 0 #7a2a06; overflow-wrap: anywhere; }
+.rush-b:active { transform: translateY(3px); box-shadow: 0 2px 0 #7a2a06; }
+.rush-b.ok { background: var(--green); color: #052; box-shadow: 0 5px 0 #0c7a52; }
+.rush-b.ng { background: #7a1f1f; box-shadow: 0 5px 0 #4a1414; }
+.rush-cb { min-height: 34px; font-family: var(--display); font-weight: 900; font-size: 24px; color: var(--yellow); text-shadow: 0 0 12px #ffd400; }
+.rush-ul { max-height: 24vh; overflow-y: auto; }
+.rush-next { width: 100%; margin-top: 10px; padding: 14px 10px; font-size: 16px; border-radius: 16px; }
+.rush-tiles { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 8px; }
+.rush-tile { display: flex; flex-direction: column; align-items: center; gap: 2px; padding: 10px 4px; border-radius: 16px; background: linear-gradient(145deg, #4a2408, #1b2a55); border: 1px solid #ff9d4d88; }
+.rush-tile > span { font-size: 26px; line-height: 1.1; font-family: var(--display); }
+.rush-tile b { font-size: 14px; font-weight: 900; }
+.rush-tile small { font-size: 11px; color: #ffd9b8; }
+.rush-tile.main { grid-column: 1 / -1; flex-direction: row; justify-content: center; gap: 10px; padding: 14px; background: linear-gradient(135deg, #ffd400, #ff5e3a); color: #3a1a05; border: 0; box-shadow: 0 4px 0 #a33a00; }
+.rush-tile.main b { font-size: 19px; }
+.rush-tile.main small { color: #5a2a05; }
+.rush-tile:active { transform: translateY(2px); }
+
+@media (prefers-reduced-motion: reduce) {
+  .ov.fever, .rainbow, .pack-tap, .rush.low .rush-t { animation: none !important; }
+}
+.shot-pts.small { font-size: 18px; }

@@ -65,7 +65,7 @@ function calcAllowance(st, ym, today, cfg) {
       test: { name: 'テスト', date: '', checks: {} },
       goals: {}, voices: [], voiceDays: {}, voiceWeek: '', cheerLog: [], startDate: todayStr(),
       milestones: {}, cheersSeen: [], lastCheer: null, lastSync: 0, syncError: null,
-      timer: null, moneySeen: null, complete: '', beat: {}, badges: {}, chal: 0, recapSeen: '',
+      timer: null, moneySeen: null, complete: '', beat: {}, badges: {}, chal: 0, recapSeen: '', boss: 0,
       device: rid(20), created: Date.now(), updated: Date.now(),
     };
   }
@@ -543,10 +543,10 @@ function calcAllowance(st, ym, today, cfg) {
   // ② ゲームは「5もん だけ」。けいさんを いちばん大きく、リスニング・都道府県も えらべる（おわったら すぐ ③ ガチャへ）
   // 5もんの ゲームでは「ぜんぶ せいかいで 🎟️」はない（10問の時だけ。チケットの くばり方は前と同じ）
   function shortGames() {
-    const more = [['listen', '🎧', 'リスニング'], ...(qaSubjects().includes('都道府県') ? [['qa:都道府県', '🗾', 'とどうふけん']] : [])];
+    const more = [['kr', '<b class="ti-kr">한</b>', 'かんこくご'], ['listen', '🎧', 'リスニング'], ...(qaSubjects().includes('都道府県') ? [['qa:都道府県', '🗾', 'とどうふけん']] : [])];
     return `<button class="bigbtn short" data-act="short" data-kind="calc">🧮 けいさん ${SHORT_LEN}もん<small>さっと おわるよ ▶</small></button>
-      <button class="sbtn wide kr-short" data-act="short" data-kind="kr"><b class="ti-kr">한</b> かんこくご<small>${SHORT_LEN}もん</small></button>
-      <div class="shorts">${more.map(([k, e, n]) => `<button class="sbtn" data-act="short" data-kind="${esc(k)}">${e} ${n}<small>${SHORT_LEN}もん</small></button>`).join('')}</div>`;
+      <button class="bigbtn rush" data-act="rushmenu">⚡ ${RUSH.sec}びょう ラッシュ<small>けいさん・とどうふけん・えいご・かんこくご</small></button>
+      <div class="shorts three">${more.map(([k, e, n]) => `<button class="sbtn" data-act="short" data-kind="${esc(k)}">${e} ${n}<small>${SHORT_LEN}もん</small></button>`).join('')}</div>`;
   }
   // 「きょうの きもち」：ボタンを おすだけで おうちに とどく（1日1回）。ことばで 書きたい時は 声の ページへ
   const MOOD_Q = 'きょうの きもちは？';
@@ -585,7 +585,7 @@ function calcAllowance(st, ym, today, cfg) {
     return `<button class="hero ${inStep ? 'in-step' : ''}" data-act="omakase" data-kind="${esc(p.kind)}"><span class="hero-k">${inStep ? 'おすすめは これ！' : '▶ まよったら これ！'}</span>
       <span class="hero-t">${kindIcon(p.kind)} ${esc(kindLabel(p.kind))}</span><span class="hero-s">${esc(p.why)}</span><span class="hero-a">▶ あそぶ</span></button>`;
   }
-  function playKind(kind) { if (kind === 'speak') startSpeak(); else startQuiz(kind); }
+  function playKind(kind) { if (kind === 'speak') startSpeak(); else if (kind.startsWith('rush:')) startRush(kind.slice(5)); else startQuiz(kind); }
   function markPlayed(kind, ok, combo) {
     const d = day(); d.qk = d.qk || [];
     if (!d.qk.includes(kind)) d.qk.push(kind);
@@ -624,6 +624,8 @@ function calcAllowance(st, ym, today, cfg) {
     if (t === 'cards') return Object.keys(S.cards).length;
     if (t === 'allgames') return gameKinds().every((k) => S.lastPlay[k]) ? 1 : 0;
     if (t === 'krwords') return krMastered();
+    if (t === 'boss') return S.boss || 0;
+    if (t === 'rushbest') return Math.max(S.kr.rushBest || 0, ...Object.keys(S.best).filter((k) => k.startsWith('rush:')).map((k) => S.best[k]));
     if (t === 'krstage') return Object.keys(S.kr.clear).length;
     if (t === 'krname') return S.kr.name ? 1 : 0;
     if (t === 'krletter') return S.kr.letter ? 1 : 0;
@@ -702,7 +704,7 @@ function calcAllowance(st, ym, today, cfg) {
     const t = todayStr(); const d = S.days[t] || { m: [], pts: 0 };
     const st = streak(); const h = Number(new Intl.DateTimeFormat('en-US', { timeZone: 'Asia/Tokyo', hour: 'numeric', hour12: false }).format(new Date())) % 24;
     const left = ALLOWANCE.bigWinMissions - stdCount(d);
-    const v = { name: S.nick || 'キミ', streak: st, next: st + 1, left, weak: weakTotal(), days: S.test.date ? diffDays(t, S.test.date) : '', min: timerMin(), bonus: ALLOWANCE.bigWin, need: ALLOWANCE.bigWinMissions };
+    const v = { almost: krAlmost().length, rush: RUSH.sec, name: S.nick || 'キミ', streak: st, next: st + 1, left, weak: weakTotal(), days: S.test.date ? diffDays(t, S.test.date) : '', min: timerMin(), bonus: ALLOWANCE.bigWin, need: ALLOWANCE.bigWinMissions };
     const L = COACH_LINES; const out = [];
     const add = (k, mood) => (L[k] || []).forEach((s) => out.push({ text: fillLine(s, v), mood }));
     // いちばん最初は「いま、なにをすればいいか」（ホームの ① ② ③ と同じ）
@@ -714,6 +716,7 @@ function calcAllowance(st, ym, today, cfg) {
     if (S.timer) add('timer', 'happy');
     if (d.pts > 0 && !paperDone(d)) add('gameOnly', 'think');
     if (played(t) && !(d.qk || []).includes('qa:' + FOCUS_SUBJECT)) add('socialToday', 'think');
+    if (krAlmost().length >= 3) add('krAlmost', 'wink');
     if (played(t) && !(d.qk || []).includes('speak')) add('speakNotYet', 'wink');
     if (stdCount(d) >= ALLOWANCE.bigWinMissions) add('bigDone', 'fire');
     else if (left > 0 && left <= 2 && stdCount(d) > 0) add('nearBig', 'fire');
@@ -762,6 +765,8 @@ function calcAllowance(st, ym, today, cfg) {
       <div class="pg-h">ゲームで あそぼう</div>
       <div class="pg-s">1問 せいかいで 1ポイント。ぜんぶ せいかいなら 🎟️！</div>
       ${heroButton()}
+      <div class="sec-title"><h2>⚡ ${RUSH.sec}びょう ラッシュ</h2><span>2たくを どんどん</span></div>
+      <div class="rush-tiles">${rushTiles()}</div>
       <div class="sec-title"><h2>じぶんで えらぶ</h2></div>
       <div class="tiles">
         ${tile('speak', 'gc-speak', best('speak', SPEAK_LEN), 'speak')}
@@ -769,7 +774,7 @@ function calcAllowance(st, ym, today, cfg) {
         ${tile('calc', 'gc-plural', best('calc'))}
         ${tile('kanji', 'gc-kanji', best('kanji'))}
         ${tile('kr', 'gc-kr', best('kr'))}
-        ${tile('weak', 'gc-weak', `${weakN}問 たまってる`)}
+        ${tile('weak', 'gc-weak', `👾 ボス戦 ・ ${weakN}問`)}
         ${qaTiles}
       </div>
       ${chalRow()}`;
@@ -1227,12 +1232,14 @@ function calcAllowance(st, ym, today, cfg) {
     const sayQ = (q, slow) => (q.lang === 'ko' ? sayKo(q.say, slow) : sayEn(q.say, slow));
     const names = { [kind]: quizName(kind) };
     const CLOCK = kind === 'challenge' ? 15 : SHOT_CLOCK;
-    const st = { i: 0, answered: 0, ok: 0, combo: 0, maxCombo: 0, pts: 0, miss: [], timer: null, left: CLOCK, locked: false, ended: false, t0: Date.now() };
+    const st = { i: 0, answered: 0, ok: 0, combo: 0, maxCombo: 0, pts: 0, miss: [], timer: null, left: CLOCK, locked: false, ended: false, t0: Date.now(), star0: krMastered() };
+    const isKrQuiz = kind === 'kr' || kind.startsWith('kr:');
     const el = document.createElement('div'); el.className = 'ov';
     el.style.background = 'radial-gradient(circle at 50% 30%, #3a1d5c, #0d0618)';
     el.innerHTML = `<div class="quiz">
       <div class="qhead"><button class="qclose" data-q="quit">✕ やめる</button><div class="qprog"><i></i></div><div class="combo"></div></div>
       <div class="qbody">
+        ${kind === 'weak' ? '<div class="boss"><span class="boss-e">👾</span><span class="boss-bar"><i></i></span><span class="boss-hp"></span></div>' : ''}
         <div class="shotclock"><svg width="76" height="76"><circle cx="38" cy="38" r="33" stroke="#26324f" stroke-width="7" fill="none"/><circle class="ring" cx="38" cy="38" r="33" stroke="#ff5a5a" stroke-width="7" fill="none" stroke-linecap="round" stroke-dasharray="207.3" stroke-dashoffset="0"/></svg><b>24</b></div>
         <div class="qprompt"></div><div class="qmain"></div><div class="qhint"></div>
         <form class="qform" style="width:100%" autocomplete="off"><input class="qinput" autocapitalize="off" autocorrect="off" spellcheck="false" autocomplete="off" enterkeyhint="send"><button class="btn big" style="margin-top:10px">SHOOT 🏀</button></form>
@@ -1258,6 +1265,7 @@ function calcAllowance(st, ym, today, cfg) {
     function show() {
       const q = qs[st.i];
       st.locked = false; st.qt0 = Date.now();
+      bossDraw();
       q$('.qprog i').style.width = (st.i / qs.length) * 100 + '%';
       q$('.qprompt').textContent = `${st.i + 1}/${qs.length} ・ ${q.prompt}`;
       q$('.qmain').innerHTML = q.main; q$('.qmain').classList.toggle('long', !!q.long);
@@ -1271,6 +1279,14 @@ function calcAllowance(st, ym, today, cfg) {
       if (isText) { input.value = ''; input.focus(); }
       else q$('.choices').innerHTML = q.choices.map((c) => `<button class="choice${q.lang === 'ko' ? ' kr-ch' : ''}" data-c="${esc(c)}">${q.labels ? q.labels[c] : esc(c)}</button>`).join('');
       tick();
+    }
+    // 苦手つぶしは ボス戦：正解で ボスの HP が へる（見せ方だけ）
+    function bossDraw(hit) {
+      const b = q$('.boss'); if (!b) return;
+      const left = qs.length - st.ok;
+      b.querySelector('i').style.width = (left / qs.length) * 100 + '%';
+      b.querySelector('.boss-hp').textContent = `HP ${left}`;
+      if (hit) { b.classList.remove('hit'); void b.offsetWidth; b.classList.add('hit'); }
     }
     function setCombo() {
       const c = q$('.combo');
@@ -1295,6 +1311,7 @@ function calcAllowance(st, ym, today, cfg) {
         sfx.combo(st.combo); if (st.combo >= 3) confetti(25);
         if (btn) btn.classList.add('ok');
         juiceHit(btn, st.combo, Date.now() - st.qt0);
+        bossDraw(true);
         // リスニングは正解でも意味を見せる（聞いた英語と意味を結びつける）
         if (q.say) q$('.answer').innerHTML = listenLine(q);
         // かんこくご：答えが ばれるので 先に読まなかった問題は、正解のあとに 読む
@@ -1338,6 +1355,8 @@ function calcAllowance(st, ym, today, cfg) {
       let weakTicket = false;
       if (kind === 'weak' && !quit && n >= WEAK_BONUS_MIN && st.ok === n && !d.wkt) { d.wkt = 1; S.tickets++; weakTicket = true; }
       const allOk = !quit && n > 0 && st.ok === n; // 見出し・コーチの ことば用（5もんで ぜんぶ せいかいも PERFECT。チケットの 判定には 使わない）
+      const bossDown = kind === 'weak' && !quit && st.ok === qs.length;
+      if (bossDown) S.boss = (S.boss || 0) + 1;
       // 5もんの ゲームは ベスト（10問の記録）に入れない
       if (kind !== 'weak' && !short) S.best[kind] = Math.max(S.best[kind] || 0, st.ok);
       markPlayed(kind, st.ok, st.maxCombo);
@@ -1353,11 +1372,13 @@ function calcAllowance(st, ym, today, cfg) {
         <div style="font-family:var(--display);font-weight:800;font-size:18px">${esc(kindLabel(kind))}</div>
         ${resultStars(st.ok, n)}
         <div class="big"><span class="count-up" data-n="${st.ok}">0</span><span style="font-size:28px">/${n}</span></div>
-        <div class="lvup-title ${perfect || allOk ? 'rainbow' : ''}" style="font-size:${perfect || allOk ? 40 : 30}px">${perfect || allOk ? 'PERFECT!!' : st.ok >= n * 0.7 ? 'GREAT!' : 'NICE TRY!'}</div>
+        <div class="lvup-title ${perfect || allOk ? 'rainbow' : ''}" style="font-size:${perfect || allOk ? 40 : 30}px">${bossDown ? 'BOSS DOWN!!' : kind === 'weak' ? `👾 あと HP ${qs.length - st.ok}` : perfect || allOk ? 'PERFECT!!' : st.ok >= n * 0.7 ? 'GREAT!' : 'NICE TRY!'}</div>
         <div class="shot-pts" style="opacity:1">+${tot} PTS</div>
         ${st.maxCombo >= 3 ? `<div class="note">最大 ${st.maxCombo} 連続正解 🔥</div>` : ''}
         ${ticket ? '<div class="newtag">全問正解ボーナス 🎟️ +1</div>' : ''}
         ${weakTicket ? '<div class="newtag">🎯 苦手つぶしボーナス 🎟️ +1</div>' : ''}
+        ${isKrQuiz && krMastered() > st.star0 ? `<div class="reward-big">⭐ おぼえた ことば +${krMastered() - st.star0}！（ぜんぶで ${krMastered()}こ）</div>` : ''}
+        ${isKrQuiz && krMastered() === st.star0 && krAlmost().length ? `<div class="note">⭐ あと1回 せいかいで おぼえる ことばが ${krAlmost().length}こ。「もう1回」で ★ に しよう！</div>` : ''}
         ${perfect && kind === 'challenge' && (d.cp || 0) <= ALLOWANCE.perfectPerDay ? `<div class="reward-big">💰 チャレンジ全問正解！ おこづかい +${ALLOWANCE.perfect}円</div>` : ''}
         ${st.miss.length ? `<ul>${st.miss.map((q) => `<li>${q.type === 'kr' ? q.missHtml : ['kanji', 'qa', 'hkanji', 'past', 'third', 'listen', 'calc'].includes(q.type) ? esc(q.key) + ' → ' + esc(q.answer) : esc(q.answer)}</li>`).join('')}</ul><div class="note">${kind === 'kr' || kind.startsWith('kr:') ? '↑ カードで さがして、声に出して 読んでみよう 📇（次の クイズにも 出るよ）' : '↑ 紙に3回書いて覚えよう ✍️（苦手つぶしにも出るよ）'}</div>` : ''}
         ${coachQuizLine(perfect || allOk, st.ok, n)}
@@ -1729,6 +1750,7 @@ function calcAllowance(st, ym, today, cfg) {
   const krN = (w) => S.kr.w[w.key] || 0;
   const krKnown = (w) => krN(w) >= KR_MASTER;
   const krMastered = () => KR_WORDS.filter(krKnown).length;
+  const krAlmost = () => KR_WORDS.filter((w) => krN(w) === 1); // あと1回 正解で「おぼえた」に なる ことば
   const krProgress = (id) => { const ws = krWordsOf(id); return { done: ws.filter(krKnown).length, total: ws.length }; };
   const krPct = (a, b) => (b ? Math.min(100, (a / b) * 100) : 100);
   const krSizeCls = (ko) => (ko.length > 9 ? ' xl' : ko.length > 5 ? ' lg' : '');
@@ -1788,7 +1810,7 @@ function calcAllowance(st, ym, today, cfg) {
   function krStopReading() { krReadTok++; if (window.speechSynthesis) speechSynthesis.cancel(); }
   function krHomeCard() {
     const w = krToday();
-    return `<div class="kr-home"><button class="kr-home-m" data-tab="korean"><small><b class="ti-kr">한</b> きょうの かんこくご</small><b class="kr${krSizeCls(w.ko)}">${esc(w.ko)}</b><span>${esc(w.kana)}${w.ja !== w.kana ? ` ＝ ${esc(w.ja)}` : ''}</span><em>かんこくご スタジオへ ›</em></button>
+    return `<div class="kr-home"><button class="kr-home-m" data-tab="korean"><small><b class="ti-kr">한</b> きょうの かんこくご</small><b class="kr${krSizeCls(w.ko)}">${esc(w.ko)}</b><span>${esc(w.kana)}${w.ja !== w.kana ? ` ＝ ${esc(w.ja)}` : ''}</span><em>${krAlmost().length ? `⭐ あと1回で ★ が ${krAlmost().length}こ ›` : 'かんこくご スタジオへ ›'}</em></button>
       <button class="kr-say" data-act="krsay" data-ko="${esc(w.ko)}" aria-label="聞く">🔊</button></div>`;
   }
   // 端末に 韓国語の声が ない時の 案内（カタカナは いつでも 見られる）
@@ -1816,10 +1838,12 @@ function calcAllowance(st, ym, today, cfg) {
       <div class="pg-s">IVE の カードと いっしょに れんしゅう！</div>
       <div class="kr-lv"><span class="kr-lv-e">${l[3]}</span><span class="kr-lv-t"><b class="kr">${esc(l[1])}</b> <small>${esc(l[2])}</small><span class="xpbar"><i style="width:${nx ? krPct(n - l[0], nx[0] - l[0]) : 100}%"></i></span><small>おぼえた ことば <b>${n}</b>/${KR_WORDS.length}${nx ? ` ・ つぎの レベルまで あと ${nx[0] - n}こ` : ''}</small></span></div>
       ${krVoiceNote()}
+      ${krAlmost().length ? `<button class="bigbtn star" data-act="kralmost">⭐ あと1回で おぼえる！<small>${krAlmost().length}こ あるよ。クイズで ★ に しよう</small></button>` : ''}
       <button class="bigbtn kr" data-act="krlesson">▶ きょうの レッスン<small>${cur.e} ${esc(cur.name)} ・ スワイプで ${SHORT_LEN}こ 見て クイズ</small></button>
       <button class="bigbtn rush" data-act="krrush">⚡ 30びょう ラッシュ<small>2択を どんどん！ ${S.kr.rushBest ? `ベスト ${S.kr.rushBest}問` : 'どこまで いける？'}</small></button>
       ${d.krc ? '<div class="kr-ct done"><span>📇</span><span><b>カードタイム クリア！ ✓</b><small>あしたも 1まい えらんでね</small></span></div>'
         : '<button class="kr-ct" data-act="krcardtime"><span>📇</span><span><b>カードタイム</b><small>ほんものの カードを 1まい えらんで、3回 声に出して 読んだら おす</small></span><em>+2P</em></button>'}
+      ${S.kr.name ? '' : '<button class="kr-ct" data-act="krnameopen"><span>🏷️</span><span><b>じぶんの なまえを ハングルに！</b><small>まだ やってないよ。ひらがなを 入れるだけ</small></span></button>'}
       <div class="kr-word"><small>きょうの ことば</small><b class="kr${krSizeCls(w.ko)}">${esc(w.ko)}</b><span>${esc(w.kana)}${w.ja !== w.kana ? ` ＝ ${esc(w.ja)}` : ''}</span><button class="kr-say" data-act="krsay" data-ko="${esc(w.ko)}" aria-label="聞く">🔊</button></div>
       <div class="sec-title"><h2>ステージ</h2><span>カードと おなじ 色だよ</span></div>
       <div class="kr-map">${KR_STAGES.map(stage).join('')}</div>
@@ -1997,52 +2021,98 @@ function calcAllowance(st, ym, today, cfg) {
     st.seen[0] = 1; el.querySelector('.kr-reel-c').classList.add('on');
     if (S.sound) sayKo(words[0].ko);
   }
-  // ---------- 30びょう ラッシュ：2択を どんどん。まちがえると 2びょう へる。ポイントは 1回 10Pまで・1日2回まで（それ以降は 記録だけ） ----------
-  const KR_RUSH = { sec: 30, penalty: 2, maxPts: 10 };
-  // ラッシュ・カードあわせ・まねっこは すぐ終わるので、ポイントが つくのは それぞれ 1日2回まで（それ以降は 記録だけ。ポイントの ふえ方を ほかの ゲームと そろえる）
+  // ---------- 30びょう ラッシュ：2択を どんどん。まちがえると 2びょう へる ----------
+  // 点は 正解−まちがい（1回 10Pまで）。ポイントが つくのは ラッシュ全部で 1日2回まで（それ以降は 記録だけ）
+  // まちがえた問題は 苦手リストに入る。2択なので、正解しても 苦手は消さない（韓国語は「見たことがある」に するだけ）
+  const RUSH = { sec: 30, penalty: 2, maxPts: 10 };
+  // カードあわせ・まねっこも すぐ終わるので、ポイントが つくのは それぞれ 1日2回まで（ポイントの ふえ方を ほかの ゲームと そろえる）
   const KR_POINT_ROUNDS = 2;
   function krRoundPts(field, pts) { const d = day(); d[field] = (d[field] || 0) + 1; return d[field] <= KR_POINT_ROUNDS ? pts : 0; }
-  function startKrRush() {
-    const all = krPool().filter((w) => w.ko.length <= 10 && w.ja);
-    const pool = all.length >= 4 ? all : KR_WORDS.filter((w) => w.ko.length <= 10);
-    const st = { ok: 0, miss: [], combo: 0, maxCombo: 0, ended: false, locked: false, end: Date.now() + KR_RUSH.sec * 1000, t0: Date.now(), w: null, lastSec: 99, timer: null };
-    const el = document.createElement('div'); el.className = 'ov kr-rush';
-    el.innerHTML = `<div class="quiz"><div class="qhead"><button class="qclose" data-u="quit">✕ やめる</button><div class="qprog kr-rush-bar"><i></i></div><div class="combo kr-rush-sc">0</div></div>
-      <div class="qbody"><div class="kr-rush-t"></div><div class="kr-rush-q"></div><div class="kr-rush-c"></div><div class="kr-rush-cb"></div></div></div>`;
-    document.body.appendChild(el);
-    const q$ = (x) => el.querySelector(x);
-    function next() {
-      let w; do { w = pick(pool); } while (w === st.w && pool.length > 1);
-      st.w = w; st.locked = false;
+  const RUSH_MODES = {
+    calc: { e: '🧮', name: 'けいさん', subject: '算数' },
+    pref: { e: '🗾', name: 'とどうふけん', subject: '社会' },
+    en: { e: '🔤', name: 'えいご', subject: '英語' },
+    kr: { e: '<b class="ti-kr">한</b>', name: 'かんこくご', subject: '韓国語' },
+  };
+  const rushModeIds = () => Object.keys(RUSH_MODES).filter((m) => m !== 'pref' || qaSubjects().includes('都道府県'));
+  const rushBest = (m) => (m === 'kr' ? S.kr.rushBest : S.best['rush:' + m]) || 0;
+  const rushTiles = () => rushModeIds().map((m) => `<button class="rush-tile" data-act="rush" data-mode="${m}"><span>${RUSH_MODES[m].e}</span><b>${RUSH_MODES[m].name}</b><small>${rushBest(m) ? `ベスト ${rushBest(m)}もん` : 'NEW'}</small></button>`).join('');
+  function rushMenu() {
+    if (document.querySelector('.ov')) return;
+    sfx.tap();
+    overlay(`<div class="tut"><div class="tut-e">⚡</div><div class="tut-t">${RUSH.sec}びょう ラッシュ</div><p class="note" style="text-align:center;margin:0 0 12px">2たくを どんどん！ まちがえると ${RUSH.penalty}びょう へるよ</p>
+      <div class="rush-tiles">${rushTiles()}</div><button class="btn ghost" style="width:100%;margin-top:12px" data-rm="close">とじる</button></div>`, {
+      closeOnTap: false, cls: 'solid',
+      onMount: (el, close) => { el.addEventListener('click', (e) => { if (e.target.closest('[data-rm]')) { sfx.tap(); close(); } else if (e.target.closest('[data-act="rush"]')) close(); }); },
+    });
+  }
+  // 苦手を ときどき まぜる
+  function rushPick(list, kind, keyOf) { const wk = S.weak[kind] || {}; const weak = list.filter((x) => wk[keyOf(x)]); return weak.length && Math.random() < 0.4 ? pick(weak) : pick(list); }
+  function rushItem(mode, pool) {
+    if (mode === 'kr') {
+      const w = rushPick(pool, 'kr', (x) => x.key);
       const others = shuffle(pool.filter((x) => x.st === w.st && x.ja !== w.ja));
       const other = (others[0] || pick(KR_WORDS.filter((x) => x.ja && x.ja !== w.ja))).ja;
-      const two = shuffle([w.ja, other]);
-      q$('.kr-rush-q').innerHTML = `<b class="kr${krSizeCls(w.ko)}">${esc(w.ko)}</b>${krN(w) === 0 && w.kana !== w.ja ? `<span>${esc(w.kana)}</span>` : ''}`;
-      q$('.kr-rush-q').classList.remove('in'); void q$('.kr-rush-q').offsetWidth; q$('.kr-rush-q').classList.add('in');
-      q$('.kr-rush-c').innerHTML = two.map((c) => `<button class="kr-rush-b" data-u="a" data-c="${esc(c)}">${esc(c)}</button>`).join('');
-      if (S.sound) sayKo(w.ko);
+      return { type: 'kr', key: w.key, w, lang: 'ko', say: w.ko, answer: w.ja, other, main: `<b class="kr${krSizeCls(w.ko)}">${esc(w.ko)}</b>${krN(w) === 0 && w.kana !== w.ja ? `<span>${esc(w.kana)}</span>` : ''}`, missHtml: `<span class="kr">${esc(w.ko)}</span>（${esc(w.kana)}）→ ${esc(w.ja)}` };
+    }
+    if (mode === 'en') {
+      const w = rushPick(SPEAK_SENTENCES, 'listen', (x) => x[0]);
+      return { type: 'listen', key: w[0], lang: 'en', say: w[0], answer: w[1], other: pick(SPEAK_SENTENCES.filter((x) => x[1] !== w[1]))[1], main: `<div class="rush-m long">${esc(w[0])}</div>`, missHtml: `${esc(w[0])} → ${esc(w[1])}` };
+    }
+    let q = null;
+    if (mode === 'calc') {
+      const wk = Object.keys(S.weak.calc || {});
+      if (wk.length && Math.random() < 0.3) q = calcFromKey(pick(wk));
+      if (!q) q = mkCalc(SHORT_CALC_KINDS);
+    } else q = mkQa(rushPick(BANK.qa.filter((x) => x.s === '都道府県'), 'qa', (x) => x.q));
+    const others = q.choices.filter((c) => c !== q.answer);
+    return { type: q.type, key: q.key, answer: q.answer, other: others.length ? pick(others) : '—', main: `<div class="rush-m ${q.long ? 'long' : ''}">${q.main}</div>`, missHtml: `${esc(q.key)} → ${esc(q.answer)}` };
+  }
+  function startRush(mode) {
+    if (!rushModeIds().includes(mode)) { toast('もんだいが 見つからなかったよ'); render(); return; }
+    const M = RUSH_MODES[mode]; const isKr = mode === 'kr';
+    const kind = isKr ? 'krrush' : 'rush:' + mode;
+    let pool = null;
+    if (isKr) { const all = krPool().filter((w) => w.ko.length <= 10 && w.ja); pool = all.length >= 4 ? all : KR_WORDS.filter((w) => w.ko.length <= 10 && w.ja); }
+    const st = { ok: 0, miss: [], seen: new Map(), combo: 0, maxCombo: 0, ended: false, locked: false, end: Date.now() + RUSH.sec * 1000, t0: Date.now(), q: null, lastSec: 99, timer: null };
+    const el = document.createElement('div'); el.className = 'ov rush';
+    el.innerHTML = `<div class="quiz"><div class="qhead"><button class="qclose" data-u="quit">✕ やめる</button><div class="qprog rush-bar"><i></i></div><div class="combo rush-sc">0</div></div>
+      <div class="qbody"><div class="rush-t"></div><div class="rush-q"></div><div class="rush-c"></div><div class="rush-cb"></div></div></div>`;
+    document.body.appendChild(el);
+    const q$ = (x) => el.querySelector(x);
+    const sayIt = (q) => { if (S.sound && q.say) (q.lang === 'ko' ? sayKo : sayEn)(q.say); };
+    function next() {
+      let q; let tries = 0;
+      do { q = rushItem(mode, pool); tries++; } while (st.q && q.key === st.q.key && tries < 6);
+      st.q = q; st.locked = false;
+      q$('.rush-q').innerHTML = q.main;
+      q$('.rush-q').classList.remove('in'); void q$('.rush-q').offsetWidth; q$('.rush-q').classList.add('in');
+      q$('.rush-c').innerHTML = shuffle([q.answer, q.other]).map((c) => `<button class="rush-b" data-u="a" data-c="${esc(c)}">${esc(c)}</button>`).join('');
+      sayIt(q);
     }
     function pick1(val, b) {
       if (st.locked || st.ended) return;
       st.locked = true;
-      const w = st.w;
-      if (val === w.ja) {
+      const q = st.q;
+      if (val === q.answer) {
         st.ok++; st.combo++; st.maxCombo = Math.max(st.maxCombo, st.combo);
-        // ラッシュは 2択なので「おぼえた」には しない（見たことがある に するだけ）
-        S.kr.w[w.key] = Math.max(krN(w), 1);
+        // 韓国語は 2択なので「おぼえた」には しない（見たことがある に するだけ）
+        if (isKr) { S.kr.w[q.key] = Math.max(krN(q.w), 1); st.seen.set(q.key, q.w); }
         b.classList.add('ok'); sfx.combo(st.combo); juiceHit(b, st.combo, 9999);
         el.classList.toggle('fever', st.combo >= FEVER_AT);
-        q$('.kr-rush-sc').textContent = st.ok;
-        q$('.kr-rush-cb').textContent = st.combo >= FEVER_AT ? `🌈 FEVER ×${st.combo}` : st.combo >= 2 ? `🔥 ${st.combo} COMBO` : '';
+        q$('.rush-sc').textContent = st.ok;
+        q$('.rush-cb').textContent = st.combo >= FEVER_AT ? `🌈 FEVER ×${st.combo}` : st.combo >= 2 ? `🔥 ${st.combo} COMBO` : '';
         setTimeout(() => { if (!st.ended) next(); }, 180);
       } else {
-        st.combo = 0; st.miss.push(w); st.end -= KR_RUSH.penalty * 1000;
-        S.weak.kr[w.key] = (S.weak.kr[w.key] || 0) + 1;
+        st.combo = 0; st.miss.push(q); st.end -= RUSH.penalty * 1000;
+        const wk = S.weak[q.type];
+        // 苦手に 入るのは 1回 3問まで（わざと まちがえて 苦手を ふやせないように）
+        if (wk && (wk[q.key] || (st.added || 0) < 3)) { if (!wk[q.key]) st.added = (st.added || 0) + 1; wk[q.key] = (wk[q.key] || 0) + 1; if (q.type === 'calc') { const ks = Object.keys(wk); if (ks.length > 30) delete wk[ks[0]]; } }
         b.classList.add('ng'); sfx.ng(); buzz(60);
-        el.classList.remove('fever'); q$('.kr-rush-cb').textContent = '';
-        el.querySelectorAll('.kr-rush-b').forEach((x) => { if (x.dataset.c === w.ja) x.classList.add('ok'); });
-        const r = b.getBoundingClientRect(); floatText(r.left + r.width / 2, r.top, `-${KR_RUSH.penalty}びょう`, 'minus');
-        q$('.kr-rush-q').classList.add('miss'); setTimeout(() => q$('.kr-rush-q') && q$('.kr-rush-q').classList.remove('miss'), 400);
+        el.classList.remove('fever'); q$('.rush-cb').textContent = '';
+        el.querySelectorAll('.rush-b').forEach((x) => { if (x.dataset.c === q.answer) x.classList.add('ok'); });
+        const r = b.getBoundingClientRect(); floatText(r.left + r.width / 2, r.top, `-${RUSH.penalty}びょう`, 'minus');
+        q$('.rush-q').classList.add('miss'); setTimeout(() => q$('.rush-q') && q$('.rush-q').classList.remove('miss'), 400);
         setTimeout(() => { if (!st.ended) next(); }, 650);
       }
     }
@@ -2051,41 +2121,46 @@ function calcAllowance(st, ym, today, cfg) {
       clearInterval(st.timer);
       if (window.speechSynthesis) speechSynthesis.cancel();
       el.classList.remove('fever');
-      if (quit && !st.ok) { save(); el.remove(); render(); return; }
+      if (quit && !st.ok && !st.miss.length) { save(); el.remove(); render(); return; }
       // まちがいの分は 引く（当てずっぽうで 点が入らないように）。点が つかなかった回は 回数に 数えない
-      const net = Math.min(KR_RUSH.maxPts, Math.max(0, st.ok - st.miss.length));
-      const over = (day().krr || 0) >= KR_POINT_ROUNDS;
-      const pts = net > 0 ? krRoundPts('krr', net) : 0;
-      const record = !quit && st.ok > (S.kr.rushBest || 0);
-      if (record) S.kr.rushBest = st.ok;
-      markPlayed('krrush', st.ok, st.maxCombo);
-      const info = { kind: 'krrush', n: st.ok + st.miss.length, ok: st.ok, maxCombo: st.maxCombo, miss: st.miss.map((w) => w.key), sec: Math.round((Date.now() - st.t0) / 1000), quit: quit || undefined };
-      const r = pts > 0 ? addPoints(pts, 'quiz', '30びょう ラッシュ', '韓国語', info) : null;
-      if (!r) { save(); logEvent('quiz', '30びょう ラッシュ', '韓国語', 0, info); }
+      const net = Math.min(RUSH.maxPts, Math.max(0, st.ok - st.miss.length));
+      const over = (day().rush || 0) >= KR_POINT_ROUNDS;
+      const pts = net > 0 ? krRoundPts('rush', net) : 0;
+      const record = !quit && st.ok > rushBest(mode);
+      if (record) { if (isKr) S.kr.rushBest = st.ok; else S.best[kind] = st.ok; }
+      markPlayed(kind, st.ok, st.maxCombo);
+      const info = { kind, n: st.ok + st.miss.length, ok: st.ok, maxCombo: st.maxCombo, miss: st.miss.map((q) => q.key), sec: Math.round((Date.now() - st.t0) / 1000), quit: quit || undefined };
+      const item = `${RUSH.sec}びょう ラッシュ ${M.name}`;
+      const r = pts > 0 ? addPoints(pts, 'quiz', item, M.subject, info) : null;
+      if (!r) { save(); logEvent('quiz', item, M.subject, 0, info); }
       if (record) { sfx.fanfare(); confetti(220); emojiRain(['🌈', '💖', '⭐', '🎉'], 26); } else { sfx.coin(); confetti(90); }
-      q$('.quiz').innerHTML = `<div class="qbody result"><div style="font-family:var(--display);font-weight:800;font-size:18px">⚡ 30びょう ラッシュ</div><div class="big count-up" data-n="${st.ok}">0</div>
+      // 韓国語：ラッシュで 見た ことばを クイズで「★ おぼえた」に する（遊びの先に 手ごたえを つなぐ）
+      const almost = isKr ? [...st.seen.values()].filter((w) => krN(w) === 1).slice(0, SHORT_LEN) : [];
+      q$('.quiz').innerHTML = `<div class="qbody result"><div style="font-family:var(--display);font-weight:800;font-size:18px">⚡ ${esc(item)}</div><div class="big count-up">0</div>
         <div class="lvup-title rainbow" style="font-size:${record ? 40 : 30}px">${record ? 'NEW RECORD!!' : st.ok >= 10 ? 'GREAT!' : 'NICE TRY!'}</div>
-        <div class="shot-pts" style="opacity:1">${r ? `+${pts + (r.tipoff ? 1 : 0)} PTS` : over ? 'きょうの ポイントは ゲットずみ（1日2回まで）' : '+0 PTS'}</div>
-        <div class="note">正解 ${st.ok} − まちがい ${st.miss.length} ・ ベスト ${S.kr.rushBest || st.ok}問 ・ 最大 ${st.maxCombo} 連続 🔥</div>
-        ${st.miss.length ? `<ul class="kr-ul">${[...new Set(st.miss)].map((w) => `<li><span class="kr">${esc(w.ko)}</span>（${esc(w.kana)}）→ ${esc(w.ja)}</li>`).join('')}</ul>` : ''}
+        <div class="shot-pts ${r ? '' : 'small'}" style="opacity:1">${r ? `+${pts + (r.tipoff ? 1 : 0)} PTS` : over && net > 0 ? 'きょうの ポイントは ゲットずみ（1日2回まで）' : '+0 PTS'}</div>
+        <div class="note">正解 ${st.ok} − まちがい ${st.miss.length} ・ ベスト ${rushBest(mode) || st.ok}問 ・ 最大 ${st.maxCombo} 連続 🔥</div>
+        ${st.miss.length ? `<ul class="rush-ul">${[...new Map(st.miss.map((q) => [q.key, q])).values()].map((q) => `<li>${q.missHtml}</li>`).join('')}</ul>` : ''}
+        ${almost.length ? `<button class="bigbtn star" data-u="star">⭐ クイズで ★おぼえた に しよう<small>あと1回 せいかいで ★ が ${almost.length}こ</small></button>` : ''}
+        ${!isKr && st.miss.length && weakTotal() ? '<button class="bigbtn star" data-u="boss">👾 まちがえた問題を ボス戦で たおす</button>' : ''}
         <div class="row" style="width:100%;margin-top:14px"><button class="btn ghost" style="flex:1" data-u="again">もう1回</button><button class="btn" style="flex:1" data-u="close">とじる</button></div></div>`;
       countUp(q$('.count-up'), st.ok);
-      st.after = async (again) => { el.remove(); if (r) await afterEffects(r); else render(); if (again) startKrRush(); };
+      st.after = async (k) => { el.remove(); if (r) await afterEffects(r); else render(); if (k === 'again') startRush(mode); else if (k === 'star') startQuiz('kr', true, almost); else if (k === 'boss') startQuiz('weak'); };
     }
     el.addEventListener('click', (e) => {
       const b = e.target.closest('[data-u]'); if (!b) return;
       const k = b.dataset.u;
       if (k === 'a') pick1(b.dataset.c, b);
-      else if (k === 'quit') { if (st.ended) return; if (confirm('やめる？')) finish(true); }
-      else if (st.after) st.after(k === 'again');
+      else if (k === 'quit') { if (!st.ended && confirm('やめる？')) finish(true); }
+      else if (st.after) st.after(k);
     });
     sfx.buzzer();
     next();
     st.timer = setInterval(() => {
       const ms = st.end - Date.now(); const sec = Math.ceil(ms / 1000);
-      if (ms <= 0) { q$('.kr-rush-t').textContent = '0'; finish(false); return; }
-      q$('.kr-rush-t').textContent = sec;
-      q$('.kr-rush-bar i').style.width = Math.max(0, (ms / (KR_RUSH.sec * 1000)) * 100) + '%';
+      if (ms <= 0) { q$('.rush-t').textContent = '0'; finish(false); return; }
+      q$('.rush-t').textContent = sec;
+      q$('.rush-bar i').style.width = Math.max(0, (ms / (RUSH.sec * 1000)) * 100) + '%';
       const low = sec <= 5; el.classList.toggle('low', low);
       if (low && sec !== st.lastSec) tone(1200, 0.05, 'square', 0.07);
       st.lastSec = sec;
@@ -2139,7 +2214,7 @@ function calcAllowance(st, ym, today, cfg) {
       if (!r) { save(); logEvent('quiz', 'カードあわせ', '韓国語', 0, info); }
       if (!quit) { sfx.fanfare(); confetti(160); }
       q$('.quiz').innerHTML = `<div class="qbody result"><div style="font-family:var(--display);font-weight:800;font-size:18px">🃏 カードあわせ</div><div class="big">${sec}<span style="font-size:24px">びょう</span></div>
-        <div class="lvup-title" style="font-size:32px">${record ? 'NEW RECORD!' : quit ? 'NICE TRY!' : 'CLEAR!'}</div><div class="shot-pts" style="opacity:1">${r ? `+${pts + (r.tipoff ? 1 : 0)} PTS` : 'きょうの ポイントは ゲットずみ（1日2回まで）'}</div>
+        <div class="lvup-title" style="font-size:32px">${record ? 'NEW RECORD!' : quit ? 'NICE TRY!' : 'CLEAR!'}</div><div class="shot-pts ${r ? '' : 'small'}" style="opacity:1">${r ? `+${pts + (r.tipoff ? 1 : 0)} PTS` : 'きょうの ポイントは ゲットずみ（1日2回まで）'}</div>
         <ul class="kr-ul">${ws.map((w) => `<li><span class="kr">${esc(w.ko)}</span>（${esc(w.kana)}）${w.ja !== w.kana ? ` → ${esc(w.ja)}` : ''}</li>`).join('')}</ul>
         <div class="row" style="width:100%;margin-top:14px"><button class="btn ghost" style="flex:1" data-m="again">もう1回</button><button class="btn" style="flex:1" data-m="close">とじる</button></div></div>`;
       st.after = async (again) => { el.remove(); if (r) await afterEffects(r); else render(); if (again) startKrMatch(id); };
@@ -2238,7 +2313,7 @@ function calcAllowance(st, ym, today, cfg) {
       if (!r) { save(); logEvent('quiz', 'まねっこ', '韓国語', 0, info); }
       if (st.ok >= n) { sfx.fanfare(); confetti(160); } else sfx.coin();
       q$('.quiz').innerHTML = `<div class="qbody result"><div style="font-family:var(--display);font-weight:800;font-size:18px">🗣️ まねっこ</div><div class="big">${st.ok}<span style="font-size:28px">/${n}</span></div>
-        <div class="lvup-title" style="font-size:30px">${st.ok >= n ? 'PERFECT!!' : 'NICE TRY!'}</div><div class="shot-pts" style="opacity:1">${r ? `+${pts + (r.tipoff ? 1 : 0)} PTS` : st.ok > 0 ? 'きょうの ポイントは ゲットずみ（1日2回まで）' : '+0 PTS'}</div>
+        <div class="lvup-title" style="font-size:30px">${st.ok >= n ? 'PERFECT!!' : 'NICE TRY!'}</div><div class="shot-pts ${r ? '' : 'small'}" style="opacity:1">${r ? `+${pts + (r.tipoff ? 1 : 0)} PTS` : st.ok > 0 ? 'きょうの ポイントは ゲットずみ（1日2回まで）' : '+0 PTS'}</div>
         ${coachQuizLine(st.ok >= n, st.ok, n)}
         <div class="row" style="width:100%;margin-top:14px"><button class="btn ghost" style="flex:1" data-n="again">もう1回</button><button class="btn" style="flex:1" data-n="close">とじる</button></div></div>`;
       st.after = async (again) => { el.remove(); if (r) await afterEffects(r); else render(); if (again) startKrSpeak(id); };
@@ -2271,7 +2346,8 @@ function calcAllowance(st, ym, today, cfg) {
     else if (act === 'krquiz') { sfx.tap(); startQuiz('kr:' + id); }
     else if (act === 'krspeak') startKrSpeak(id);
     else if (act === 'krmatch') startKrMatch(id);
-    else if (act === 'krrush') startKrRush();
+    else if (act === 'krrush') startRush('kr');
+    else if (act === 'kralmost') { sfx.tap(); startQuiz('kr', true, shuffle(krAlmost()).slice(0, SHORT_LEN)); }
     else if (act === 'krb') { krB[a.dataset.g] = Number(a.dataset.i); sfx.tap(); render(); sayKo(krSyllable().ch); }
     else if (act === 'krcardtime') {
       const d = day(); if (d.krc) return;
@@ -2400,6 +2476,8 @@ function calcAllowance(st, ym, today, cfg) {
     else if (act === 'quiz') { sfx.tap(); startQuiz(a.dataset.kind); }
     else if (act === 'speak') { sfx.tap(); startSpeak(); }
     else if (act === 'omakase') { sfx.tap(); playKind(a.dataset.kind); }
+    else if (act === 'rush') { sfx.tap(); startRush(a.dataset.mode); }
+    else if (act === 'rushmenu') rushMenu();
     else if (act === 'short') { sfx.tap(); if (a.dataset.kind === 'speak') startSpeak(); else startQuiz(a.dataset.kind, true); }
     else if (act === 'mood') { sfx.tap(); sendMood(Number(a.dataset.i)); }
     else if (act === 'chal') {

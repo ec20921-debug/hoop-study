@@ -953,29 +953,56 @@ canvas.confetti { position: fixed; inset: 0; z-index: 65; pointer-events: none; 
 .kr-reel-x { position: absolute; left: 12px; top: calc(12px + var(--safe-t)); z-index: 2; width: 40px; height: 40px; border-radius: 50%; font-size: 18px; color: #fff; background: #0006; }
 
 /* 30びょう ラッシュ */
-.ov.kr-rush { background: radial-gradient(circle at 50% 30%, #3a1d5c, #0d0618); }
-.kr-rush-bar > i { background: linear-gradient(90deg, var(--yellow), var(--orange)); transition: width .1s linear; }
-.kr-rush.low .kr-rush-bar > i { background: #ff5a5a; }
-.kr-rush-sc { font-size: 26px; color: var(--yellow); min-width: 54px; }
-.kr-rush-t { font-family: var(--display); font-weight: 900; font-size: 34px; color: #ffffffcc; }
-.kr-rush.low .kr-rush-t { color: #ff6b6b; animation: pulse .5s ease-in-out infinite; }
-.kr-rush-q { display: flex; flex-direction: column; align-items: center; gap: 4px; min-height: 120px; justify-content: center; text-align: center; }
-.kr-rush-q b { font-size: 58px; line-height: 1.15; }
-.kr-rush-q b.lg { font-size: 42px; }
-.kr-rush-q b.xl { font-size: 32px; }
-.kr-rush-q span { font-size: 18px; font-weight: 800; color: #e6d5f5; }
-.kr-rush-q.in { animation: reelin .22s cubic-bezier(.2,1.6,.4,1); }
-.kr-rush-q.miss { animation: shakex .35s; }
-.kr-rush-c { display: grid; gap: 10px; width: 100%; }
-.kr-rush-b { min-height: 72px; padding: 10px; border-radius: 18px; font-size: 21px; font-weight: 900; color: #fff; background: linear-gradient(135deg, #7c3aed, #d6338c); box-shadow: 0 5px 0 #4c1d95; }
-.kr-rush-b:active { transform: translateY(3px); box-shadow: 0 2px 0 #4c1d95; }
-.kr-rush-b.ok { background: var(--green); color: #052; box-shadow: 0 5px 0 #0c7a52; }
-.kr-rush-b.ng { background: #7a1f1f; box-shadow: 0 5px 0 #4a1414; }
-.kr-rush-cb { min-height: 34px; font-family: var(--display); font-weight: 900; font-size: 24px; color: var(--yellow); text-shadow: 0 0 12px #ffd400; }
+.ov.rush { background: radial-gradient(circle at 50% 30%, #3a1d5c, #0d0618); }
+.rush-bar > i { background: linear-gradient(90deg, var(--yellow), var(--orange)); transition: width .1s linear; }
+.rush.low .rush-bar > i { background: #ff5a5a; }
+.rush-sc { font-size: 26px; color: var(--yellow); min-width: 54px; }
+.rush-t { font-family: var(--display); font-weight: 900; font-size: 34px; color: #ffffffcc; }
+.rush.low .rush-t { color: #ff6b6b; animation: pulse .5s ease-in-out infinite; }
+.rush-q { display: flex; flex-direction: column; align-items: center; gap: 4px; min-height: 120px; justify-content: center; text-align: center; }
+.rush-q b { font-size: 58px; line-height: 1.15; }
+.rush-q b.lg { font-size: 42px; }
+.rush-q b.xl { font-size: 32px; }
+.rush-q span { font-size: 18px; font-weight: 800; color: #e6d5f5; }
+.rush-q.in { animation: reelin .22s cubic-bezier(.2,1.6,.4,1); }
+.rush-q.miss { animation: shakex .35s; }
+.rush-c { display: grid; gap: 10px; width: 100%; }
+.rush-b { min-height: 72px; padding: 10px; border-radius: 18px; font-size: 21px; font-weight: 900; color: #fff; background: linear-gradient(135deg, #7c3aed, #d6338c); box-shadow: 0 5px 0 #4c1d95; }
+.rush-b:active { transform: translateY(3px); box-shadow: 0 2px 0 #4c1d95; }
+.rush-b.ok { background: var(--green); color: #052; box-shadow: 0 5px 0 #0c7a52; }
+.rush-b.ng { background: #7a1f1f; box-shadow: 0 5px 0 #4a1414; }
+.rush-cb { min-height: 34px; font-family: var(--display); font-weight: 900; font-size: 24px; color: var(--yellow); text-shadow: 0 0 12px #ffd400; }
 .bigbtn.rush { margin-top: 10px; background: linear-gradient(135deg, #ffd400, #ff5e3a); color: #3a1a05; box-shadow: 0 5px 0 #a33a00, 0 10px 24px #ff9d0055; font-size: 22px; }
 .bigbtn.rush small { display: block; font-size: 14px; font-weight: 800; margin-top: 3px; }
 .bigbtn.rush:active { box-shadow: 0 1px 0 #a33a00; }
 
 @media (prefers-reduced-motion: reduce) {
-  .ov.fever, .rainbow, .kr-home, .pack-tap, .kr-reel-up, .kr-rush.low .kr-rush-t, .kr-st.now .kr-st-e { animation: none !important; }
+  .ov.fever, .rainbow, .kr-home, .pack-tap, .kr-reel-up, .rush.low .rush-t, .kr-st.now .kr-st-e { animation: none !important; }
 }
+
+/* ラッシュ（学校の内容）・★への導線・ボス戦（2026-11-05） */
+.rush-q { width: 100%; }
+.rush-m { font-family: var(--display); font-weight: 800; font-size: 44px; line-height: 1.25; overflow-wrap: anywhere; }
+.rush-m.long { font-family: var(--body); font-weight: 900; font-size: 22px; line-height: 1.5; }
+.rush-b { overflow-wrap: anywhere; }
+.rush-ul { max-height: 24vh; overflow-y: auto; }
+.rush-ul .kr { font-size: 16px; }
+.rush-tiles { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+.rush-tile { display: flex; flex-direction: column; align-items: center; gap: 2px; padding: 12px 4px; border-radius: 16px; background: linear-gradient(145deg, #5a2a7a, #2b1d6b); border: 1px solid #ffd40066; }
+.rush-tile > span { font-size: 28px; line-height: 1.15; }
+.rush-tile b { font-size: 15px; font-weight: 900; }
+.rush-tile small { font-size: 12px; color: #ffe9a8; }
+.rush-tile:active { transform: translateY(2px); }
+.bigbtn.star { margin-top: 10px; background: linear-gradient(135deg, #fff2a8, #ffc400); color: #3a1a05; box-shadow: 0 5px 0 #a37a00, 0 10px 24px #ffd40055; font-size: 21px; }
+.bigbtn.star small { display: block; font-size: 14px; font-weight: 800; margin-top: 3px; }
+.bigbtn.star:active { box-shadow: 0 1px 0 #a37a00; }
+.shorts.three { grid-template-columns: repeat(3, 1fr); }
+.shorts.three .sbtn { white-space: normal; font-size: 13px; padding: 10px 4px; line-height: 1.3; }
+.boss { display: flex; align-items: center; gap: 8px; width: 100%; padding: 8px 12px; border-radius: 14px; background: #0006; border: 1px solid #ff5a5a66; }
+.boss-e { font-size: 30px; line-height: 1; }
+.boss-bar { flex: 1; height: 14px; border-radius: 99px; background: var(--line); overflow: hidden; }
+.boss-bar > i { display: block; height: 100%; width: 100%; background: linear-gradient(90deg, #ff5a5a, #ff4fa3); border-radius: 99px; transition: width .35s; }
+.boss-hp { font-family: var(--display); font-weight: 800; font-size: 14px; white-space: nowrap; }
+.boss.hit .boss-e { animation: bosshit .35s; }
+@keyframes bosshit { 0%,100% { transform: scale(1) rotate(0); } 30% { transform: scale(1.5) rotate(-18deg); } 60% { transform: scale(.85) rotate(14deg); } }
+.shot-pts.small { font-size: 18px; }
