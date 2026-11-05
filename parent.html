@@ -152,7 +152,7 @@ button.ghost { background: transparent; color: var(--sub); border: 1px solid var
 
     <section class="card hidden" id="krcard" style="margin-top:12px"><h2>🇰🇷 かんこくご（IVE カードと連動）</h2><div id="kr"></div></section>
 
-    <section class="card hidden" id="ekcard" style="margin-top:12px"><h2>🏆 英検5級</h2><div id="ek"></div></section>
+    <section class="card hidden" id="ekcard" style="margin-top:12px"><h2 id="ekttl">🏆 英検</h2><div id="ek"></div></section>
 
     <section class="card"><h2>📣 エールを送る</h2>
       <p class="sub">次にアプリを開いた時、大きく表示されます。チケットを付けるとガチャが回せます。</p>
@@ -243,7 +243,7 @@ window.startParent = () => {
   const getKey = () => { try { return localStorage.getItem(PK) || ''; } catch (e) { return ''; } };
   const setKey = (k) => { try { k ? localStorage.setItem(PK, k) : localStorage.removeItem(PK); } catch (e) { /* noop */ } };
   const ICON = { eiken_past: '📄', eiken_pass: '🏅', mission: '🏀', quiz: '🎮', check: '✅', gacha: '🎰', undo: '↩️', cheer_read: '📣', test_set: '📅', goal_set: '🎯', voice: '💬', reset: '⚠️', timer: '⏱', trade: '🔄', complete: '👑', challenge: '📜', badge: '🏅', session: '📱', krcard: '📇', krcards: '📖', krname: '🏷️', krletter: '💌', krclear: '🏅', krlevel: '🎤' };
-  const QNAME = { 'ek:w': '🏆 英検 単語', 'ek:r1': '🏆 英検 大問1（語句）', 'ek:r2': '🏆 英検 大問2（会話）', 'ek:r3': '🏆 英検 大問3（並べかえ）', 'ek:l1': '🏆 英検 リスニング第1部', 'ek:l2': '🏆 英検 リスニング第2部', 'ek:l3': '🏆 英検 リスニング第3部', 'ek:scout': '🏆 英検 実力チェック', 'ek:mock': '🏆 英検 模試', calc: '🧮 計算ダッシュ', speak: '🎤 スピーキング', listen: '🎧 リスニング', spell: 'スペル', plural: '複数形', kanji: '漢字よみ', weak: '苦手つぶし', challenge: '👑 チャレンジ（上級）', verb: '🧩 動詞の形トレーニング', kwrite: '✍️ 漢字かき取り（紙・自己採点）', 'qa:社会': '社会 一問一答', 'qa:理科': '理科 一問一答', kr: '🇰🇷 韓国語クイズ', krrush: '⚡ 韓国語ラッシュ（2択）', krmatch: '🃏 韓国語カードあわせ', krspeak: '🗣️ 韓国語まねっこ' };
+  const QNAME = { 'ek:w': '🏆 英検 単語', 'ek:r1': '🏆 英検 大問1（語句）', 'ek:r2': '🏆 英検 大問2（会話）', 'ek:r3': '🏆 英検 大問3（並べかえ）', 'ek:r4': '🏆 英検 大問4（長文）', 'ek:l1': '🏆 英検 リスニング第1部', 'ek:l2': '🏆 英検 リスニング第2部', 'ek:l3': '🏆 英検 リスニング第3部', 'ek:scout': '🏆 英検 実力チェック', 'ek:mock': '🏆 英検 模試', calc: '🧮 計算ダッシュ', speak: '🎤 スピーキング', listen: '🎧 リスニング', spell: 'スペル', plural: '複数形', kanji: '漢字よみ', weak: '苦手つぶし', challenge: '👑 チャレンジ（上級）', verb: '🧩 動詞の形トレーニング', kwrite: '✍️ 漢字かき取り（紙・自己採点）', 'qa:社会': '社会 一問一答', 'qa:理科': '理科 一問一答', kr: '🇰🇷 韓国語クイズ', krrush: '⚡ 韓国語ラッシュ（2択）', krmatch: '🃏 韓国語カードあわせ', krspeak: '🗣️ 韓国語まねっこ' };
 
   const RUSH_NAME = { ek: '英検単語', verb: '動詞の形', kanji: '漢字よみ', calc: '計算', pref: '都道府県', en: '英語' };
   function showLogin(msg) { $('#login').classList.remove('hidden'); $('#dash').classList.add('hidden'); $('#loginmsg').textContent = msg || ''; }
@@ -406,23 +406,25 @@ window.startParent = () => {
       ${targetLine}${goalTable}
       ${TEST_CHECKS.map((c) => `<div class="chk"><span class="m">${T.checks && T.checks[c.id] ? '✅' : '⬜️'}</span><span><span class="sub">${esc(c.sub)}</span> ${esc(c.label)}</span></div>`).join('')}`;
 
-    // 英検5級（HOOP STUDY だけ。記録が無い子には出さない）
+    // 英検（HOOP STUDY だけ。記録が無い子には出さない。2026-11-06 5級→4級）
     const EK = st.ek; const EKS = (st.summary && st.summary.ek) || null;
     $('#ekcard').classList.toggle('hidden', !(EK && EKS));
     if (EK && EKS) {
+      $('#ekttl').textContent = '🏆 ' + (EKS.name || '英検');
+      const RT = EKS.rTotal || '—'; const LT = EKS.lTotal || '—';
       const leftE = Math.round((Date.parse(EKS.date + 'T00:00:00Z') - Date.parse(t + 'T00:00:00Z')) / 86400000);
       const since7 = addDays(t, -6);
       const menu7 = Object.keys(st.days || {}).filter((ds) => { const e = st.days[ds].ek; return ds >= since7 && e && e.m && e.m.length && e.done.length >= e.m.length; }).length;
-      const names = { w: '単語', r1: '大問1', r2: '大問2', r3: '大問3', l1: 'L第1部', l2: 'L第2部', l3: 'L第3部' };
+      const names = { w: '単語', r1: '大問1', r2: '大問2', r3: '大問3', r4: '大問4', l1: 'L第1部', l2: 'L第2部', l3: 'L第3部' };
       const rows = Object.keys(names).map((k) => { const r = (EK.rc || {})[k] || ''; const ok = r.split('').filter((c) => c === '1').length; const pct = r.length ? Math.round(ok / r.length * 100) : null; return `<div class="bar"><span>${names[k]}</span><span class="tr"><i style="width:${pct == null ? 0 : pct}%"></i></span><span class="n">${pct == null ? '—' : pct + '%'}</span></div>`; }).join('');
       const mockName = { mini1: 'ミニ模試①', mini2: 'ミニ模試②', full1: '本番模試①', full2: '本番模試②' };
       const mocks = Object.entries(EK.mocks || {}).map(([id, x]) => `<div class="sub">${esc(mockName[id] || id)}：${x.r ? `R ${x.r.ok}/${x.r.n}` : 'R 未'} ・ ${x.l ? `L ${x.l.ok}/${x.l.n}` : 'L 未'}（${esc(x.date || '')}）</div>`).join('');
-      const past = Object.entries(EK.past || {}).map(([id, x]) => `<div class="sub">公式の過去問${esc(id.slice(1))}：R ${x.r == null ? '—' : x.r}/25 ・ L ${x.l == null ? '—' : x.l}/25（${esc(x.date || '')}）</div>`).join('');
+      const past = Object.entries(EK.past || {}).map(([id, x]) => `<div class="sub">公式の過去問${esc(id.slice(1))}：R ${x.r == null ? '—' : x.r}/${RT} ・ L ${x.l == null ? '—' : x.l}/${LT}（${esc(x.date || '')}）</div>`).join('');
       $('#ek').innerHTML = `<div style="font-weight:800">本番 ${esc(EKS.date)} ${leftE > 0 ? `<span class="sub">（あと${leftE}日・今は「${esc(EKS.phase)}」）</span>` : leftE === 0 ? '<span class="sub">（今日）</span>' : `<span class="sub">（終了${EK.pass ? '・合格を記録ずみ 🎉' : ''}）</span>`}</div>
         <div class="sub" style="margin:6px 0">実力チェック ${EK.scout ? '済（' + esc(EK.scout) + '）' : '未'} ・ メニュークリア 通算 ${EK.menus || 0}日（直近7日で ${menu7}日） ・ 単語 おぼえた ${EKS.words}/${EKS.wordGoal}（全${EKS.wordTotal}語）${EKS.reward ? ` ・ 合格のごほうび 🍣 ${esc(EKS.reward)}` : ''}</div>
         <div class="sub" style="margin:8px 0 4px">形式ごとの正答率（それぞれ直近20問まで・Lはリスニング）</div><div class="bars">${rows}</div>
         ${mocks || past ? `<div class="sub" style="margin:10px 0 4px"><b>模試・過去問</b></div>${mocks}${past}` : ''}
-        <div class="sub" style="margin-top:10px">目標8割はアプリの目安で、公式の合格点ではありません（公式は正答数の目安を出していません。合格基準はCSEスコア）。アプリの問題はオリジナルなので、冬休みに<a href="https://www.eiken.or.jp/eiken/exam/grade_5/" target="_blank" rel="noopener" style="color:#8fc0ff">公式の過去問（3回分）</a>を紙に印刷して解くと、本番に近い力がわかります。</div>`;
+        <div class="sub" style="margin-top:10px">目標8割はアプリの目安で、公式の合格点ではありません（公式は正答数の目安を出していません。合格基準はCSEスコア）。アプリの問題はオリジナルなので、冬休みに<a href="${esc(EKS.url || 'https://www.eiken.or.jp/eiken/exam/')}" target="_blank" rel="noopener" style="color:#8fc0ff">公式の過去問（3回分）</a>を紙に印刷して解くと、本番に近い力がわかります。</div>`;
     }
 
     // エール

@@ -1,7 +1,7 @@
 // HOOP STUDY service worker — アプリ本体をスマホに保存してオフラインでも開けるようにする
-const CACHE = 'hoop-v20';
+const CACHE = 'hoop-v21';
 const IMG_CACHE = 'ekimg-v1';
-const SHELL = ['./', './index.html', './style.css?v=20', './app.js?v=20', './data.js?v=20', './eiken.js?v=20', './config.js?v=20', './manifest.webmanifest', './icons/icon-180.png', './icons/icon-192.png', './icons/coach.jpg', './icons/coach-full.jpg'];
+const SHELL = ['./', './index.html', './style.css?v=21', './app.js?v=21', './data.js?v=21', './eiken.js?v=21', './config.js?v=21', './manifest.webmanifest', './icons/icon-180.png', './icons/icon-192.png', './icons/coach.jpg', './icons/coach-full.jpg'];
 
 self.addEventListener('install', (e) => {
   e.waitUntil(caches.open(CACHE).then((c) => c.addAll(SHELL)).then(() => self.skipWaiting()));
