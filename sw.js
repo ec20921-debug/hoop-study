@@ -1,6 +1,7 @@
 // HOOP STUDY service worker — アプリ本体をスマホに保存してオフラインでも開けるようにする
-const CACHE = 'hoop-v19';
-const SHELL = ['./', './index.html', './style.css?v=19', './app.js?v=19', './data.js?v=19', './config.js?v=19', './manifest.webmanifest', './icons/icon-180.png', './icons/icon-192.png', './icons/coach.jpg', './icons/coach-full.jpg'];
+const CACHE = 'hoop-v20';
+const IMG_CACHE = 'ekimg-v1';
+const SHELL = ['./', './index.html', './style.css?v=20', './app.js?v=20', './data.js?v=20', './eiken.js?v=20', './config.js?v=20', './manifest.webmanifest', './icons/icon-180.png', './icons/icon-192.png', './icons/coach.jpg', './icons/coach-full.jpg'];
 
 self.addEventListener('install', (e) => {
   e.waitUntil(caches.open(CACHE).then((c) => c.addAll(SHELL)).then(() => self.skipWaiting()));
@@ -14,8 +15,14 @@ self.addEventListener('activate', (e) => {
 self.addEventListener('fetch', (e) => {
   const u = new URL(e.request.url);
   if (e.request.method !== 'GET' || u.origin !== location.origin || u.searchParams.has('fresh')) return;
+  // 英検の絵は版が変わっても同じなので、別のキャッシュに入れて先に見る（圏外でも出る）
+  if (u.pathname.includes('/icons/ek/')) {
+    e.respondWith(caches.open(IMG_CACHE).then((c) => c.match(e.request).then((hit) => hit || fetch(e.request).then((r) => { if (r.ok) c.put(e.request, r.clone()); return r; }))));
+    return;
+  }
   e.respondWith(
-    fetch(e.request).then((r) => {
+    // 開く時の html は古いものを使わない（新しい app.js と食い違わないように）
+    (e.request.mode === 'navigate' ? fetch(e.request.url, { cache: 'no-cache' }) : fetch(e.request)).then((r) => {
       if (r.ok) { const copy = r.clone(); caches.open(CACHE).then((c) => c.put(e.request, copy)); }
       return r;
     }).catch(() => caches.match(e.request).then((r) => r || caches.match('./index.html')))

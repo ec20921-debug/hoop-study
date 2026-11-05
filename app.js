@@ -1,4 +1,8 @@
 // HOOP STUDY — 本体
+// eiken.js が読めなかった時の代わり（古い index.html が残っている間など）。日付が過去なので英検の入口は出ない
+if (typeof EIKEN === 'undefined') {
+  Object.assign(window, { EIKEN: { date: '2000-01-01', goal: 0.8, counts: {}, speed: 0.85, reward: '' }, EK_PARTS: {}, EK_PHASES: [{ title: '', until: '2000-01-01', read: [], listen: [], words: 0 }], EK_MOCKS: [], EK_MINI: {}, EK_SCOUT: {}, EK_MOCK_ONLY: {}, EK_INTERVAL: [1], EK_MASTERED_BOX: 3, EK_WORD_GOAL: 1, EK_DAY_CHECKS: [], EK_NOT_TOGETHER: [], EK_WORD_GROUPS: [], EK_R1: [], EK_R2: [], EK_R3: [], EK_L1: [], EK_L2: [], EK_L3: [] });
+}
 function calcAllowance(st, ym, today, cfg) {
   var A = cfg; var days = (st && st.days) || {};
   var p = ym.split('-').map(Number);
@@ -65,6 +69,7 @@ function calcAllowance(st, ym, today, cfg) {
       goals: {}, voices: [], voiceDays: {}, voiceWeek: '', cheerLog: [], startDate: todayStr(),
       milestones: {}, cheersSeen: [], lastCheer: null, lastSync: 0, syncError: null,
       timer: null, moneySeen: null, complete: '', beat: {}, badges: {}, chal: 0, recapSeen: '', boss: 0,
+      ek: { sr: {}, rc: {}, st: {}, mocks: {}, past: {}, checks: {}, scout: '', menus: 0, pass: '' },
       device: rid(20), created: Date.now(), updated: Date.now(),
     };
   }
@@ -72,6 +77,7 @@ function calcAllowance(st, ym, today, cfg) {
     const f = freshState();
     for (const k in f) if (s[k] === undefined) s[k] = f[k];
     for (const k of ['spell', 'plural', 'kanji', 'qa', 'past', 'third', 'hkanji', 'speak', 'listen', 'kwrite']) if (!s.weak[k]) s.weak[k] = {};
+    for (const k in f.ek) if (s.ek[k] === undefined) s.ek[k] = f.ek[k];
     const firstDay = Object.keys(s.days || {}).sort()[0];
     if (firstDay && firstDay < s.startDate) s.startDate = firstDay;
     return s;
@@ -124,7 +130,7 @@ function calcAllowance(st, ym, today, cfg) {
   }
   function snapshot() {
     const r = RANKS[rankIdx(S.xp)];
-    return { ...S, summary: { rank: r[1], streak: streak(), cardKinds: Object.keys(S.cards).length, allowanceCfg: ALLOWANCE } };
+    return { ...S, summary: { rank: r[1], streak: streak(), cardKinds: Object.keys(S.cards).length, allowanceCfg: ALLOWANCE, ek: { date: EIKEN.date, goal: EIKEN.goal, words: ekMastered(), wordGoal: EK_WORD_GOAL, wordTotal: ekBank('w').length, phase: EK_PHASES[ekPhaseIdx()].title, reward: EIKEN.reward } } };
   }
   let flushTimer = null;
   let flushing = false;
@@ -515,6 +521,7 @@ function calcAllowance(st, ym, today, cfg) {
       ${allowanceCard()}
       ${mvpRow()}
       ${cheer}
+      ${ekCard()}
       ${heroButton()}
       ${chalRow()}
       <div class="sec-title"><h2>今日のミッション</h2><span>${bigProgress(d)}</span></div>
@@ -531,6 +538,7 @@ function calcAllowance(st, ym, today, cfg) {
   function gameKinds() { return ['speak', 'listen', 'spell', 'plural', 'verb', 'kanji', ...qaSubjects().map((x) => 'qa:' + x), 'challenge']; }
   const playedToday = (k) => ((S.days[todayStr()] || {}).qk || []).includes(k);
   function autoPick() {
+    const ek = ekAutoPick(); if (ek) return ek;
     const d = S.days[todayStr()] || {};
     const n = weakTotal();
     const vw = PAST_FORMS.filter((w) => S.weak.past[w[0]]).length + THIRD_FORMS.filter((w) => S.weak.third[w[0]]).length;
@@ -550,13 +558,13 @@ function calcAllowance(st, ym, today, cfg) {
     return { kind: oldest, why: !last ? 'まだやったことがないゲーム！' : c.length ? `${diffDays(last, todayStr())}日ぶりのゲーム` : 'もう1回、自己ベストに挑戦！' };
   }
   const KIND_ICON = { speak: '🎤', listen: '🎧', spell: '🔤', plural: '📦', kanji: '漢', weak: '🎯', challenge: '👑', verb: '🧩', kwrite: '✍️' };
-  const kindIcon = (k) => (k.startsWith('rush:') ? '⚡' : KIND_ICON[k]) || ({ 理科: '🧪', 社会: '🗾', 数学: '📐', 国語: '✍️' }[k.slice(3)] || '📚');
+  const kindIcon = (k) => (k.startsWith('ek:') ? '🏆' : k.startsWith('rush:') ? '⚡' : KIND_ICON[k]) || ({ 理科: '🧪', 社会: '🗾', 数学: '📐', 国語: '✍️' }[k.slice(3)] || '📚');
   function heroButton() {
     const p = autoPick();
     return `<button class="hero" data-act="omakase" data-kind="${esc(p.kind)}"><span class="hero-k">▶ おまかせ</span>
       <span class="hero-t">${kindIcon(p.kind)} ${esc(quizName(p.kind))}</span><span class="hero-s">${esc(p.why)}</span><span class="hero-a">START</span></button>`;
   }
-  function playKind(kind) { if (kind === 'speak') startSpeak(); else if (kind.startsWith('rush:')) startRush(kind.slice(5)); else startQuiz(kind); }
+  function playKind(kind) { if (kind === 'ek:menu') ekStartMenu(); else if (kind === 'speak') startSpeak(); else if (kind.startsWith('rush:')) startRush(kind.slice(5)); else startQuiz(kind); }
   function markPlayed(kind, ok, combo) {
     const d = day(); d.qk = d.qk || [];
     if (!d.qk.includes(kind)) d.qk.push(kind);
@@ -593,6 +601,11 @@ function calcAllowance(st, ym, today, cfg) {
     if (t === 'cards') return Object.keys(S.cards).length;
     if (t === 'allgames') return gameKinds().every((k) => S.lastPlay[k]) ? 1 : 0;
     if (t === 'boss') return S.boss || 0;
+    if (t === 'ekscout') return S.ek.scout ? 1 : 0;
+    if (t === 'ekmenu') return S.ek.menus || 0;
+    if (t === 'ekwords') return ekMastered();
+    if (t === 'ekmock') return ['full1', 'full2'].map((id) => S.ek.mocks[id]).some((v) => v && v.r && v.l && (v.r.ok + v.l.ok) / (v.r.n + v.l.n) >= EIKEN.goal) ? 1 : 0;
+    if (t === 'ekpass') return S.ek.pass ? 1 : 0;
     if (t === 'rushbest') return Math.max(0, ...Object.keys(S.best).filter((k) => k.startsWith('rush:')).map((k) => S.best[k]));
     return 0;
   }
@@ -662,13 +675,22 @@ function calcAllowance(st, ym, today, cfg) {
     const best = bestStreak(); const weekend = idx >= 5;
     const owned = Object.keys(S.cards).length; const ms = COLLECTION_MILESTONES.find((m) => m > owned);
     const vw = PAST_FORMS.filter((w) => S.weak.past[w[0]]).length + THIRD_FORMS.filter((w) => S.weak.third[w[0]]).length;
-    const v = { rush: RUSH.sec, name: S.nick || 'キミ', streak: st, next: st + 1, left, weak: weakTotal(), days: S.test.date ? diffDays(t, S.test.date) : '', min: timerMin(), wb, mvpLeft, mvp: ALLOWANCE.mvp, winLeft, best, vw, tk: S.tickets, ms, colLeft: ms ? ms - owned : 0 };
+    const v = { rush: RUSH.sec, name: S.nick || 'キミ', streak: st, next: st + 1, left, weak: weakTotal(), days: S.test.date ? diffDays(t, S.test.date) : '', min: timerMin(), wb, mvpLeft, mvp: ALLOWANCE.mvp, winLeft, best, vw, tk: S.tickets, ms, colLeft: ms ? ms - owned : 0, ekDays: ekLeft(), ekMock: (ekMockDue() || {}).name || '', ekReward: EIKEN.reward };
     const L = COACH_LINES; const out = [];
     const add = (k, mood) => (L[k] || []).forEach((s) => out.push({ text: fillLine(s, v), mood }));
     if (S.timer) add('timer', 'happy');
     // 連続が切れた日（今日はまだ0本）：ベスト記録を見せて、今日を「新しい1日目」にする
     const broke = !played(t) && st === 0 && best >= 3;
     if (broke) add('restart', 'fire');
+    // 英検5級（本番まで）。今日のメニューが残っていれば先に言う
+    if (v.ekDays === 0) add('ekToday', 'fire');
+    else if (v.ekDays === 1) add('ekEve', 'wink');
+    else if (v.ekDays > 1) {
+      if (!S.ek.scout) add('ekScout', 'fire');
+      else if (ekMenuLeft().length) add('ekMenu', 'fire');
+      else if (v.ekMock) add('ekMock', 'think');
+      else if (v.ekDays <= 14) add('ekFinal', 'wink');
+    }
     // 週間MVPが今週ねらえる時は、いちばん先に言う（あと1〜2日・今日はまだ BIG WIN していない）
     if (ALLOWANCE.on !== false && ALLOWANCE.mvp && !bigToday && mvpLeft >= 1 && mvpLeft <= 2 && mvpLeft <= 7 - idx) add('mvpNear', 'fire');
     // 平日で、週間MVPが金曜までの BIG WIN だけで届く時（あと3〜5日）
@@ -739,7 +761,7 @@ function calcAllowance(st, ym, today, cfg) {
     const qaTiles = qaSubjects().map((s, i) => tile('qa:' + s, i % 2 ? 'gc-qa2' : 'gc-qa', best('qa:' + s))).join('');
     // おまかせがスピーキングを選んでいる時は、同じボタンを2つ並べない
     const speakCard = autoPick().kind === 'speak' ? '' : `<button class="speakcard" data-act="speak"><span class="sp-e">🎤</span><span class="sp-t"><b>スピーキング</b><small>お手本を聞いて、英語で話そう ・ 5問</small></span><span class="sp-b">${best('speak', SPEAK_LEN)}</span></button>`;
-    return header() + paperNudge() + heroButton() + speakCard + `
+    return header() + paperNudge() + ekCard() + heroButton() + speakCard + `
       <div class="sec-title"><h2>⚡ ${RUSH.sec}秒ラッシュ</h2><span>2択をどんどん</span></div>
       <div class="rush-tiles">${rushTiles()}</div>
       <div class="sec-title"><h2>ゲームをえらぶ</h2><span>1問 1P</span></div>
@@ -778,7 +800,7 @@ function calcAllowance(st, ym, today, cfg) {
         <div class="tg-bar"><i style="width:${Math.min(100, (pSum / TEST_TARGET.total) * 100)}%"></i><span style="left:${Math.min(100, (gSum / TEST_TARGET.total) * 100)}%"></span></div>
         <div class="tg-s">${gSet ? (gSum >= TEST_TARGET.total ? `✅ 目標の合計 ${gSum}点 — ${TEST_TARGET.total}点プラン完成！` : `目標の合計 ${gSum}点 — あと${TEST_TARGET.total - gSum}点ぶん、どの教科で上げる？`) : '教科ごとの目標を入れて、400点プランを作ろう'}</div>
       </div>`;
-    return header() + target + `
+    return header() + ekCard() + target + `
       <div class="testhead">
         <div style="font-size:13px;color:var(--sub)">次の試合（テスト）</div>
         <div style="font-family:var(--display);font-weight:800;font-size:22px;margin:4px 0 6px">${esc(T.name)}</div>
@@ -881,7 +903,7 @@ function calcAllowance(st, ym, today, cfg) {
     el.textContent = !CFG.GAS_URL ? '' : S.syncError === 'device' ? '⚠️ 送信できていません（⚙️設定を見てね）' : q ? `送信待ち ${q} 件（電波のある所で自動送信）` : S.lastSync ? '✓ おうちに送信ずみ' : '';
   }
   function render() {
-    const v = { home: viewHome, game: viewGame, test: viewTest, voice: viewVoice, gacha: viewGacha, set: viewSet, ranks: viewRanks }[tab] || viewHome;
+    const v = { home: viewHome, game: viewGame, test: viewTest, voice: viewVoice, gacha: viewGacha, set: viewSet, ranks: viewRanks, eiken: viewEiken }[tab] || viewHome;
     $('#app').innerHTML = v();
     renderTabs();
     updateSyncLabel();
@@ -1202,6 +1224,7 @@ function calcAllowance(st, ym, today, cfg) {
     return qs;
   }
   function quizName(kind) {
+    if (kind === 'ek:menu') return S.ek.scout ? '英検カップ 今日のメニュー' : '英検5級 実力チェック';
     if (kind.startsWith('rush:')) return `${RUSH.sec}秒ラッシュ ${rushName(kind.slice(5))}`;
     return { speak: 'スピーキング', listen: 'リスニング', spell: 'スペル・シュート', plural: '複数形チャレンジ', kanji: '漢字よみ速攻', weak: '苦手つぶし', challenge: 'チャレンジ（上級）', verb: '動詞の形トレーニング', kwrite: '漢字かき取り' }[kind] || (kind.startsWith('qa:') ? kind.slice(3) + ' 一問一答' : kind);
   }
@@ -1493,16 +1516,21 @@ function calcAllowance(st, ym, today, cfg) {
   // 点は 正解−まちがい（1回 10Pまで）。ポイントがつくのはラッシュ全部で1日2回まで（それ以降は記録だけ。ポイントの増え方をほかのゲームとそろえる）
   // まちがえた問題は苦手リストに入る。2択なので、正解しても苦手は消さない（消えるのは苦手つぶしで正解した時）
   const RUSH = { sec: 24, penalty: 2, maxPts: 10, rounds: 2 };
-  const rushModes = () => [['verb', '🧩', '動詞の形'], ['kanji', '漢', '漢字よみ'], ...qaSubjects().map((s) => ['qa:' + s, kindIcon('qa:' + s), s])];
+  const rushModes = () => [['verb', '🧩', '動詞の形'], ...(ekLeft() >= 0 ? [['ek', '🏆', '英検単語']] : []), ['kanji', '漢', '漢字よみ'], ...qaSubjects().map((s) => ['qa:' + s, kindIcon('qa:' + s), s])];
   const rushName = (m) => (rushModes().find((x) => x[0] === m) || [m, '', m])[2];
-  const rushSubject = (m) => (m === 'verb' ? '英語' : m === 'kanji' ? '国語' : SUBJECTS.includes(m.slice(3)) ? m.slice(3) : '全教科');
+  const rushSubject = (m) => (m === 'verb' || m === 'ek' ? '英語' : m === 'kanji' ? '国語' : SUBJECTS.includes(m.slice(3)) ? m.slice(3) : '全教科');
   const rushTiles = () => rushModes().map(([m, e, n], i) => `<button class="rush-tile ${i === 0 ? 'main' : ''}" data-act="rush" data-mode="${esc(m)}"><span>${e}</span><b>${esc(n)}</b><small>${S.best['rush:' + m] != null ? `ベスト ${S.best['rush:' + m]}問` : 'NEW'}</small></button>`).join('');
   // 苦手をときどき混ぜる
   function rushPick(list, kind, keyOf) { const wk = S.weak[kind] || {}; const weak = list.filter((x) => wk[keyOf(x)]); return weak.length && Math.random() < 0.5 ? pick(weak) : pick(list); }
   function rushItem(mode) {
     let q;
     if (mode === 'verb') q = Math.random() < 0.6 ? mkVerbPast(rushPick(PAST_FORMS, 'past', (w) => w[0])) : mkVerbThird(rushPick(THIRD_FORMS, 'third', (w) => w[0]));
-    else if (mode === 'kanji') q = mkKanji(rushPick(BANK.kanji, 'kanji', (x) => x.q));
+    else if (mode === 'ek') {
+      // 英検の単語：まちがえた語を半分くらい混ぜる。2択なので正解しても「おぼえた」には進めない（まちがえたら復習に戻す）
+      const all = ekBank('w'); const low = all.filter((w) => ekBox(w.id) === 0);
+      const w = low.length && Math.random() < 0.5 ? pick(low) : pick(all.filter((x) => x.tier === 1));
+      q = { type: 'ekw', ekid: w.id, key: w.en, sub: '英語', prompt: '意味は？', main: esc(w.en), answer: w.ja, choices: ekWordChoices(w, 'ja') };
+    } else if (mode === 'kanji') q = mkKanji(rushPick(BANK.kanji, 'kanji', (x) => x.q));
     else q = mkQa(rushPick(BANK.qa.filter((x) => x.s === mode.slice(3)), 'qa', (x) => x.q));
     const others = q.choices.filter((c) => c !== q.answer);
     return { ...q, other: others.length ? pick(others) : '—' };
@@ -1537,6 +1565,7 @@ function calcAllowance(st, ym, today, cfg) {
         setTimeout(() => { if (!st.ended) next(); }, 180);
       } else {
         st.combo = 0; st.miss.push(q); st.end -= RUSH.penalty * 1000;
+        if (q.ekid) { ekMark(q.ekid, false); save(); }
         const wk = S.weak[q.type];
         if (wk && (wk[q.key] || (st.added || 0) < 3)) { if (!wk[q.key]) st.added = (st.added || 0) + 1; wk[q.key] = (wk[q.key] || 0) + 1; }
         b.classList.add('ng'); sfx.ng(); buzz(60);
@@ -1597,6 +1626,661 @@ function calcAllowance(st, ym, today, cfg) {
       if (low && sec !== st.lastSec) tone(1200, 0.05, 'square', 0.07);
       st.lastSec = sec;
     }, 100);
+  }
+
+  // ---------- 英検5級プログラム（2026-11-05 Daisuke「1/17 の英検5級に合格できるように」） ----------
+  // 毎日のメニュー（単語→大問→リスニング・約5分）＋ 模試 ＋ 公式の過去問の記録。
+  // 点は他のゲームと同じ「1問 1P」で addPoints を通る（XP・その日の点には他のゲームと同じように入る）。
+  // 全問正解チケットなど、英検だけの新しいごほうびは足していない。おこづかいの計算式も変えていない
+  const ekHash = (s) => { let h = 5381; for (let i = 0; i < s.length; i++) h = ((h * 33) ^ s.charCodeAt(i)) >>> 0; return h.toString(36); };
+  const ekLeft = () => diffDays(todayStr(), EIKEN.date);
+  const ekDateLabel = () => { const [, m, d] = EIKEN.date.split('-').map(Number); return `${m}月${d}日（${'日月火水木金土'[new Date(EIKEN.date + 'T00:00:00Z').getUTCDay()]}）`; };
+  const ekPhaseIdx = (ds = todayStr()) => { const i = EK_PHASES.findIndex((p) => ds <= p.until); return i < 0 ? EK_PHASES.length - 1 : i; };
+  // 問題を共通の形にそろえる（id は本文から作るので、問題を足しても記録がずれない）
+  let ekBanks = null;
+  function ekBank(part) {
+    if (!ekBanks) {
+      const tag = (key, list, mk) => list.map((x, i) => ({ ...mk(x), part: key, mockOnly: i >= list.length - EK_MOCK_ONLY[key], mockSet: i >= list.length - EK_MOCK_ONLY[key] / 2 ? 2 : 1 }));
+      ekBanks = {
+        w: EK_WORD_GROUPS.flatMap((g) => g.w.map((w) => ({ part: 'w', id: 'w:' + w[0], en: w[0], ja: w[1], group: g.id, tier: g.tier }))),
+        r1: tag('r1', EK_R1, (x) => ({ id: 'r1:' + ekHash(x[0]), text: x[0], choices: x[1], ja: x[2], tip: x[3] })),
+        r2: tag('r2', EK_R2, (x) => ({ id: 'r2:' + ekHash(JSON.stringify(x[0])), lines: x[0], choices: x[1], ja: x[2], tip: x[3] })),
+        r3: tag('r3', EK_R3, (x) => ({ id: 'r3:' + ekHash(x[1] + x[2].join() + x[3]), ja: x[0], pre: x[1], chunks: x[2], post: x[3] })),
+        l1: tag('l1', EK_L1, (x) => ({ id: 'l1:' + ekHash(x[2] + x[0]), pic: x[0], who: x[1], line: x[2], choices: x[3], ja: x[4] })),
+        l2: tag('l2', EK_L2, (x) => ({ id: 'l2:' + ekHash(JSON.stringify(x[0])), lines: x[0], question: x[1], choices: x[2], ja: x[3] })),
+        l3: tag('l3', EK_L3, (x) => ({ id: 'l3:' + ekHash(x[0] + x[1][0]), pic: x[0], choices: x[1], ja: x[2] })),
+      };
+    }
+    return ekBanks[part] || [];
+  }
+  // ---------- おぼえ直し（箱の番号が大きいほど、次に出るまで間があく） ----------
+  function ekMark(id, ok, fast) {
+    const sr = S.ek.sr; const r = sr[id]; const t = dayNum();
+    if (!ok) { sr[id] = [0, t + EK_INTERVAL[0]]; return; }
+    if (r && r[1] > t) return; // 予定の日より前に正解しても箱は上げない（同じ日に何度やっても1つだけ）
+    const box = Math.min(EK_INTERVAL.length - 1, r ? r[0] + 1 : fast ? 2 : 1);
+    sr[id] = [box, t + EK_INTERVAL[box]];
+  }
+  const ekBox = (id) => { const r = S.ek.sr[id]; return r ? r[0] : -1; };
+  const ekMastered = () => ekBank('w').filter((w) => ekBox(w.id) >= EK_MASTERED_BOX).length;
+  function ekStat(part, ok) {
+    const st = S.ek.st[part] || [0, 0]; st[0] += ok ? 1 : 0; st[1]++; S.ek.st[part] = st;
+    S.ek.rc[part] = ((S.ek.rc[part] || '') + (ok ? '1' : '0')).slice(-20);
+  }
+  // 直近の正答率（問題数が少ないうちは、まだわからないので null）
+  const ekRate = (part, min = 3) => { const r = S.ek.rc[part]; if (!r || r.length < min) return null; return r.split('').filter((c) => c === '1').length / r.length; };
+  // 問題を選ぶ：予定の日が来たもの → まだやっていないもの → 間があいているもの の順
+  function ekPick(part, n) {
+    const t = dayNum();
+    const pool = ekBank(part).filter((q) => !q.mockOnly);
+    const due = shuffle(pool.filter((q) => { const r = S.ek.sr[q.id]; return r && r[1] <= t; })).sort((a, b) => ekBox(a.id) - ekBox(b.id));
+    let fresh = shuffle(pool.filter((q) => !S.ek.sr[q.id]));
+    if (part === 'w') fresh = fresh.sort((a, b) => a.tier - b.tier);
+    const later = shuffle(pool.filter((q) => { const r = S.ek.sr[q.id]; return r && r[1] > t; })).sort((a, b) => S.ek.sr[a.id][1] - S.ek.sr[b.id][1]);
+    // 単語は復習がたまっても、新しい語を毎回3つは入れる（進んでいる手ごたえが止まらないように）
+    const keepNew = part === 'w' ? Math.min(3, fresh.length) : 0;
+    const out = due.slice(0, n - keepNew);
+    fresh.slice(0, n - out.length).forEach((q) => out.push(q));
+    later.slice(0, n - out.length).forEach((q) => out.push(q));
+    return shuffle(out);
+  }
+  // ---------- 今日のメニュー ----------
+  function ekWeakest(parts) {
+    let worst = null; let low = 0.9; // 全部 9割以上なら「苦手なし」
+    parts.forEach((p) => { const r = ekRate(p); if (r != null && r < low) { low = r; worst = p; } });
+    return worst;
+  }
+  function ekBuildMenu(ds) {
+    const left = diffDays(ds, EIKEN.date);
+    if (left <= 0) return { m: [], done: [] };
+    if (!S.ek.scout) return { m: [{ k: 'scout', n: 15 }], done: [] };
+    const i = ekPhaseIdx(ds); const ph = EK_PHASES[i]; const num = dayNum(ds);
+    // 基礎練・戦術練習は順番どおり（3日に1回だけ苦手を優先）。練習試合からは苦手を優先
+    const useWeak = i >= 2 || num % 3 === 0;
+    const pickOf = (list, parts) => (useWeak && ekWeakest(parts)) || list[num % list.length];
+    if (left === 1) return { m: [{ k: 'w', n: 5 }, { k: pickOf(ph.read, ['r1', 'r2', 'r3']), n: 3 }, { k: pickOf(ph.listen, ['l1', 'l2', 'l3']), n: 2 }], done: [] };
+    return { m: [{ k: 'w', n: ph.words }, { k: pickOf(ph.read, ['r1', 'r2', 'r3']), n: 5 }, { k: pickOf(ph.listen, ['l1', 'l2', 'l3']), n: 3 }], done: [] };
+  }
+  const ekMenu = () => (S.days[todayStr()] || {}).ek || ekBuildMenu(todayStr());
+  const ekMenuLeft = () => { const m = ekMenu(); return m.m.filter((_, i) => !m.done.includes(i)); };
+  const ekSlotName = (s) => (s.k === 'scout' ? '実力チェック' : EK_PARTS[s.k].name);
+  // おまかせの一番目（今日のメニューが残っている間だけ）
+  function ekAutoPick() {
+    if (ekLeft() <= 0) return null;
+    const m = ekMenu();
+    if (!ekMenuLeft().length) return null;
+    return { kind: 'ek:menu', why: S.ek.scout ? `${m.m.map((s, i) => `${'①②③'[i]}${ekSlotName(s)}`).join(' ')}（${m.done.length}/${m.m.length}）約5分` : `まず今の力をチェック！ 15問・約5分（本番まで あと${ekLeft()}日）` };
+  }
+  // 模試：予定の日が来ていて、まだ終わっていない最初の1つ
+  const ekMockDone = (def) => { const r = S.ek.mocks[def.id]; return !!(r && r.r && r.l); };
+  const ekMockDue = () => (ekLeft() > 0 ? EK_MOCKS.find((d) => todayStr() >= d.from && !ekMockDone(d)) || null : null);
+  // ---------- 予想スコア（本番の問題数で重みづけ。公式の合否判定ではない） ----------
+  function ekEstimate() {
+    const calc = (parts) => { let sum = 0; let known = 0; let tot = 0; parts.forEach((p) => { const c = EIKEN.counts[p]; const x = ekRate(p, 2); tot += c; if (x != null) { sum += x * c; known += c; } }); return known >= tot * 0.5 ? Math.round((sum / known) * tot) : null; };
+    return { r: calc(['r1', 'r2', 'r3']), l: calc(['l1', 'l2', 'l3']) };
+  }
+  // 一番新しい「通しの結果」（公式の過去問 → 本番模試 の順に優先）
+  function ekLatestReal() {
+    const past = Object.values(S.ek.past || {}).filter((v) => v.r != null && v.l != null).sort((a, b) => String(a.date).localeCompare(String(b.date))).pop();
+    if (past) return { label: '公式の過去問', r: past.r, l: past.l };
+    const full = ['full2', 'full1'].map((id) => S.ek.mocks[id]).find((x) => x && x.r && x.l);
+    return full ? { label: '本番模試', r: full.r.ok, l: full.l.ok } : null;
+  }
+  function ekGauge() {
+    const real = ekLatestReal(); const est = ekEstimate();
+    const R = real ? real.r : est.r; const L = real ? real.l : est.l;
+    const bar = (name, x) => `<div class="ek-gb"><span>${name}</span><span class="ek-gt"><i style="width:${x == null ? 0 : (x / 25) * 100}%"></i><u style="left:${EIKEN.goal * 100}%"></u></span><b>${x == null ? '？' : x}<small>/25</small></b></div>`;
+    const both = R != null && L != null; const pct = both ? (R + L) / 50 : 0;
+    const zone = !both ? (S.ek.scout ? '🏀 メニューを続けると、ここに予想が出るよ' : 'まず実力チェックをやってみよう') : pct >= EIKEN.goal ? '🟢 目標の8割クリア！ このままキープ' : pct >= 0.65 ? '🟡 あと少しで目標の8割' : '🔵 これから伸ばそう。毎日のメニューで上がるよ';
+    return `<div class="ek-gauge">${bar('リーディング', R)}${bar('リスニング', L)}<div class="ek-zone">${zone}</div><div class="ek-gnote">${real ? real.label + 'の点数' : 'アプリの問題での予想'}。線＝目標8割（アプリの目標で、公式の合格点ではないよ）</div></div>`;
+  }
+  // ---------- 画面（ホームのカード・ゲーム／試合前の入口・英検カップ本体） ----------
+  function ekDots() {
+    const t = todayStr();
+    return Array.from({ length: 7 }, (_, i) => { const ds = addDays(t, i - 6); const e = (S.days[ds] || {}).ek; const ok = e && e.m.length && e.done.length >= e.m.length; return `<i class="${ok ? 'on' : ds === t ? 'now' : ''}"></i>`; }).join('');
+  }
+  function ekCard() {
+    const left = ekLeft();
+    if (left < 0) {
+      if (S.ek.pass) return `<button class="ek-card done" data-tab="eiken"><span class="ek-c-e">🏅</span><span class="ek-c-t"><b>英検5級 合格！</b><small>おめでとう！ 🍣 ${esc(EIKEN.reward)}に行こう！</small></span></button>`;
+      return left >= -60 ? `<button class="ek-card" data-tab="eiken"><span class="ek-c-e">🏆</span><span class="ek-c-t"><b>英検5級 おつかれさま！</b><small>結果がわかったら、ここから教えてね</small></span><span class="ek-c-a">›</span></button>` : '';
+    }
+    const rest = ekMenuLeft().length; const m = ekMenu();
+    return `<button class="ek-card" data-tab="eiken"><span class="ek-c-e">🏆</span><span class="ek-c-t"><b>英検5級 ${left === 0 ? '今日が本番！' : `あと <em>${left}</em> 日`}<i class="ek-c-r">🍣合格で${esc(EIKEN.reward)}！</i></b><small>${left === 0 ? 'いつものシュートを打つだけ 🔥' : !S.ek.scout ? 'タップで作戦を見る' : rest ? `今日のメニュー ${m.done.length}/${m.m.length}` : '今日のメニュー クリア ✓'} ・ 単語 ${ekMastered()}/${EK_WORD_GOAL}</small><span class="ek-dots">${ekDots()}</span></span><span class="ek-c-a">›</span></button>`;
+  }
+  function ekMenuCard() {
+    const left = ekLeft();
+    if (left === 0) return `<div class="ek-today"><div class="ek-sec">🔥 今日が本番！</div><p class="note">えんぴつと消しゴムは持った？ 迷ったら印をつけて先へ。リスニングは2回読まれるよ。これまでのシュートを信じて！</p></div>`;
+    if (left < 0) return '';
+    const m = ekMenu(); const allDone = m.m.length && m.done.length >= m.m.length;
+    return `<div class="ek-today"><div class="ek-sec">今日のメニュー<span>約5分</span></div>
+      ${m.m.map((s, i) => { const done = m.done.includes(i); const p = EK_PARTS[s.k]; return `<div class="ek-slot ${done ? 'done' : ''}"><span class="ek-n">${done ? '✓' : '①②③'[i]}</span><span class="ek-sn"><b>${s.k === 'scout' ? '🔎 実力チェック' : p.icon + ' ' + esc(p.name)}</b><small>${s.k === 'scout' ? '6つの形式から15問。今の力を見るよ' : `${s.n}問 ・ ${esc(p.how)}`}</small></span></div>`; }).join('')}
+      ${allDone ? `<div class="ek-clear">🏆 今日のメニュー クリア！<button class="btn ghost" data-act="ekmore" data-kind="w">単語をもう1セット</button></div>` : `<button class="btn big" data-act="ekgo">${m.done.length ? '▶ つづきから' : '▶ START'}</button>`}</div>`;
+  }
+  function viewEiken() {
+    const left = ekLeft(); const i = ekPhaseIdx(); const due = ekMockDue();
+    const mw = ekMastered();
+    setTimeout(ekPreload, 1500);
+    const passBtn = left < 0 && !S.ek.pass ? '<button class="btn big" data-act="ekpass" style="margin-top:10px">🎉 合格した！</button>' : '';
+    const practice = ['w', 'r1', 'r2', 'r3', 'l1', 'l2', 'l3'].map((k) => { const p = EK_PARTS[k]; const r = ekRate(k); return `<button class="tile ek-tile" data-act="ekmore" data-kind="${k}"><span class="t-e">${p.icon}</span><span class="t-n">${esc(p.name)}</span><span class="t-b">${r == null ? 'NEW' : `最近 ${Math.round(r * 100)}%`}</span></button>`; }).join('');
+    const mockRow = (d) => { const x = S.ek.mocks[d.id]; const done = ekMockDone(d); const now = todayStr() >= d.from; return `<div class="ek-mock ${done ? 'done' : now ? 'now' : ''}"><span class="ek-sn"><b>${done ? '✓ ' : ''}${esc(d.name)}</b><small>${done ? `R ${x.r.ok}/${x.r.n} ・ L ${x.l.ok}/${x.l.n}` : x && (x.r || x.l) ? '後半が残っているよ' : `${d.kind === 'full' ? '50問・約45分（前半後半に分けてOK）' : '20問・約15分'} ・ ${Number(d.from.slice(5, 7))}/${Number(d.from.slice(8))}〜`}</small></span>${done ? '' : `<button class="btn ${now ? '' : 'ghost'}" data-act="ekmock" data-id="${d.id}">${x && (x.r || x.l) ? 'つづき' : 'やる'}</button>`}</div>`; };
+    const pastRows = ['p1', 'p2', 'p3'].map((id, n) => { const x = (S.ek.past || {})[id] || {}; return `<div class="ek-past"><span>${'①②③'[n]}</span><input class="inp" inputmode="numeric" id="ekp-r-${id}" value="${esc(x.r == null ? '' : x.r)}" placeholder="R /25"><input class="inp" inputmode="numeric" id="ekp-l-${id}" value="${esc(x.l == null ? '' : x.l)}" placeholder="L /25"><button class="btn ghost" data-act="ekpast" data-id="${id}">保存</button></div>`; }).join('');
+    return header() + `
+      <div class="ek-hero"><div class="ek-h-l">🏆 英検カップ</div>
+        <div class="ek-h-t">英検5級 ${left > 0 ? `あと <b>${left}</b> 日` : left === 0 ? '<b>今日が本番！</b>' : 'おつかれさま！'}</div>
+        <div class="ek-h-s">本番 ${ekDateLabel()} ・ リーディング25問（25分）＋リスニング25問（約20分）</div>
+        ${S.ek.pass ? '' : `<div class="ek-reward">🍣 合格したら <b>${esc(EIKEN.reward)}</b>！</div>`}
+        ${left >= 0 ? ekGauge() : ''}${passBtn}${S.ek.pass ? `<div class="reward-big">🏅 合格おめでとう！ よくがんばった！<br>🍣 ${esc(EIKEN.reward)}に行こう！<br><small>この画面をおうちの人に見せてね</small></div>` : ''}
+      </div>
+      ${ekMenuCard()}
+      ${due ? `<div class="ek-due"><span>🏟️ 練習試合の時期だよ：<b>${esc(due.name)}</b></span><button class="btn" data-act="ekmock" data-id="${due.id}">やる ▶</button></div>` : ''}
+      <div class="sec-title"><h2>📖 単語</h2><span>おぼえた ${mw} ／ 目標 ${EK_WORD_GOAL}</span></div>
+      <div class="progress" style="margin-top:0"><i style="width:${Math.min(100, (mw / EK_WORD_GOAL) * 100)}%"></i></div>
+      <p class="note">正解すると間をあけてまた出るよ。別の日にも正解できたら「おぼえた」。${left >= 0 ? `<button class="ek-link" data-act="rush" data-mode="ek">⚡ ${RUSH.sec}秒ラッシュ（単語）</button>` : ''}</p>
+      <div class="sec-title"><h2>本番までの作戦</h2><span>今ここ ▶</span></div>
+      <div class="roadmap">${EK_PHASES.map((p, n) => `<div class="phase ${n === i && left >= 0 ? 'now' : n < i ? 'past' : ''}"><div class="pt">${n === i && left >= 0 ? '▶ ' : ''}${esc(p.title)}<span>〜${Number(p.until.slice(5, 7))}/${Number(p.until.slice(8))}</span></div><div class="px">${esc(p.text)}</div></div>`).join('')}</div>
+      <div class="sec-title"><h2>🎯 自主練</h2><span>好きな形式を少しだけ</span></div>
+      <div class="tiles">${practice}</div>
+      <div class="sec-title"><h2>🏟️ 模試</h2><span>時間を計って本番と同じ形で</span></div>
+      <div class="ek-mocks">${EK_MOCKS.map(mockRow).join('')}</div>
+      <div class="sec-title"><h2>📄 公式の過去問</h2><span>本物でいちばん力がわかる</span></div>
+      <div class="ek-pastbox"><p class="note" style="margin-top:0">英検の公式サイトで3回分（問題・音声・解答）が見られるよ。紙に印刷して、本番みたいに解こう。⏱タイマーも使ってね。点数を入れると上のゲージにも出るよ。</p>
+        <a class="btn ghost ek-a" href="${esc(EIKEN.officialUrl)}" target="_blank" rel="noopener">公式の過去問ページを開く ↗</a>
+        ${pastRows}</div>
+      <div class="sec-title"><h2>✅ 当日までのチェック</h2><span>${EK_DAY_CHECKS.filter((c) => S.ek.checks[c.id]).length}/${EK_DAY_CHECKS.length}</span></div>
+      ${EK_DAY_CHECKS.map((c) => `<button class="check ${S.ek.checks[c.id] ? 'on' : ''}" data-act="ekcheck" data-id="${c.id}"><span class="bx">${S.ek.checks[c.id] ? '✓' : ''}</span><span>${esc(c.label)}</span></button>`).join('')}
+      <p class="note" style="margin-top:12px">スピーキングテストは希望すれば受けられるけど、5級の合否には関係ないよ。ここの問題はアプリ用に作ったもので、本物とは少しちがうよ。</p>`;
+  }
+  // ---------- 読み上げ（2人の声。男性の声が無い端末では高さを変える） ----------
+  let ekMale = null;
+  function ekVoices() {
+    if (!window.speechSynthesis) return;
+    const vs = speechSynthesis.getVoices().filter((v) => /^en/i.test(v.lang));
+    ekMale = vs.find((v) => /^en[-_]US/i.test(v.lang) && /Aaron|Fred|Nathan|Evan|Tom|Alex|Reed|Male/i.test(v.name)) || vs.find((v) => /Daniel|Arthur|Oliver|Rishi|Male/i.test(v.name)) || null;
+  }
+  let ekPlayId = 0;
+  let ekCur = null; // 再生中の読み上げを持っておく（持っていないと iPhone で終わりの知らせが来ないことがある）
+  let ekMockAudio = false; // 模試のリスニング中は、裏に回っても放送を止めない（進行が止まるため）
+  function ekStopAudio() { ekPlayId++; if (window.speechSynthesis) speechSynthesis.cancel(); }
+  function ekSayLine(text, who, rate) {
+    return new Promise((res) => {
+      if (!window.speechSynthesis) { res(); return; }
+      if (!ekMale) ekVoices();
+      const u = new SpeechSynthesisUtterance(text);
+      u.lang = 'en-US'; u.rate = rate;
+      const male = who === 'b' || who === 'm';
+      if (male && ekMale) { u.voice = ekMale; u.pitch = who === 'b' ? 1.25 : 0.95; } else {
+        if (enVoice) u.voice = enVoice;
+        u.pitch = who === 'g' ? 1.3 : who === 'w' ? 1.05 : who === 'b' ? 0.85 : who === 'm' ? 0.65 : 1;
+      }
+      const to = setTimeout(res, Math.max(3500, text.length * 170)); // 終わりの知らせが来ない端末でも止まらないように
+      u.onend = u.onerror = () => { clearTimeout(to); res(); };
+      ekCur = u;
+      if (speechSynthesis.paused) speechSynthesis.resume();
+      speechSynthesis.speak(u);
+    });
+  }
+  // lines: [{ t, who, gap }] を times 回読む。とちゅうで止めたら false
+  async function ekPlay(lines, times = 2, slow) {
+    ekStopAudio();
+    const id = ekPlayId;
+    await sleep(120);
+    for (let k = 0; k < times; k++) {
+      for (const ln of lines) {
+        if (id !== ekPlayId) return false;
+        await ekSayLine(ln.t, ln.who, slow ? 0.6 : EIKEN.speed);
+        await sleep(ln.gap || 260);
+      }
+      if (k < times - 1) await sleep(900);
+    }
+    return id === ekPlayId;
+  }
+  // ---------- 問題 → 画面の部品 ----------
+  // 第1部の返事の声：絵の説明から、会話の相手に近い声を選ぶ（母と息子なら男の子の声、女の子どうしなら女性の声）
+  function ekReplyVoice(it) {
+    const s = it.pic;
+    if (it.who === 'm' || it.who === 'w') { if (/\b(boy|son|student)\b/i.test(s)) return 'b'; if (/\b(girl|daughter)\b/i.test(s)) return 'g'; return it.who === 'm' ? 'w' : 'm'; }
+    if (/two girls/i.test(s)) return 'w';
+    if (/two boys/i.test(s)) return 'm';
+    return it.who === 'g' ? 'b' : 'g';
+  }
+  const ekPicHtml = (pic) => {
+    if (pic.startsWith('clock:')) return `<div class="ek-pic ek-pic-t"><span class="ek-clock">${esc(pic.slice(6))}</span></div>`;
+    if (pic.startsWith('text:')) return `<div class="ek-pic ek-pic-t"><span class="ek-tag">${esc(pic.slice(5))}</span></div>`;
+    return `<div class="ek-pic"><img src="icons/ek/${ekHash(pic)}.jpg" alt="" onerror="this.replaceWith(Object.assign(document.createElement('span'),{className:'ek-pic-x',textContent:'🖼️ 絵を読みこめなかったよ（通信を確かめてね）'}))"></div>`;
+  };
+  const ekBlank = (s) => esc(s).replace(/\(\s+\)/g, '<b class="ek-bl">(　　　)</b>');
+  const ekSent = (s) => ekBlank(s).replace(/ ?\bB: /, '<br>B: ');
+  const ekFull3 = (q) => { const s = [q.pre, q.chunks.join(' ')].filter(Boolean).join(' '); const full = s + (q.post ? (/^[.?]/.test(q.post) ? '' : ' ') + q.post : ''); return full.charAt(0).toUpperCase() + full.slice(1); };
+  function ekWordChoices(w, key) {
+    // 同じ語・同じ訳・意味が近い組（EK_NOT_TOGETHER）は混ぜない（正解が2つに見えないように）
+    const near = new Set(EK_NOT_TOGETHER.filter((g) => g.includes(w.en)).flat());
+    const ok = (x) => x.en !== w.en && x.ja !== w.ja && !near.has(x.en);
+    const same = shuffle(ekBank('w').filter((x) => x.group === w.group && ok(x)));
+    const other = shuffle(ekBank('w').filter((x) => x.group !== w.group && ok(x)));
+    const out = []; for (const x of same.concat(other)) { if (!out.includes(x[key])) out.push(x[key]); if (out.length === 3) break; }
+    return shuffle([w[key], ...out]);
+  }
+  // 画面に出す形を作る（mock＝本番形式。語句を並べるかわりに、本番と同じ組み合わせの4択にする）
+  function ekBuild(item, mock) {
+    const p = item.part; const q = { item, part: p, id: item.id, label: '' };
+    if (p === 'w') {
+      const box = ekBox(item.id); const mode = box === 2 ? 'ja' : window.speechSynthesis && (box === 1 || (box >= 3 && dayNum() % 2 === 0)) ? 'audio' : 'en';
+      q.label = item.en;
+      if (mode === 'ja') { q.prompt = '英語でいうと？'; q.main = `<div class="ek-w ek-w-ja">${esc(item.ja)}</div>`; q.answer = item.en; q.choices = ekWordChoices(item, 'en'); } else {
+        q.prompt = mode === 'audio' ? '聞いて、意味は？' : '意味は？'; q.answer = item.ja; q.choices = ekWordChoices(item, 'ja'); q.main = mode === 'audio' ? '<div class="ek-w">🎧</div>' : `<div class="ek-w">${esc(item.en)}</div>`;
+        if (mode === 'audio') { q.audio = [{ t: item.en, who: 'w' }]; q.times = 1; }
+      }
+      q.after = `<b>${esc(item.en)}</b> ＝ ${esc(item.ja)}`;
+      return q;
+    }
+    if (p === 'r1') { q.label = item.text; q.prompt = '（　）に入るものは？'; q.main = `<div class="ek-s">${ekSent(item.text)}</div>`; q.answer = item.choices[0]; q.choices = shuffle(item.choices); q.after = esc(item.ja); q.tip = item.tip; return q; }
+    if (p === 'r2') { q.label = item.lines[0][1]; q.prompt = '（　）に入る文は？'; q.main = `<div class="ek-dlg">${item.lines.map((l) => `<div><i>${esc(l[0])}:</i> ${ekBlank(l[1])}</div>`).join('')}</div>`; q.answer = item.choices[0]; q.choices = shuffle(item.choices); q.list = true; q.after = esc(item.ja); q.tip = item.tip; return q; }
+    if (p === 'r3') {
+      q.label = ekFull3(item); q.chunks = shuffle(item.chunks); q.after = `<b>${esc(ekFull3(item))}</b><br>${esc(item.ja)}`;
+      const at = (t) => q.chunks.indexOf(t);
+      const num = '①②③④'; q.correctOrder = item.chunks.map(at);
+      q.combo = `${num[at(item.chunks[0])]} － ${num[at(item.chunks[2])]}`;
+      const idx = [0, 1, 2, 3]; const pairs = [];
+      idx.forEach((a) => idx.forEach((b) => { if (a !== b) { const s = `${num[a]} － ${num[b]}`; if (s !== q.combo) pairs.push(s); } }));
+      q.answer = q.combo; q.prompt = mock ? '1番目と3番目は？' : '順番にタップ';
+      q.main = `<div class="ek-ja">${esc(item.ja)}</div>${mock ? `<div class="ek-chs">${q.chunks.map((c, i) => `<span>${num[i]} ${esc(c)}</span>`).join('')}</div>` : ''}`;
+      q.boxes = true; q.choices = shuffle([q.combo, ...shuffle(pairs).slice(0, 3)]);
+      return q;
+    }
+    if (p === 'l1') {
+      q.label = item.line; q.prompt = '返事はどれ？'; q.main = ekPicHtml(item.pic);
+      const c = shuffle(item.choices); const who = ekReplyVoice(item);
+      q.audio = [{ t: item.line, who: item.who, gap: 500 }, ...c.map((t, i) => ({ t: `${['One', 'Two', 'Three'][i]}. ${t}`, who, gap: 420 }))];
+      q.numbers = c; q.answer = String(c.indexOf(item.choices[0]) + 1); q.choices = ['1', '2', '3'];
+      q.after = `🔊 ${esc(item.line)}<br>${c.map((t, i) => `${i + 1}. ${esc(t)}`).join('<br>')}<br><span class="ek-j">${esc(item.ja)}</span>`;
+      return q;
+    }
+    if (p === 'l2') {
+      q.label = item.question; q.prompt = '答えはどれ？'; q.main = '<div class="ek-w">👂</div>';
+      q.audio = [...item.lines.map((l) => ({ t: l[1], who: l[0], gap: 420 })), { t: 'Question. ' + item.question, who: 'n', gap: 500 }];
+      q.answer = item.choices[0]; q.choices = shuffle(item.choices); q.list = true;
+      q.after = `${item.lines.map((l) => `🔊 ${esc(l[1])}`).join('<br>')}<br>❓ ${esc(item.question)}<br><span class="ek-j">${esc(item.ja)}</span>`;
+      return q;
+    }
+    // l3
+    const c = shuffle(item.choices);
+    q.label = item.choices[0]; q.prompt = '絵に合う文は？'; q.main = ekPicHtml(item.pic);
+    q.audio = c.map((t, i) => ({ t: `${['One', 'Two', 'Three'][i]}. ${t}`, who: 'n', gap: 420 }));
+    q.numbers = c; q.answer = String(c.indexOf(item.choices[0]) + 1); q.choices = ['1', '2', '3'];
+    q.after = `${c.map((t, i) => `${i + 1}. ${esc(t)}`).join('<br>')}<br><span class="ek-j">${esc(item.ja)}</span>`;
+    return q;
+  }
+  const ekResultRows = (parts) => Object.entries(parts).map(([k, v]) => `<div class="ek-rw"><span>${EK_PARTS[k].icon} ${esc(EK_PARTS[k].name)}</span><b>${v[0]}/${v[1]}</b></div>`).join('');
+  const ekMissHtml = (miss) => (miss.length ? `<div class="ek-miss"><div class="ek-m-h">まちがえた問題（また出るよ）</div>${miss.map((q) => `<div class="ek-m-i"><div>${q.after}</div>${q.part === 'r1' || q.part === 'r2' ? `<div class="ek-m-a">正解：${esc(q.answer)}</div>` : ''}${q.part === 'l1' || q.part === 'l3' ? `<div class="ek-m-a">正解：${esc(q.answer)}</div>` : ''}${q.tip ? `<div class="ek-m-t">💡 ${esc(q.tip)}</div>` : ''}</div>`).join('')}</div>` : '');
+  // ---------- ドリル（毎日のメニュー・自主練・実力チェック。その場で答え合わせ） ----------
+  function ekRun(title, items, opt = {}) {
+    const qs = items.map((it) => ekBuild(it, false));
+    if (!qs.length) { toast('問題が見つからなかったよ'); render(); return; }
+    const st = { i: 0, ok: 0, combo: 0, maxCombo: 0, answered: 0, miss: [], parts: {}, locked: false, ended: false, t0: Date.now(), pick3: [] };
+    const el = document.createElement('div'); el.className = 'ov ek-ov';
+    el.style.background = 'radial-gradient(circle at 50% 30%, #1b2a55, #05070d)';
+    el.innerHTML = `<div class="quiz"><div class="qhead"><button class="qclose" data-e="quit">✕ やめる</button><div class="qprog"><i></i></div><div class="combo"></div></div>
+      <div class="qbody ek-body"><div class="qprompt"></div><div class="ek-main"></div><div class="ek-au"></div><div class="ek-box3"></div><div class="choices"></div><div class="judge"></div><div class="answer ek-ans"></div><button class="btn big ek-next hidden" data-e="next">つぎへ ▶</button></div></div>`;
+    document.body.appendChild(el);
+    const q$ = (s) => el.querySelector(s);
+    function ekBoxes(q, picked) {
+      const it = q.item;
+      const cell = (n) => `<span class="ek-cell ${picked[n] != null ? 'on' : ''} ${n === 0 || n === 2 ? 'key' : ''}">${n === 0 || n === 2 ? `<small>${n + 1}番目</small>` : ''}${picked[n] != null ? `${'①②③④'[picked[n]]} ${esc(q.chunks[picked[n]])}` : ''}</span>`;
+      return `<div class="ek-line">${it.pre ? `<span>${esc(it.pre)}</span>` : ''}${[0, 1, 2, 3].map(cell).join('')}<span>${esc(it.post)}</span></div>`;
+    }
+    function show() {
+      const q = qs[st.i];
+      st.locked = true; st.qt0 = Date.now(); st.pick3 = [];
+      setTimeout(() => { st.locked = false; }, 250);
+      q$('.qprog i').style.width = (st.i / qs.length) * 100 + '%';
+      q$('.qprompt').textContent = `${st.i + 1}/${qs.length} ・ ${EK_PARTS[q.part].icon} ${EK_PARTS[q.part].name} ・ ${q.prompt}`;
+      q$('.ek-main').innerHTML = q.main;
+      q$('.judge').textContent = ''; q$('.judge').className = 'judge'; q$('.ek-ans').innerHTML = '';
+      q$('.ek-next').classList.add('hidden');
+      q$('.ek-au').innerHTML = q.audio ? '<button class="lsn-slow" data-e="again">🔊 もう1回</button><button class="lsn-slow" data-e="slow">🐢 ゆっくり</button>' : '';
+      const ch = q$('.choices');
+      if (q.boxes) {
+        // 大問3の練習：語句をタップして順番に並べる
+        q$('.ek-box3').innerHTML = ekBoxes(q, []);
+        ch.className = 'choices ek-3'; ch.innerHTML = q.chunks.map((c, i) => `<button class="choice" data-pick="${i}">${'①②③④'[i]} ${esc(c)}</button>`).join('');
+      } else {
+        q$('.ek-box3').innerHTML = '';
+        ch.className = 'choices' + (q.list ? ' ek-list' : '') + (q.numbers ? ' ek-num' : '');
+        ch.innerHTML = q.choices.map((c) => `<button class="choice" data-c="${esc(c)}">${esc(c)}</button>`).join('');
+      }
+      if (q.audio) ekPlay(q.audio, q.times || 2);
+    }
+    function setCombo() {
+      const c = q$('.combo');
+      c.textContent = st.combo >= FEVER_AT ? `🔥 ZONE ×${st.combo}` : st.combo >= 3 ? `🔥 ON FIRE ×${st.combo}` : st.combo > 0 ? `${st.combo} COMBO` : '';
+      c.className = 'combo' + (st.combo >= FEVER_AT ? ' fever-t' : st.combo >= 3 ? ' fire' : '');
+      el.classList.toggle('fever', st.combo >= FEVER_AT);
+    }
+    function judge(ok, btn) {
+      if (st.locked || st.ended) return;
+      st.locked = true; st.answered++;
+      ekStopAudio();
+      const q = qs[st.i]; const ms = Date.now() - st.qt0;
+      ekMark(q.id, ok, q.part === 'w' && ms < 5000);
+      ekStat(q.part, ok);
+      const P = st.parts[q.part] || [0, 0]; P[0] += ok ? 1 : 0; P[1]++; st.parts[q.part] = P;
+      const j = q$('.judge');
+      if (ok) {
+        st.ok++; st.combo++; st.maxCombo = Math.max(st.maxCombo, st.combo);
+        j.textContent = st.combo >= 3 ? `🔥 ${pick(SHOT_WORDS)}` : 'NICE! +1'; j.className = 'judge ok';
+        sfx.combo(st.combo); if (st.combo >= 3) confetti(25);
+        if (btn) btn.classList.add('ok');
+        juiceHit(btn, st.combo, ms);
+      } else {
+        st.combo = 0; st.miss.push(q);
+        j.textContent = 'MISS…'; j.className = 'judge ng';
+        sfx.ng(); if (btn) btn.classList.add('ng'); buzz(60);
+        el.querySelectorAll('.choice').forEach((b) => { if (b.dataset.c === q.answer) b.classList.add('ok'); });
+      }
+      save(); setCombo();
+      const showAns = q.part === 'r1' || q.part === 'r2' ? `<div class="ek-m-a">正解：${esc(q.answer)}</div>` : '';
+      q$('.ek-ans').innerHTML = `<div class="ek-after">${ok ? '' : showAns}${q.after}${!ok && q.tip ? `<div class="ek-m-t">💡 ${esc(q.tip)}</div>` : ''}</div>`;
+      q$('.ek-au').innerHTML = '';
+      // 正解は短く見せて次へ。まちがいと、聞き取り・並べかえは読むので「つぎへ」を押すまで待つ
+      const hold = !ok || ['l1', 'l2', 'l3', 'r3'].includes(q.part);
+      if (hold) q$('.ek-next').classList.remove('hidden'); else st.auto = setTimeout(next, q.part === 'w' ? 650 : 1500);
+    }
+    function next() {
+      clearTimeout(st.auto);
+      if (st.ended) return;
+      st.i++;
+      if (st.i >= qs.length) finish(false); else show();
+    }
+    function finish(quit) {
+      if (st.ended) return; st.ended = true;
+      clearTimeout(st.auto); ekStopAudio(); el.classList.remove('fever');
+      const n = quit ? st.answered : qs.length;
+      if (quit && n === 0) { el.remove(); render(); return; }
+      const key = opt.kind || 'ek:' + qs[0].part;
+      markPlayed(key, st.ok, st.maxCombo);
+      if (!quit && opt.onDone) opt.onDone();
+      const info = { kind: key, n, ok: st.ok, maxCombo: st.maxCombo, parts: st.parts, miss: st.miss.map((q) => String(q.label).slice(0, 40)), sec: Math.round((Date.now() - st.t0) / 1000), quit: quit || undefined };
+      const r = st.ok > 0 ? addPoints(st.ok, 'quiz', title, '英語', info) : null;
+      if (!r) { save(); logEvent('quiz', title, '英語', 0, info); }
+      const allOk = !quit && n > 0 && st.ok === n;
+      if (allOk) { sfx.fanfare(); confetti(180); emojiRain(['🔥', '💯', '🏀', '🏆'], 24); } else if (st.ok >= n * 0.7) { sfx.coin(); confetti(80); } else sfx.tap();
+      const nextLabel = !quit && opt.nextLabel ? opt.nextLabel() : '';
+      q$('.quiz').innerHTML = `<div class="qbody result"><div style="font-family:var(--display);font-weight:800;font-size:18px">${esc(title)}</div>${resultStars(st.ok, n)}
+        <div class="big"><span class="count-up">0</span><span style="font-size:28px">/${n}</span></div>
+        <div class="lvup-title ${allOk ? 'rainbow' : ''}" style="font-size:${allOk ? 38 : 28}px">${allOk ? 'PERFECT!!' : st.ok >= n * 0.7 ? 'GREAT!' : 'NICE TRY!'}</div>
+        <div class="shot-pts" style="opacity:1">+${st.ok + (r && r.tipoff ? 1 : 0)} PTS</div>
+        ${opt.showParts ? `<div class="ek-table">${ekResultRows(st.parts)}</div>` : ''}
+        ${ekMissHtml(st.miss)}
+        ${coachQuizLine(allOk, st.ok, n)}
+        ${paperNudge()}
+        ${nextLabel ? `<button class="btn big" style="width:100%;margin-top:12px" data-e="go">${esc(nextLabel)} ▶</button>` : ''}
+        <div class="row" style="width:100%;margin-top:10px">${opt.again ? '<button class="btn ghost" style="flex:1" data-e="again2">もう1セット</button>' : ''}<button class="btn ${nextLabel ? 'ghost' : ''}" style="flex:1" data-e="close">とじる</button></div></div>`;
+      countUp(el.querySelector('.count-up'), st.ok);
+      st.after = async (k) => {
+        el.remove();
+        if (r) await afterEffects(r); else render();
+        if (k === 'go' && opt.onNext) opt.onNext();
+        else if (k === 'again2' && opt.again) opt.again();
+        else if (k === 'close' && opt.onClose) opt.onClose();
+      };
+    }
+    el.addEventListener('click', (e) => {
+      const b = e.target.closest('[data-e]');
+      if (b) {
+        const k = b.dataset.e;
+        if (k === 'quit') { if (confirm('やめる？（ここまでの正解は得点になるよ）')) finish(true); return; }
+        if (k === 'next') { next(); return; }
+        const q = qs[st.i];
+        if (k === 'again' && q && q.audio) { ekPlay(q.audio, 1); return; }
+        if (k === 'slow' && q && q.audio) { ekPlay(q.audio, 1, true); return; }
+        if (st.after && ['go', 'close', 'again2'].includes(k)) st.after(k);
+        return;
+      }
+      // 結果画面の「ミッションへ」（画面の移動は共通の処理がする）
+      if (e.target.closest('[data-tab]')) { if (st.after) st.after('tab'); return; }
+      const pk = e.target.closest('[data-pick]');
+      if (pk) {
+        if (st.locked) return;
+        // 大問3：タップで置く。もう一度タップで外す。4つそろったら答え合わせ
+        const i = Number(pk.dataset.pick); const q = qs[st.i];
+        const at = st.pick3.indexOf(i);
+        if (at >= 0) st.pick3.splice(at, 1); else { st.pick3.push(i); sfx.tap(); }
+        pk.classList.toggle('used', st.pick3.includes(i));
+        q$('.ek-box3').innerHTML = ekBoxes(q, st.pick3);
+        if (st.pick3.length === 4) {
+          const ok = st.pick3.every((v, n) => v === q.correctOrder[n]);
+          judge(ok, null);
+          q$('.choices').innerHTML = `<div class="ek-combo">本番なら「1番目と3番目」＝ <b>${esc(q.combo)}</b></div>`;
+        }
+        return;
+      }
+      const c = e.target.closest('.choice');
+      if (c && c.dataset.c != null) judge(c.dataset.c === qs[st.i].answer, c);
+    });
+    sfx.buzzer();
+    show();
+  }
+  // ---------- 毎日のメニューを順番に進める ----------
+  function ekSlotItems(s) {
+    if (s.k === 'scout') { const out = []; Object.entries(EK_SCOUT).forEach(([k, n]) => ekPick(k, n).forEach((q) => out.push(q))); return out; }
+    return ekPick(s.k, s.n);
+  }
+  function ekStartMenu() {
+    ekPreload();
+    const d = day();
+    if (!d.ek) { d.ek = ekBuildMenu(todayStr()); save(); }
+    const m = d.ek;
+    const idx = m.m.findIndex((_, i) => !m.done.includes(i));
+    if (idx < 0) { tab = 'eiken'; render(); return; }
+    const s = m.m[idx];
+    const isScout = s.k === 'scout';
+    const nextSlot = () => m.m.findIndex((_, i) => !m.done.includes(i));
+    ekRun(isScout ? '🔎 英検5級 実力チェック' : `🏆 英検カップ ${'①②③'[idx]} ${ekSlotName(s)}`, ekSlotItems(s), {
+      kind: isScout ? 'ek:scout' : 'ek:' + s.k,
+      showParts: isScout,
+      onDone: () => {
+        if (!m.done.includes(idx)) m.done.push(idx);
+        if (isScout) {
+          S.ek.scout = todayStr(); // 実力チェックはその日のメニューそのもの。ふつうのメニューは次の日から
+        }
+        if (m.done.length >= m.m.length) { S.ek.menus = (S.ek.menus || 0) + 1; ekCelebrate = true; setTimeout(ekShowClear, 300); }
+        save();
+      },
+      nextLabel: () => { const n = nextSlot(); return n >= 0 ? `つぎは ${ekSlotName(m.m[n])}` : ''; },
+      onNext: () => ekStartMenu(),
+      onClose: () => { tab = 'eiken'; render(); },
+    });
+  }
+  // メニュー全部クリアのお祝い（ポイント・チケットは増えない）
+  let ekCelebrate = false;
+  async function ekShowClear() {
+    if (!ekCelebrate) return;
+    if (document.querySelector('.ov')) { setTimeout(ekShowClear, 800); return; }
+    ekCelebrate = false;
+    sfx.fanfare(); confetti(200); emojiRain(['🏆', '🏀', '⭐', '🔥'], 26);
+    await overlay(`<div class="lvup-title" style="font-size:38px">MENU CLEAR!</div><div class="lvup-rank">🏆</div>
+      <div class="lvup-name">本番まで あと${ekLeft()}日</div>
+      <div class="coach-mini" style="max-width:340px">${coachFace('fire')}<span>${esc(pick(COACH_LINES.ekClear))}</span></div>
+      <div class="note">メニュークリア 通算 ${S.ek.menus}日</div>`, { lockMs: 900, cls: 'solid' });
+  }
+  function ekStartPart(k) {
+    ekPreload();
+    const n = k === 'w' ? 10 : k[0] === 'l' ? 3 : 5;
+    ekRun(`🎯 自主練 ${EK_PARTS[k].name}`, ekPick(k, n), { kind: 'ek:' + k, again: () => ekStartPart(k), onClose: () => { tab = 'eiken'; render(); } });
+  }
+  // ---------- 模試（本番と同じ形。その場で答え合わせをしない） ----------
+  function ekMockItems(def, section) {
+    const parts = section === 'r' ? ['r1', 'r2', 'r3'] : ['l1', 'l2', 'l3'];
+    if (def.kind === 'mini') return parts.flatMap((k) => ekPick(k, EK_MINI[k]));
+    const set = def.id === 'full1' ? 1 : 2;
+    return parts.flatMap((k) => shuffle(ekBank(k).filter((q) => q.mockOnly && q.mockSet === set)));
+  }
+  function ekStartMock(id) {
+    const def = EK_MOCKS.find((d) => d.id === id); if (!def) return;
+    ekPreload();
+    const x = S.ek.mocks[id] || {};
+    const section = !x.r ? 'r' : !x.l ? 'l' : null;
+    if (!section) return;
+    const items = ekMockItems(def, section);
+    if (!items.length) { toast('問題が見つからなかったよ'); return; }
+    const min = def.kind === 'full' ? EIKEN.readingMin : 10;
+    overlay(`<div class="tut"><div class="tut-step">🏟️ ${esc(def.name)}</div><div class="tut-e">${section === 'r' ? '📝' : '🎧'}</div>
+      <div class="tut-t">${section === 'r' ? `前半 リーディング ${items.length}問・${min}分` : `後半 リスニング ${items.length}問`}</div>
+      <div class="tut-b">${section === 'r' ? '本番と同じで、答え合わせは最後にまとめて。もどって直してもOK。大問3は「1番目と3番目」の組み合わせを選ぶよ。<br><b>紙とえんぴつを用意して、書きこみながら解こう。</b>' : `放送は2回。そのあと${EIKEN.listenAnswerSec}秒で答えるよ。もう1回は聞けないよ。<br><b>静かな場所で、音を大きめにしてね。</b>`}</div>
+      <button class="btn big" data-mk="go">スタート ▶</button><button class="btn ghost" data-mk="back" style="margin-top:10px">あとで</button></div>`, {
+      closeOnTap: false, cls: 'solid',
+      onMount: (o, close) => { o.addEventListener('click', (e) => { const b = e.target.closest('[data-mk]'); if (!b) return; sfx.tap(); close(); if (b.dataset.mk === 'go') { if (section === 'r') ekMockReading(def, items, min); else ekMockListening(def, items); } }); },
+    });
+  }
+  function ekMockSave(def, section, qs, picks, t0) {
+    const parts = {}; let ok = 0; const miss = [];
+    qs.forEach((q, i) => { const P = parts[q.part] || [0, 0]; const good = picks[i] === q.answer; P[0] += good ? 1 : 0; P[1]++; parts[q.part] = P; if (good) ok++; else miss.push(q); ekStat(q.part, good); if (!q.item.mockOnly) ekMark(q.id, good); });
+    const x = S.ek.mocks[def.id] || { date: todayStr() };
+    x[section] = { ok, n: qs.length, parts, sec: Math.round((Date.now() - t0) / 1000) };
+    S.ek.mocks[def.id] = x;
+    markPlayed('ek:mock', ok, 0);
+    const title = `🏟️ ${def.name} ${section === 'r' ? 'リーディング' : 'リスニング'}`;
+    const info = { kind: 'ek:mock', mock: def.id, section, n: qs.length, ok, parts, miss: miss.map((q) => String(q.label).slice(0, 40)), sec: x[section].sec };
+    const r = ok > 0 ? addPoints(ok, 'quiz', title, '英語', info) : null;
+    if (!r) { save(); logEvent('quiz', title, '英語', 0, info); }
+    return { ok, n: qs.length, parts, miss, r, x, title };
+  }
+  function ekMockResult(def, section, res) {
+    const nextSec = section === 'r' && !res.x.l;
+    const done = res.x.r && res.x.l;
+    const total = done ? res.x.r.ok + res.x.l.ok : 0; const totalN = done ? res.x.r.n + res.x.l.n : 0;
+    const good = res.ok / res.n >= EIKEN.goal;
+    if (good) { sfx.fanfare(); confetti(200); } else { sfx.coin(); confetti(70); }
+    const el = document.createElement('div'); el.className = 'ov ek-ov';
+    el.style.background = 'radial-gradient(circle at 50% 30%, #1b2a55, #05070d)';
+    el.innerHTML = `<div class="quiz"><div class="qbody result"><div style="font-family:var(--display);font-weight:800;font-size:18px">${esc(res.title)}</div>
+      <div class="big"><span class="count-up">0</span><span style="font-size:28px">/${res.n}</span></div>
+      <div class="lvup-title" style="font-size:26px">${good ? '🟢 目標の8割クリア！' : '目標まで あと' + Math.max(1, Math.ceil(res.n * EIKEN.goal) - res.ok) + '問'}</div>
+      <div class="shot-pts" style="opacity:1">+${res.ok + (res.r && res.r.tipoff ? 1 : 0)} PTS</div>
+      <div class="ek-table">${ekResultRows(res.parts)}</div>
+      ${done ? `<div class="reward-big">通算 ${total}/${totalN}（${Math.round((total / totalN) * 100)}%）<br><small>${total / totalN >= EIKEN.goal ? 'この調子！ 本番も同じように解こう' : 'まちがえた形式を自主練で固めよう'}</small></div>` : ''}
+      ${ekMissHtml(res.miss)}
+      ${nextSec ? '<button class="btn big" style="width:100%;margin-top:12px" data-e="next">続けて後半 リスニング ▶</button>' : ''}
+      <button class="btn ${nextSec ? 'ghost' : ''}" style="width:100%;margin-top:10px" data-e="close">${nextSec ? 'あとで（後半はいつでもOK）' : 'とじる'}</button></div></div>`;
+    document.body.appendChild(el);
+    countUp(el.querySelector('.count-up'), res.ok);
+    let busy = false;
+    el.addEventListener('click', async (e) => {
+      const b = e.target.closest('[data-e]'); if (!b || busy) return;
+      busy = true;
+      el.remove();
+      if (res.r) await afterEffects(res.r); else render();
+      if (b.dataset.e === 'next') ekStartMock(def.id); else { tab = 'eiken'; render(); }
+    });
+  }
+  function ekMockReading(def, items, min) {
+    const qs = items.map((it) => ekBuild(it, true));
+    const picks = qs.map(() => null); let i = 0; const t0 = Date.now(); const end = t0 + min * 60000; let ended = false;
+    const el = document.createElement('div'); el.className = 'ov ek-ov';
+    el.style.background = 'radial-gradient(circle at 50% 30%, #1b2a55, #05070d)';
+    el.innerHTML = `<div class="quiz"><div class="qhead"><button class="qclose" data-m="quit">✕ やめる</button><div class="qprog"><i></i></div><div class="combo ek-time"></div></div>
+      <div class="qbody ek-body"><div class="qprompt"></div><div class="ek-main"></div><div class="choices"></div>
+      <div class="row ek-nav"><button class="btn ghost" data-m="prev">◀ 前へ</button><button class="btn ghost" data-m="next">次へ ▶</button></div>
+      <div class="ek-grid"></div><button class="btn big hidden ek-submit" data-m="submit">提出する</button></div></div>`;
+    document.body.appendChild(el);
+    const q$ = (s) => el.querySelector(s);
+    function draw() {
+      const q = qs[i];
+      q$('.qprog i').style.width = (picks.filter((x) => x != null).length / qs.length) * 100 + '%';
+      q$('.qprompt').textContent = `${i + 1}/${qs.length} ・ ${EK_PARTS[q.part].name} ・ ${q.prompt}`;
+      q$('.ek-main').innerHTML = q.main + (q.boxes ? `<div class="ek-line">${q.item.pre ? `<span>${esc(q.item.pre)}</span>` : ''}${[0, 1, 2, 3].map((n) => `<span class="ek-cell ${n === 0 || n === 2 ? 'key' : ''}">${n === 0 || n === 2 ? `<small>${n + 1}番目</small>` : ''}</span>`).join('')}<span>${esc(q.item.post)}</span></div>` : '');
+      const ch = q$('.choices'); ch.className = 'choices' + (q.list ? ' ek-list' : '');
+      ch.innerHTML = q.choices.map((c) => `<button class="choice ${picks[i] === c ? 'sel' : ''}" data-c="${esc(c)}">${esc(c)}</button>`).join('');
+      q$('.ek-grid').innerHTML = qs.map((_, n) => `<button class="ek-g ${picks[n] != null ? 'on' : ''} ${n === i ? 'cur' : ''}" data-go="${n}">${n + 1}</button>`).join('');
+      q$('.ek-submit').classList.toggle('hidden', !(i === qs.length - 1 || picks.every((x) => x != null)));
+    }
+    function submit() {
+      if (ended) return; ended = true; clearInterval(tm);
+      const res = ekMockSave(def, 'r', qs, picks, t0);
+      el.remove();
+      ekMockResult(def, 'r', res);
+    }
+    const tm = setInterval(() => {
+      const left = Math.max(0, end - Date.now()); const s = Math.ceil(left / 1000);
+      const box = q$('.ek-time'); if (box) box.textContent = `⏱ ${Math.floor(s / 60)}:${String(s % 60).padStart(2, '0')}`;
+      if (left <= 0) { toast('時間になったよ！ ここまでで採点するね'); submit(); }
+    }, 500);
+    el.addEventListener('click', (e) => {
+      const m = e.target.closest('[data-m]');
+      if (m) {
+        const k = m.dataset.m;
+        if (k === 'quit') { if (confirm('やめる？（この模試の記録は残らないよ）')) { ended = true; clearInterval(tm); el.remove(); render(); } return; }
+        if (k === 'prev' && i > 0) { i--; draw(); }
+        if (k === 'next' && i < qs.length - 1) { i++; draw(); }
+        if (k === 'submit') { const blank = picks.filter((x) => x == null).length; if (!blank || confirm(`まだ ${blank}問 答えていないよ。提出する？`)) submit(); }
+        return;
+      }
+      const g = e.target.closest('[data-go]'); if (g) { i = Number(g.dataset.go); draw(); return; }
+      const c = e.target.closest('.choice');
+      if (c) { picks[i] = c.dataset.c; sfx.tap(); if (i < qs.length - 1) i++; draw(); }
+    });
+    draw();
+  }
+  function ekMockListening(def, items) {
+    // 本番と同じ順（第1部 → 第2部 → 第3部）
+    const qs = items.map((it) => ekBuild(it, true));
+    const picks = qs.map(() => null); let i = -1; const t0 = Date.now(); let ended = false; let timer = null;
+    ekMockAudio = true;
+    const el = document.createElement('div'); el.className = 'ov ek-ov';
+    el.style.background = 'radial-gradient(circle at 50% 30%, #1b2a55, #05070d)';
+    el.innerHTML = `<div class="quiz"><div class="qhead"><button class="qclose" data-m="quit">✕ やめる</button><div class="qprog"><i></i></div><div class="combo ek-time"></div></div>
+      <div class="qbody ek-body"><div class="qprompt"></div><div class="ek-main"></div><div class="choices"></div><div class="ek-wait note"></div></div></div>`;
+    document.body.appendChild(el);
+    const q$ = (s) => el.querySelector(s);
+    async function next() {
+      clearInterval(timer);
+      if (ended) return;
+      i++;
+      if (i >= qs.length) { finish(); return; }
+      const q = qs[i]; const me = i;
+      q$('.qprog i').style.width = (i / qs.length) * 100 + '%';
+      q$('.qprompt').textContent = `No.${i + 1} ・ ${EK_PARTS[q.part].name} ・ ${q.prompt}`;
+      q$('.ek-main').innerHTML = q.main;
+      const ch = q$('.choices'); ch.className = 'choices' + (q.list ? ' ek-list' : '') + (q.numbers ? ' ek-num' : '');
+      ch.innerHTML = q.choices.map((c) => `<button class="choice" data-c="${esc(c)}">${esc(c)}</button>`).join('');
+      q$('.ek-wait').textContent = '🔊 放送中（2回読まれるよ）'; q$('.ek-time').textContent = '';
+      const finished = await ekPlay(q.audio, 2);
+      if (!finished || ended || me !== i) return;
+      let s = EIKEN.listenAnswerSec;
+      q$('.ek-wait').textContent = '答えをえらんでね'; q$('.ek-time').textContent = `⏱ ${s}`;
+      timer = setInterval(() => { s--; q$('.ek-time').textContent = `⏱ ${s}`; if (s <= 0) { clearInterval(timer); next(); } }, 1000);
+    }
+    function finish() {
+      if (ended) return; ended = true; clearInterval(timer); ekStopAudio(); ekMockAudio = false;
+      const res = ekMockSave(def, 'l', qs, picks, t0);
+      el.remove();
+      ekMockResult(def, 'l', res);
+    }
+    el.addEventListener('click', (e) => {
+      if (e.target.closest('[data-m="quit"]')) { if (confirm('やめる？（この模試の後半の記録は残らないよ）')) { ended = true; ekMockAudio = false; clearInterval(timer); ekStopAudio(); el.remove(); render(); } return; }
+      const c = e.target.closest('.choice');
+      if (c && i >= 0 && picks[i] == null) {
+        picks[i] = c.dataset.c; c.classList.add('sel'); sfx.tap();
+        ekStopAudio(); clearInterval(timer);
+        setTimeout(next, 700);
+      }
+    });
+    next();
+  }
+  // 絵を先に読みこんでおく（圏外でも出るように。sw.js がキャッシュに入れる）
+  let ekPreloaded = false;
+  function ekPreload() {
+    if (ekPreloaded || !navigator.onLine) return; ekPreloaded = true;
+    const pics = [...ekBank('l1'), ...ekBank('l3')].map((q) => q.pic).filter((p) => !/^(clock|text):/.test(p));
+    let n = 0; let failed = 0;
+    (function step() {
+      if (n >= pics.length) { if (failed) ekPreloaded = false; return; }
+      const im = new Image();
+      im.onload = () => setTimeout(step, 60);
+      im.onerror = () => { failed++; setTimeout(step, 60); };
+      im.src = `icons/ek/${ekHash(pics[n++])}.jpg`;
+    })();
   }
 
   // ---------- スピーキング（お手本を聞く → 英語で話す → 聞き取れた単語を色分け） ----------
@@ -2002,6 +2686,19 @@ function calcAllowance(st, ym, today, cfg) {
     else if (act === 'speak') { sfx.tap(); startSpeak(); }
     else if (act === 'omakase') { sfx.tap(); playKind(a.dataset.kind); }
     else if (act === 'rush') { sfx.tap(); startRush(a.dataset.mode); }
+    else if (act === 'ekgo') { sfx.tap(); ekStartMenu(); }
+    else if (act === 'ekmore') { sfx.tap(); ekStartPart(a.dataset.kind); }
+    else if (act === 'ekmock') { sfx.tap(); ekStartMock(a.dataset.id); }
+    else if (act === 'ekcheck') { sfx.tap(); S.ek.checks[a.dataset.id] = !S.ek.checks[a.dataset.id]; save(); render(); }
+    else if (act === 'ekpast') {
+      const num = (v) => { const n = parseInt(String(v).replace(/[^0-9]/g, ''), 10); return Number.isFinite(n) ? Math.min(25, n) : null; };
+      const id = a.dataset.id; const r = num($('#ekp-r-' + id).value); const l = num($('#ekp-l-' + id).value);
+      if (r == null && l == null) { toast('点数を入れてね'); return; }
+      S.ek.past[id] = { r, l, date: todayStr() }; save(); logEvent('eiken_past', `英検5級 公式の過去問 ${id}`, '英語', 0, { r, l }); sfx.coin(); toast('記録したよ 📄'); render();
+    } else if (act === 'ekpass') {
+      if (!confirm('合格おめでとう！ 記録していい？')) return;
+      S.ek.pass = todayStr(); save(); logEvent('eiken_pass', '英検5級 合格', '英語', 0, {}); sfx.fanfare(); confetti(240); emojiRain(['🏅', '🍣', '🎉', '🏀'], 30); render();
+    }
     else if (act === 'chal') {
       const c = todayChal(); sfx.tap();
       if ((S.days[todayStr()] || {}).chal) toast('今日の挑戦状はクリアずみ！ 明日もお楽しみに 🏅');
@@ -2056,6 +2753,7 @@ function calcAllowance(st, ym, today, cfg) {
   });
   document.addEventListener('visibilitychange', () => {
     if (!S) return;
+    if (document.visibilityState !== 'visible' && !ekMockAudio) ekStopAudio();
     if (document.visibilityState === 'visible') {
       sessionBegin(); if (tab !== 'voice') render(); flush(); checkCheers(); syncBank();
       // 開いたままで月がかわった時も、先月のふり返りを1回だけ出す
