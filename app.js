@@ -594,7 +594,7 @@ function calcAllowance(st, ym, today, cfg) {
       const rate = (s) => { const cs = TEST_CHECKS.filter((c) => c.sub === s); return cs.length ? cs.filter((c) => S.test.checks[c.id]).length / cs.length : 1; };
       const low = subs.map((x, i) => [x, rate(x), i]).sort((a, b) => a[1] - b[1] || a[2] - b[2]).slice(0, 3);
       const s = low[Math.floor(Date.parse(ds + 'T00:00:00Z') / 86400000) % low.length][0];
-      return { sub: s, e: '📋', name: `${s}の仕上げ`, steps: [...SUBJECT_STEPS[s].slice(0, 2), 'tab:test'], test: left };
+      return { sub: s, e: '📋', name: `${s}の仕上げ`, why: SUBJECT_WHY[s] || '', steps: [...SUBJECT_STEPS[s].slice(0, 2), 'tab:test'], test: left };
     }
     return DAY_PLAN[wdIdx(ds)];
   }
@@ -633,6 +633,7 @@ function calcAllowance(st, ym, today, cfg) {
       : `<button class="dp-step ${s === next ? 'next' : ''}" ${s.act}><span class="dp-i">${'①②③④'[i]}</span><span class="dp-x"><b>${s.icon} ${esc(s.name)}</b><small>${esc(s.sub)}</small></span><span class="dp-go">${s === next ? (s.k.startsWith('m:') ? 'SHOOT' : s.k.startsWith('tab:') ? 'OPEN' : 'START') : '›'}</span></button>`);
     return `<div class="dayplan ${all ? 'done' : ''}">
       <div class="dp-h"><span class="dp-e">${p.e}</span><span class="dp-t"><small>${p.test != null ? `試合前モード ・ テストまで あと${p.test}日` : '今日の教科'}</small><b>${all ? `${esc(p.name)} クリア！` : `今日は ${esc(p.name)}！`}</b></span><span class="dp-n">${done}/${total}</span></div>
+      ${p.why && !all ? `<div class="dp-why">💡 ${esc(p.why)}</div>` : ''}
       ${steps.map(row).join('')}
       <div class="dp-tmr">${all ? '🔥 ナイス！' : '📅'} 明日は <b>${tm.e} ${esc(tm.name)}</b>${all ? ' でいこう！' : ''}</div></div>`;
   }

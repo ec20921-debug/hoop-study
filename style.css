@@ -859,3 +859,4 @@ button.winmsg.go b { color: var(--yellow); font-size: 18px; }
 .more-box > summary small { flex: 1; text-align: right; font-weight: 400; font-size: 11px; color: var(--sub); }
 .more-box > .missions { margin-top: 10px; }
 .gc-rush { background: linear-gradient(135deg, #3a2a00, #2a1240); border-color: #c79a00; }
+.dp-why { margin: -2px 0 2px; padding: 8px 10px; border-radius: 12px; background: #00000033; font-size: 12px; line-height: 1.5; color: #ffe9d6; }
