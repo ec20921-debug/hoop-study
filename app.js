@@ -521,33 +521,47 @@ function calcAllowance(st, ym, today, cfg) {
     const cheer = S.lastCheer && diffDays(S.lastCheer.date, t) <= 3
       ? `<div class="cheer">📣 <b>おうちからのエール</b><br>${esc(S.lastCheer.text)}</div>` : '';
     const left = RIVAL.score + 1 - d.pts;
-    // 上から「今の状態 → すぐやる1つ → 紙のミッション」の順。くわしい数字はタップした先に置く
-    return header() + coachBox() + `
+    // 上から「今日の教科 → 今の状態 → 紙のミッション」の順（2026-11-08 曜日割）。くわしい数字はタップした先に置く
+    const pl = planFor(t);
+    const planIds = pl.steps.filter((k) => k.startsWith('m:')).map((k) => k.slice(2));
+    const mine = (m) => planIds.includes(m.id) || m.sub === pl.sub || m.sub === '全教科';
+    const front = S.missions.filter(mine); const rest = S.missions.filter((m) => !mine(m));
+    const restDone = rest.filter((m) => d.m.includes(m.id)).length;
+    const big = stdCount(d) >= ALLOWANCE.bigWinMissions;
+    // 今日の教科のミッションが終わって BIG WIN がまだの時、または1本でもやった時は開いておく
+    const restOpen = restDone > 0 || (!big && front.every((m) => d.m.includes(m.id)));
+    const missionRow = (m) => {
+      const done = d.m.includes(m.id);
+      return `<div class="mission ${done ? 'done' : ''}"><div class="ic">${m.icon || '🏀'}</div>
+          <div class="tx"><div class="lb">${esc(m.label)}</div><div class="mt">${esc(m.sub)} ・ ${m.pts}P${ALLOWANCE.stdMissions.includes(m.id) ? '' : ' ・ おこづかい対象外'}</div>${m.id === 'kanji' && !done ? `<button class="kw-go" data-act="quiz" data-kind="kwrite">✍️ 漢字かき取り（アプリが${KANJI_WRITE_LEN}問出す）›</button>` : ''}</div>
+          <button class="shoot-btn" data-act="mission" data-id="${esc(m.id)}">${done ? '✓ IN' : 'SHOOT'}</button></div>`;
+    };
+    return header() + coachBox() + dayCard() + `
       <div class="status">
         <div class="st-streak"><span class="flame ${today ? '' : 'cold'}">🔥</span><b>${st}</b><small>日連続</small>${best > st && best >= 3 ? `<small class="st-best">ベスト${best}日</small>` : ''}</div>
         <div class="st-score"><span class="lbl">YOU</span><b class="sc">${d.pts}</b><span class="vs">VS</span><b class="sc away">${RIVAL.score}</b><span class="lbl"><i class="rv-e">${todayRival().e}</i>${esc(todayRival().name)}</span></div>
       </div>
       ${winLine(d, left)}
-      ${allowanceCard()}
-      ${mvpRow()}
       ${cheer}
       ${ekCard()}
-      ${heroButton()}
-      ${chalRow()}
+      ${allowanceCard()}
+      ${mvpRow(true)}
       <div class="sec-title"><h2>今日のミッション</h2><span>${bigProgress(d)}</span></div>
-      <div class="missions">${S.missions.map((m) => {
-        const done = d.m.includes(m.id);
-        return `<div class="mission ${done ? 'done' : ''}"><div class="ic">${m.icon || '🏀'}</div>
-          <div class="tx"><div class="lb">${esc(m.label)}</div><div class="mt">${esc(m.sub)} ・ ${m.pts}P${ALLOWANCE.stdMissions.includes(m.id) ? '' : ' ・ おこづかい対象外'}</div>${m.id === 'kanji' && !done ? `<button class="kw-go" data-act="quiz" data-kind="kwrite">✍️ 漢字かき取り（アプリが${KANJI_WRITE_LEN}問出す）›</button>` : ''}</div>
-          <button class="shoot-btn" data-act="mission" data-id="${esc(m.id)}">${done ? '✓ IN' : 'SHOOT'}</button></div>`;
-      }).join('')}</div>
+      <div class="missions">${front.map(missionRow).join('')}</div>
+      ${rest.length ? `<details class="more-box"${restOpen ? ' open' : ''}><summary>ほかのミッション（${rest.length}本${restDone ? `・${restDone}本IN` : ''}）<small>${big ? '' : 'BIG WIN にはここからもOK'}</small></summary>
+        <div class="missions">${rest.map(missionRow).join('')}</div></details>` : ''}
       ${timerCard()}
+      ${chalRow()}
       <div class="sync" id="sync"></div>`;
   }
   // ---------- おまかせ（今やるといいゲームを1つ選ぶ。迷わずすぐ始められるように） ----------
   function gameKinds() { return ['speak', 'listen', 'spell', 'plural', 'verb', 'kanji', ...qaSubjects().map((x) => 'qa:' + x), 'challenge']; }
   const playedToday = (k) => ((S.days[todayStr()] || {}).qk || []).includes(k);
   function autoPick() {
+    // 今日の教科のゲームで、まだやっていないものを先に
+    const pl = planFor(todayStr());
+    const ps = planSteps(pl).find((s) => !s.done && s.act.includes('omakase'));
+    if (ps) return { kind: ps.k, why: `今日は${pl.name}！` };
     const ek = ekAutoPick(); if (ek) return ek;
     const d = S.days[todayStr()] || {};
     const n = weakTotal();
@@ -569,10 +583,65 @@ function calcAllowance(st, ym, today, cfg) {
   }
   const KIND_ICON = { speak: '🎤', listen: '🎧', spell: '🔤', plural: '📦', kanji: '漢', weak: '🎯', challenge: '👑', verb: '🧩', kwrite: '✍️' };
   const kindIcon = (k) => (k.startsWith('ek:') ? '🏆' : k.startsWith('rush:') ? '⚡' : KIND_ICON[k]) || ({ 理科: '🧪', 社会: '🗾', 数学: '📐', 国語: '✍️' }[k.slice(3)] || '📚');
-  function heroButton() {
-    const p = autoPick();
-    return `<button class="hero" data-act="omakase" data-kind="${esc(p.kind)}"><span class="hero-k">▶ おまかせ</span>
-      <span class="hero-t">${kindIcon(p.kind)} ${esc(quizName(p.kind))}</span><span class="hero-s">${esc(p.why)}</span><span class="hero-a">START</span></button>`;
+  // ---------- 今日の教科（曜日割・2026-11-08）。ホームの一番上で ①②③ を順に進める ----------
+  // 点数・WIN・おこづかいの数え方は変えない。見せる順番と量を絞るだけ
+  function wdIdx(ds) { return (new Date(ds + 'T00:00:00Z').getUTCDay() + 6) % 7; }
+  function planFor(ds) {
+    const left = S.test.date ? diffDays(ds, S.test.date) : null;
+    if (left != null && left >= 0 && left <= DAY_PLAN_TEST_DAYS) {
+      // 試合前モード：試合前チェックの進みが少ない3教科を、日ごとに順番に出す（毎日同じ教科にならないように）
+      const subs = Object.keys(SUBJECT_STEPS);
+      const rate = (s) => { const cs = TEST_CHECKS.filter((c) => c.sub === s); return cs.length ? cs.filter((c) => S.test.checks[c.id]).length / cs.length : 1; };
+      const low = subs.map((x, i) => [x, rate(x), i]).sort((a, b) => a[1] - b[1] || a[2] - b[2]).slice(0, 3);
+      const s = low[Math.floor(Date.parse(ds + 'T00:00:00Z') / 86400000) % low.length][0];
+      return { sub: s, e: '📋', name: `${s}の仕上げ`, steps: [...SUBJECT_STEPS[s].slice(0, 2), 'tab:test'], test: left };
+    }
+    return DAY_PLAN[wdIdx(ds)];
+  }
+  // 1本ぶんの中身。使えないもの（消したミッション・英検後の英検メニュー等）は null
+  function stepInfo(k) {
+    const d = S.days[todayStr()] || {};
+    if (k.startsWith('m:')) {
+      const m = S.missions.find((x) => x.id === k.slice(2)); if (!m) return null;
+      return { k, icon: m.icon || '🏀', name: m.label, sub: `紙のミッション ・ ${m.pts}P`, done: (d.m || []).includes(m.id), act: `data-act="mission" data-id="${esc(m.id)}"` };
+    }
+    if (k === 'tab:test') return { k, icon: '📋', name: '試合前チェックに印をつける', sub: 'できたものをタップ', done: false, opt: true, act: 'data-tab="test"' };
+    if (k === 'ek:menu') { if (ekLeft() <= 0) return null; return { k, icon: '🏆', name: '英検カップ 今日のメニュー', sub: 'ゲーム ・ 約7分', done: !ekMenuLeft().length, act: `data-act="omakase" data-kind="ek:menu"` }; }
+    if (k.startsWith('rush:') && !rushModes().some((x) => 'rush:' + x[0] === k)) return null;
+    if (k.startsWith('qa:') && !qaSubjects().includes(k.slice(3))) return null;
+    if (k === 'weak' && weakTotal() < 1) return stepInfo('challenge');
+    return { k, icon: kindIcon(k), name: quizName(k), sub: k.startsWith('rush:') ? `ゲーム ・ ${RUSH.sec}秒` : 'ゲーム', done: playedToday(k), act: `data-act="omakase" data-kind="${esc(k)}"` };
+  }
+  function planSteps(p) {
+    const seen = new Set(); const ok = (s) => s && !seen.has(s.k) && seen.add(s.k);
+    const out = p.steps.map(stepInfo).filter(ok);
+    // 問題がまだ届いていない等で3本に足りない時は、全教科の定番でうめる
+    for (const k of ['m:redo', 'm:review', 'weak', 'challenge']) { if (out.length >= 3) break; const s = stepInfo(k); if (ok(s)) out.push(s); }
+    return out;
+  }
+  function planProgress() {
+    const core = planSteps(planFor(todayStr())).filter((s) => !s.opt);
+    const done = core.filter((s) => s.done).length;
+    return { done, total: core.length, all: core.length > 0 && done >= core.length };
+  }
+  function dayCard() {
+    const t = todayStr(); const p = planFor(t); const tm = planFor(addDays(t, 1));
+    const steps = planSteps(p); const { done, total, all } = planProgress();
+    const next = steps.find((s) => !s.done);
+    const row = (s, i) => (s.done
+      ? `<div class="dp-step done"><span class="dp-i">✓</span><span class="dp-x"><b>${s.icon} ${esc(s.name)}</b><small>${esc(s.sub)}</small></span></div>`
+      : `<button class="dp-step ${s === next ? 'next' : ''}" ${s.act}><span class="dp-i">${'①②③④'[i]}</span><span class="dp-x"><b>${s.icon} ${esc(s.name)}</b><small>${esc(s.sub)}</small></span><span class="dp-go">${s === next ? (s.k.startsWith('m:') ? 'SHOOT' : s.k.startsWith('tab:') ? 'OPEN' : 'START') : '›'}</span></button>`);
+    return `<div class="dayplan ${all ? 'done' : ''}">
+      <div class="dp-h"><span class="dp-e">${p.e}</span><span class="dp-t"><small>${p.test != null ? `試合前モード ・ テストまで あと${p.test}日` : '今日の教科'}</small><b>${all ? `${esc(p.name)} クリア！` : `今日は ${esc(p.name)}！`}</b></span><span class="dp-n">${done}/${total}</span></div>
+      ${steps.map(row).join('')}
+      <div class="dp-tmr">${all ? '🔥 ナイス！' : '📅'} 明日は <b>${tm.e} ${esc(tm.name)}</b>${all ? ' でいこう！' : ''}</div></div>`;
+  }
+  // 教科ごとのゲーム（ゲーム画面の「今日の教科」に出す）
+  function subjectGames(sub) {
+    const map = { 英語: ['speak', 'verb', 'listen', 'spell', 'plural', 'rush:verb', 'rush:ek'], 国語: ['kanji', 'kwrite', 'rush:kanji'], 全教科: ['weak', 'challenge'] };
+    const ks = map[sub] || ['qa:' + sub, 'rush:qa:' + sub];
+    const out = ks.filter((k) => (k === 'kwrite' ? true : !!stepInfo(k) && (k !== 'weak' || weakTotal() > 0)));
+    return out.length ? out : sub === '全教科' ? ['challenge'] : subjectGames('全教科');
   }
   function playKind(kind) { if (kind === 'ek:menu') ekStartMenu(); else if (kind === 'speak') startSpeak(); else if (kind.startsWith('rush:')) startRush(kind.slice(5)); else startQuiz(kind); }
   function markPlayed(kind, ok, combo) {
@@ -686,12 +755,19 @@ function calcAllowance(st, ym, today, cfg) {
     const owned = Object.keys(S.cards).length; const ms = COLLECTION_MILESTONES.find((m) => m > owned);
     const vw = PAST_FORMS.filter((w) => S.weak.past[w[0]]).length + THIRD_FORMS.filter((w) => S.weak.third[w[0]]).length;
     const v = { rush: RUSH.sec, name: S.nick || 'キミ', streak: st, next: st + 1, left, weak: weakTotal(), days: S.test.date ? diffDays(t, S.test.date) : '', min: timerMin(), wb, mvpLeft, mvp: ALLOWANCE.mvp, winLeft, best, vw, tk: S.tickets, ms, colLeft: ms ? ms - owned : 0, ekDays: ekLeft(), ekMock: (ekMockDue() || {}).name || '', ekReward: EIKEN.reward };
+    const pl = planFor(t); const pp = planProgress();
+    v.plan = pl.name; v.tmr = planFor(addDays(t, 1)).name;
+    if (pl.test != null) v.days = pl.test;
     const L = COACH_LINES; const out = [];
     const add = (k, mood) => (L[k] || []).forEach((s) => out.push({ text: fillLine(s, v), mood }));
     if (S.timer) add('timer', 'happy');
     // 連続が切れた日（今日はまだ0本）：ベスト記録を見せて、今日を「新しい1日目」にする
     const broke = !played(t) && st === 0 && best >= 3;
     if (broke) add('restart', 'fire');
+    // 今日の教科（曜日割）。まず何をやるかを言い切る。3本終わったら明日の教科を予告
+    if (pp.all) add('dayDone', 'fire');
+    else if (pl.test != null) add('testMode', 'think');
+    else if (!pp.done) add('dayStart', 'fire');
     // 英検（本番まで）。今日のメニューが残っていれば先に言う
     if (v.ekDays === 0) add('ekToday', 'fire');
     else if (v.ekDays === 1) add('ekEve', 'wink');
@@ -730,6 +806,7 @@ function calcAllowance(st, ym, today, cfg) {
     if (!(d.m || []).includes('kanji') && S.missions.some((m) => m.id === 'kanji') && !playedToday('kwrite')) add('kwrite', 'wink');
     if (v.days !== '' && v.days > 0 && v.days <= 21) add('test', 'think');
     if (S.lastCheer && diffDays(S.lastCheer.date, t) <= 1) add('cheer', 'wink');
+    if (!pp.all && played(t) && (h >= 20 || h < 5)) add('tomorrow', 'happy');
     add(h >= 5 && h < 11 ? 'morning' : h < 17 && h >= 11 ? 'day' : h >= 17 && h < 21 ? 'evening' : 'late', 'happy');
     add('tips', 'wink');
     return out;
@@ -769,9 +846,16 @@ function calcAllowance(st, ym, today, cfg) {
     const best = (k, n = QUIZ_LEN) => (S.best[k] != null ? `ベスト ${S.best[k]}/${n}` : 'NEW');
     const tile = (k, cls, sub) => `<button class="tile ${cls}" data-act="quiz" data-kind="${esc(k)}"><span class="t-e">${kindIcon(k)}</span><span class="t-n">${esc(quizName(k))}</span><span class="t-b">${sub}</span></button>`;
     const qaTiles = qaSubjects().map((s, i) => tile('qa:' + s, i % 2 ? 'gc-qa2' : 'gc-qa', best('qa:' + s))).join('');
-    // おまかせがスピーキングを選んでいる時は、同じボタンを2つ並べない
-    const speakCard = autoPick().kind === 'speak' ? '' : `<button class="speakcard" data-act="speak"><span class="sp-e">🎤</span><span class="sp-t"><b>スピーキング</b><small>お手本を聞いて、英語で話そう ・ 5問</small></span><span class="sp-b">${best('speak', SPEAK_LEN)}</span></button>`;
-    return header() + paperNudge() + ekCard() + heroButton() + speakCard + `
+    const speakCard = `<button class="speakcard" data-act="speak"><span class="sp-e">🎤</span><span class="sp-t"><b>スピーキング</b><small>お手本を聞いて、英語で話そう ・ 5問</small></span><span class="sp-b">${best('speak', SPEAK_LEN)}</span></button>`;
+    // 今日の教科のゲームだけを上に。ほかは下にたたむ（2026-11-08 曜日割）
+    const pl = planFor(todayStr());
+    const GC = { speak: 'gc-listen', listen: 'gc-listen', spell: 'gc-spell', plural: 'gc-plural', verb: 'gc-verb', kanji: 'gc-kanji', kwrite: 'gc-kanji', weak: 'gc-weak', challenge: 'gc-challenge' };
+    const todayTiles = subjectGames(pl.sub).map((k) => `<button class="tile ${GC[k] || (k.startsWith('rush:') ? 'gc-rush' : 'gc-qa')}" data-act="${k === 'kwrite' ? 'quiz' : 'omakase'}" data-kind="${esc(k)}"><span class="t-e">${kindIcon(k)}</span><span class="t-n">${esc(quizName(k))}</span><span class="t-b">${playedToday(k) ? '✓ 今日やった' : k === 'weak' ? `👾 苦手 ${weakN}問` : S.best[k] != null ? `ベスト ${S.best[k]}` : 'NEW'}</span></button>`).join('');
+    return header() + paperNudge() + ekCard() + `
+      <div class="sec-title"><h2>${pl.e} 今日は ${esc(pl.name)}</h2><span>まずはここから</span></div>
+      <div class="tiles">${todayTiles}</div>
+      <details class="more-box more-games"><summary>ほかの教科のゲーム<small>いつでもOK・点数は同じ</small></summary>
+      ${speakCard}
       <div class="sec-title"><h2>⚡ ${RUSH.sec}秒ラッシュ</h2><span>2択をどんどん</span></div>
       <div class="rush-tiles">${rushTiles()}</div>
       <div class="sec-title"><h2>ゲームをえらぶ</h2><span>1問 1P</span></div>
@@ -785,7 +869,7 @@ function calcAllowance(st, ym, today, cfg) {
         ${tile('kanji', 'gc-kanji', best('kanji'))}
         ${tile('kwrite', 'gc-kanji', '紙に書く ・ 漢字ミッション')}
         ${qaTiles}
-      </div>
+      </div></details>
       <p class="note" style="margin-top:14px">全問正解で +2P ＆ 🎟️（1日2枚まで）。今日の WIN には紙のミッション1本か ⏱タイマー10分が必要だよ ✍️</p>`;
   }
   function phaseOf(left) { return left == null ? null : ROADMAP.findIndex((p) => left <= p.from && left >= p.to); }
@@ -2860,12 +2944,14 @@ function calcAllowance(st, ym, today, cfg) {
     return `<div class="winmsg">${left > 0 ? `あと ${left} 点で WIN → ガチャチケット！` : '紙のミッション1本（または⏱タイマー10分）で WIN！'}</div>`;
   }
   // 週間MVPメーター（月〜日で BIG WIN の日に色がつく）。数え方はおこづかいと同じ（基本ミッションの本数）
-  function mvpRow() {
+  // onlyNear: ホームでは「あと1〜2日で届く」「今日達成した」時だけ出す（ふだんは💰の中で見られる）
+  function mvpRow(onlyNear) {
     const A = ALLOWANCE; if (A.on === false || !A.mvp) return '';
     const t = todayStr(); const idx = (new Date(t + 'T00:00:00Z').getUTCDay() + 6) % 7; const mon = addDays(t, -idx);
     const big = (ds) => stdCount(S.days[ds]) >= A.bigWinMissions;
     const wb = weekBigs(t); const need = A.mvpDays - wb;
     const chances = 6 - idx + (big(t) ? 0 : 1); // 今週あと何日 BIG WIN をねらえるか（今日をふくむ）
+    if (onlyNear && !((need > 0 && need <= 2 && need <= chances) || (need <= 0 && big(t)))) return '';
     const wdChances = idx <= 4 ? 4 - idx + (big(t) ? 0 : 1) : 0; // そのうち金曜まで（平日）の日数
     const dots = '月火水木金土日'.split('').map((w, k) => { const ds = addDays(mon, k); return `<i class="${big(ds) ? 'on' : ds === t ? 'now' : ds > t ? 'fut' : ''}">${w}</i>`; }).join('');
     const msg = need <= 0 ? `🏅 週間MVP 達成！ +${yen(A.mvp)}（日曜が終わったら おこづかいに入るよ）`

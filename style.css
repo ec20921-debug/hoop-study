@@ -826,3 +826,36 @@ button.winmsg.go b { color: var(--yellow); font-size: 18px; }
 .ek-q4 { width: 100%; margin-top: 10px; font-weight: 800; font-size: 17px; line-height: 1.5; text-align: left; }
 .ek-tr { margin-top: 6px; font-size: 13px; color: #b8c6ea; }
 .ek-tr summary { cursor: pointer; color: var(--cyan); }
+
+/* ---------- 今日の教科（曜日割・2026-11-08） ---------- */
+.dayplan { margin: 4px 0 12px; padding: 14px; border-radius: 22px; background: linear-gradient(135deg, #3a1a06, #1e1530); border: 2px solid var(--orange); box-shadow: 0 0 22px #ff7a1a44; }
+.dayplan.done { border-color: var(--green); box-shadow: 0 0 22px #2ee59d44; background: linear-gradient(135deg, #0f2a22, #14203a); }
+.dp-h { display: flex; align-items: center; gap: 10px; margin-bottom: 10px; }
+.dp-e { font-size: 34px; }
+.dp-t { flex: 1; min-width: 0; display: flex; flex-direction: column; }
+.dp-t small { font-size: 11px; color: #ffd2ad; }
+.dayplan.done .dp-t small { color: #9ff5d3; }
+.dp-t b { font-family: var(--display); font-weight: 800; font-size: 22px; line-height: 1.2; }
+.dp-n { font-family: var(--display); font-size: 18px; color: var(--yellow); }
+.dp-step { display: flex; align-items: center; gap: 10px; width: 100%; text-align: left; margin-top: 8px; padding: 10px 12px; border-radius: 16px; background: #ffffff10; border: 1px solid #ffffff22; }
+.dp-step.next { background: linear-gradient(135deg, var(--orange), #c2410c); border-color: transparent; box-shadow: 0 4px 0 #9a3606; }
+.dp-step.next:active { transform: translateY(3px); box-shadow: 0 1px 0 #9a3606; }
+.dp-step.done { opacity: .75; }
+.dp-step.done .dp-i { color: var(--green); }
+.dp-i { font-size: 20px; width: 24px; text-align: center; font-weight: 800; }
+.dp-x { flex: 1; min-width: 0; display: flex; flex-direction: column; }
+.dp-x b { font-size: 15px; line-height: 1.3; }
+.dp-x small { font-size: 11px; color: var(--sub); }
+.dp-step.next .dp-x small { color: #ffe9d6; }
+.dp-go { flex-shrink: 0; font-family: var(--display); font-weight: 800; font-size: 13px; color: var(--sub); }
+.dp-step.next .dp-go { padding: 8px 12px; border-radius: 12px; background: #fff; color: #c2410c; }
+.dp-tmr { margin-top: 10px; font-size: 13px; color: #ffe2c8; text-align: center; }
+.dayplan.done .dp-tmr { color: #9ff5d3; font-size: 14px; }
+.more-box { margin: 12px 0 4px; }
+.more-box > summary { list-style: none; cursor: pointer; display: flex; align-items: baseline; justify-content: space-between; gap: 8px; padding: 12px 14px; border-radius: 16px; background: var(--card); border: 1px dashed var(--line); font-weight: 800; font-size: 14px; }
+.more-box > summary::-webkit-details-marker { display: none; }
+.more-box > summary::after { content: '▸'; color: var(--sub); }
+.more-box[open] > summary::after { content: '▾'; }
+.more-box > summary small { flex: 1; text-align: right; font-weight: 400; font-size: 11px; color: var(--sub); }
+.more-box > .missions { margin-top: 10px; }
+.gc-rush { background: linear-gradient(135deg, #3a2a00, #2a1240); border-color: #c79a00; }
