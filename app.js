@@ -1958,12 +1958,22 @@ function calcAllowance(st, ym, today, cfg) {
       <p class="note" style="margin-top:12px">スピーキングテストは希望すれば受けられるけど、${esc(EIKEN.name)}の合否には関係ないよ。ここの問題はアプリ用に作ったもので、本物とは少しちがうよ。</p>`;
   }
   // ---------- 読み上げ（2人の声。男性の声が無い端末では高さを変える） ----------
-  let ekMale = null;
+  // 男の人の声は「聞きやすい順」に候補を並べ、ドリルの「🗣 声をかえる」で本人が選べる（S.ek.mv）。
+  // 最後の候補はいつもの声（enVoice）を少し低くしたもの。声の高さを大きく変えると音がこもるので、変える幅は小さくする。
+  const EK_MALE_NAMES = ['Aaron', 'Evan', 'Nathan', 'Tom', 'Alex', 'Google UK English Male', 'Daniel', 'Arthur', 'Oliver', 'Rishi', 'Gordon', 'Male'];
+  let ekMales = [];
   function ekVoices() {
     if (!window.speechSynthesis) return;
     const vs = speechSynthesis.getVoices().filter((v) => /^en/i.test(v.lang));
-    ekMale = vs.find((v) => /^en[-_]US/i.test(v.lang) && /Aaron|Fred|Nathan|Evan|Tom|Alex|Reed|Male/i.test(v.name)) || vs.find((v) => /Daniel|Arthur|Oliver|Rishi|Male/i.test(v.name)) || null;
+    const rank = (v) => EK_MALE_NAMES.findIndex((n) => new RegExp('\\b' + n + '\\b', 'i').test(v.name));
+    const good = (v) => (/Premium|Enhanced/i.test(v.name) ? 0 : 1); // 高音質の声があれば先に
+    const us = (v) => (/^en[-_]US/i.test(v.lang) ? 0 : 1);
+    const seen = new Set();
+    ekMales = vs.filter((v) => rank(v) >= 0).sort((x, y) => good(x) - good(y) || us(x) - us(y) || rank(x) - rank(y))
+      .filter((v) => { const k = EK_MALE_NAMES[rank(v)]; if (seen.has(k)) return false; seen.add(k); return true; }).slice(0, 3);
   }
+  const ekMaleCount = () => { if (!ekMales.length) ekVoices(); return ekMales.length + 1; };
+  const ekMaleIdx = () => (S.ek.mv || 0) % ekMaleCount();
   let ekPlayId = 0;
   let ekCur = null; // 再生中の読み上げを持っておく（持っていないと iPhone で終わりの知らせが来ないことがある）
   let ekMockAudio = false; // 模試のリスニング中は、裏に回っても放送を止めない（進行が止まるため）
@@ -1971,13 +1981,15 @@ function calcAllowance(st, ym, today, cfg) {
   function ekSayLine(text, who, rate) {
     return new Promise((res) => {
       if (!window.speechSynthesis) { res(); return; }
-      if (!ekMale) ekVoices();
       const u = new SpeechSynthesisUtterance(text);
-      u.lang = 'en-US'; u.rate = rate;
+      u.lang = 'en-US'; u.volume = 1;
       const male = who === 'b' || who === 'm';
-      if (male && ekMale) { u.voice = ekMale; u.pitch = who === 'b' ? 1.25 : 0.95; } else {
+      u.rate = male ? rate * 0.93 : rate; // 男の人の声は少しだけゆっくり（聞き取りやすく）
+      const mi = male ? ekMaleIdx() : -1; // 先に候補を作ってから選ぶ
+      const mv = mi >= 0 ? ekMales[mi] : null;
+      if (mv) { u.voice = mv; u.pitch = who === 'b' ? 1.1 : 1; } else {
         if (enVoice) u.voice = enVoice;
-        u.pitch = who === 'g' ? 1.3 : who === 'w' ? 1.05 : who === 'b' ? 0.85 : who === 'm' ? 0.65 : 1;
+        u.pitch = who === 'g' ? 1.25 : who === 'w' ? 1.05 : who === 'b' ? 0.92 : who === 'm' ? 0.8 : 1;
       }
       const to = setTimeout(res, Math.max(3500, text.length * 170)); // 終わりの知らせが来ない端末でも止まらないように
       u.onend = u.onerror = () => { clearTimeout(to); res(); };
@@ -2119,7 +2131,8 @@ function calcAllowance(st, ym, today, cfg) {
       q$('.ek-main').innerHTML = q.main;
       q$('.judge').textContent = ''; q$('.judge').className = 'judge'; q$('.ek-ans').innerHTML = '';
       q$('.ek-next').classList.add('hidden');
-      q$('.ek-au').innerHTML = q.audio ? '<button class="lsn-slow" data-e="again">🔊 もう1回</button><button class="lsn-slow" data-e="slow">🐢 ゆっくり</button>' : '';
+      const hasMale = q.audio && q.audio.some((l) => l.who === 'b' || l.who === 'm');
+      q$('.ek-au').innerHTML = q.audio ? '<button class="lsn-slow" data-e="again">🔊 もう1回</button><button class="lsn-slow" data-e="slow">🐢 ゆっくり</button>' + (hasMale ? '<button class="lsn-slow" data-e="mvoice">🗣 男の人の声をかえる</button>' : '') : '';
       const ch = q$('.choices');
       if (q.boxes) {
         // 大問3の練習：語句をタップして順番に並べる
@@ -2215,6 +2228,12 @@ function calcAllowance(st, ym, today, cfg) {
         const q = qs[st.i];
         if (k === 'again' && q && q.audio) { ekPlay(q.audio, 1); return; }
         if (k === 'slow' && q && q.audio) { ekPlay(q.audio, 1, true); return; }
+        if (k === 'mvoice' && q && q.audio) {
+          // 聞こえにくい時に、男の人の声をつぎの候補にかえて、もう1回流す（えらんだ声はおぼえておく）
+          const n = ekMaleCount(); S.ek.mv = (ekMaleIdx() + 1) % n; save();
+          toast(`男の人の声 ${S.ek.mv + 1}/${n} にしたよ。聞きやすい声をえらんでね`);
+          ekPlay(q.audio, 1); return;
+        }
         if (st.after && ['go', 'close', 'again2'].includes(k)) st.after(k);
         return;
       }

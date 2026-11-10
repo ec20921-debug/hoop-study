@@ -765,7 +765,7 @@ button.winmsg.go b { color: var(--yellow); font-size: 18px; }
 .ek-ov .quiz { height: auto; min-height: 100%; }
 .ek-body { justify-content: flex-start; gap: 10px; padding: 6px 0 16px; }
 .ek-main { width: 100%; display: flex; flex-direction: column; align-items: center; gap: 8px; }
-.ek-au { display: flex; gap: 8px; justify-content: center; }
+.ek-au { display: flex; gap: 8px; justify-content: center; flex-wrap: wrap; }
 .ek-au:empty, .ek-box3:empty { display: none; }
 .ek-box3 { width: 100%; }
 .ek-w { font-family: var(--body); font-weight: 900; font-size: 40px; text-align: center; line-height: 1.2; margin: 14px 0; word-break: break-word; }
