@@ -318,7 +318,7 @@ const COACH_LINES = {
 };
 
 // アップデートのお知らせ（id を変えると、次に開いた時に1回だけ表示される）
-const UPDATE_NOTE = { id: 'star-11', title: 'ラッシュが ふえたよ！', img: 'icons/coach-full.jpg', items: ['⚡ <b>30びょう ラッシュ</b>に <b>けいさん・とどうふけん・えいご</b>が ふえたよ！', '⭐ <b>あと1回で おぼえる ことば</b>が わかるように なったよ。クイズで ★ に しよう', '👾 <b>苦手つぶしは ボス戦</b>！ せいかいで ボスの HP を へらそう', `💰 べんきょう ${ALLOWANCE.bigWinMissions}つで おこづかい <b>+${ALLOWANCE.bigWin}円</b> は そのままだよ`] };
+const UPDATE_NOTE = { id: 'star-12', title: 'ホームが みやすく なったよ！', img: 'icons/coach-full.jpg', items: ['🛌 おこづかいの 下に <b>こんげつの おやすみ のこり</b>が 出るよ', '🎯 かんこくごの <b>おぼえた ことば</b>が もうすぐ ふしめの 時は「あと◯こで たっせい！」が 出るよ', `💰 べんきょう ${ALLOWANCE.bigWinMissions}つで おこづかい <b>+${ALLOWANCE.bigWin}円</b> は そのままだよ`] };
 
 // 英語の読み上げのふつうの速さ（中学生版は 0.9）。小4版は少しゆっくり
 const SPEECH_RATE = 0.8;

@@ -1,5 +1,5 @@
 // HOOP STUDY service worker — アプリ本体をスマホに保存してオフラインでも開けるようにする
-const CACHE = 'hoop-v23';
+const CACHE = 'hoop-v24';
 const IMG_CACHE = 'ekimg-v1';
 const SHELL = ['./', './index.html', './style.css?v=23', './app.js?v=23', './data.js?v=23', './eiken.js?v=23', './config.js?v=23', './manifest.webmanifest', './icons/icon-180.png', './icons/icon-192.png', './icons/coach.jpg', './icons/coach-full.jpg'];
 

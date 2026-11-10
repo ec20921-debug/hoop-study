@@ -1006,3 +1006,12 @@ canvas.confetti { position: fixed; inset: 0; z-index: 65; pointer-events: none; 
 .boss.hit .boss-e { animation: bosshit .35s; }
 @keyframes bosshit { 0%,100% { transform: scale(1) rotate(0); } 30% { transform: scale(1.5) rotate(-18deg); } 60% { transform: scale(.85) rotate(14deg); } }
 .shot-pts.small { font-size: 18px; }
+
+/* 2026-11-10 改善（star-v12）：おやすみ枠・おぼえた ことばの ふしめ */
+.money.mini2 { flex-wrap: wrap; }
+.money.mini2 .mo-rest { flex-basis: 100%; font-size: 14px; color: #9ff5d3; }
+.money.mini2 .mo-rest b { color: var(--green); font-size: 16px; }
+.money.mini2 .mo-rest small { display: block; font-size: 12px; margin-top: 2px; }
+.money.mini2 .mo-rest.low { color: #ffcf9e; } .money.mini2 .mo-rest.low b { color: var(--yellow); }
+.money.mini2 .mo-rest.over { color: #ffb0b0; } .money.mini2 .mo-rest.over small { color: #ffe2c8; }
+.kr-goal { display: block; margin-top: 2px; color: #ffe066; font-weight: 700; }

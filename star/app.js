@@ -1378,6 +1378,7 @@ function calcAllowance(st, ym, today, cfg) {
         ${ticket ? '<div class="newtag">全問正解ボーナス 🎟️ +1</div>' : ''}
         ${weakTicket ? '<div class="newtag">🎯 苦手つぶしボーナス 🎟️ +1</div>' : ''}
         ${isKrQuiz && krMastered() > st.star0 ? `<div class="reward-big">⭐ おぼえた ことば +${krMastered() - st.star0}！（ぜんぶで ${krMastered()}こ）</div>` : ''}
+        ${isKrQuiz && krGoalNote() ? `<div class="newtag">${krGoalNote()}</div>` : ''}
         ${isKrQuiz && krMastered() === st.star0 && krAlmost().length ? `<div class="note">⭐ あと1回 せいかいで おぼえる ことばが ${krAlmost().length}こ。「もう1回」で ★ に しよう！</div>` : ''}
         ${perfect && kind === 'challenge' && (d.cp || 0) <= ALLOWANCE.perfectPerDay ? `<div class="reward-big">💰 チャレンジ全問正解！ おこづかい +${ALLOWANCE.perfect}円</div>` : ''}
         ${st.miss.length ? `<ul>${st.miss.map((q) => `<li>${q.type === 'kr' ? q.missHtml : ['kanji', 'qa', 'hkanji', 'past', 'third', 'listen', 'calc'].includes(q.type) ? esc(q.key) + ' → ' + esc(q.answer) : esc(q.answer)}</li>`).join('')}</ul><div class="note">${kind === 'kr' || kind.startsWith('kr:') ? '↑ カードで さがして、声に出して 読んでみよう 📇（次の クイズにも 出るよ）' : '↑ 紙に3回書いて覚えよう ✍️（苦手つぶしにも出るよ）'}</div>` : ''}
@@ -1808,9 +1809,14 @@ function calcAllowance(st, ym, today, cfg) {
   const krLt = { to: 0, off: {} }; // ファンレターの あて名（-1 は みんな）と 使わない 文
   let krReadTok = 0;
   function krStopReading() { krReadTok++; if (window.speechSynthesis) speechSynthesis.cancel(); }
+  // つぎの ふしめ（レベルアップ）まで あと3こ いないの 時だけ 出す（2026-11-10・表示だけ）
+  function krGoalNote() {
+    const { n, nx } = krLevel(); if (!nx || nx[0] - n > 3) return '';
+    return `🎯 あと${nx[0] - n}こで ${nx[0]}こ たっせい！`;
+  }
   function krHomeCard() {
-    const w = krToday();
-    return `<div class="kr-home"><button class="kr-home-m" data-tab="korean"><small><b class="ti-kr">한</b> きょうの かんこくご</small><b class="kr${krSizeCls(w.ko)}">${esc(w.ko)}</b><span>${esc(w.kana)}${w.ja !== w.kana ? ` ＝ ${esc(w.ja)}` : ''}</span><em>${krAlmost().length ? `⭐ あと1回で ★ が ${krAlmost().length}こ ›` : 'かんこくご スタジオへ ›'}</em></button>
+    const w = krToday(); const goal = krGoalNote();
+    return `<div class="kr-home"><button class="kr-home-m" data-tab="korean"><small><b class="ti-kr">한</b> きょうの かんこくご</small><b class="kr${krSizeCls(w.ko)}">${esc(w.ko)}</b><span>${esc(w.kana)}${w.ja !== w.kana ? ` ＝ ${esc(w.ja)}` : ''}</span><em>${goal ? `${goal}${krAlmost().length ? ` ⭐ あと1回で ★ が ${krAlmost().length}こ` : ''} ›` : krAlmost().length ? `⭐ あと1回で ★ が ${krAlmost().length}こ ›` : 'かんこくご スタジオへ ›'}</em></button>
       <button class="kr-say" data-act="krsay" data-ko="${esc(w.ko)}" aria-label="聞く">🔊</button></div>`;
   }
   // 端末に 韓国語の声が ない時の 案内（カタカナは いつでも 見られる）
@@ -1836,7 +1842,7 @@ function calcAllowance(st, ym, today, cfg) {
     return header() + `
       <div class="pg-h">かんこくご</div>
       <div class="pg-s">IVE の カードと いっしょに れんしゅう！</div>
-      <div class="kr-lv"><span class="kr-lv-e">${l[3]}</span><span class="kr-lv-t"><b class="kr">${esc(l[1])}</b> <small>${esc(l[2])}</small><span class="xpbar"><i style="width:${nx ? krPct(n - l[0], nx[0] - l[0]) : 100}%"></i></span><small>おぼえた ことば <b>${n}</b>/${KR_WORDS.length}${nx ? ` ・ つぎの レベルまで あと ${nx[0] - n}こ` : ''}</small></span></div>
+      <div class="kr-lv"><span class="kr-lv-e">${l[3]}</span><span class="kr-lv-t"><b class="kr">${esc(l[1])}</b> <small>${esc(l[2])}</small><span class="xpbar"><i style="width:${nx ? krPct(n - l[0], nx[0] - l[0]) : 100}%"></i></span><small>おぼえた ことば <b>${n}</b>/${KR_WORDS.length}${nx ? ` ・ つぎの レベルまで あと ${nx[0] - n}こ` : ''}</small>${krGoalNote() ? `<small class="kr-goal">${krGoalNote()} レベルアップ！</small>` : ''}</span></div>
       ${krVoiceNote()}
       ${krAlmost().length ? `<button class="bigbtn star" data-act="kralmost">⭐ あと1回で おぼえる！<small>${krAlmost().length}こ あるよ。クイズで ★ に しよう</small></button>` : ''}
       <button class="bigbtn kr" data-act="krlesson">▶ きょうの レッスン<small>${cur.e} ${esc(cur.name)} ・ スワイプで ${SHORT_LEN}こ 見て クイズ</small></button>
@@ -2580,7 +2586,13 @@ function calcAllowance(st, ym, today, cfg) {
     if (!ALLOWANCE.on) return '';
     const { t, a, A, up } = allowanceInfo();
     return `<button class="money mini2" data-act="money">
-      <span class="mo-l">💰 ${Number(t.slice(5, 7))}月の おこづかい<small>さいだい ${yen(A.max)}</small></span><b class="mo-total">${yen(a.total)}</b>${up ? `<span class="mo-up">+${yen(up)}</span>` : ''}<span class="mo-a">›</span></button>`;
+      <span class="mo-l">💰 ${Number(t.slice(5, 7))}月の おこづかい<small>さいだい ${yen(A.max)}</small></span><b class="mo-total">${yen(a.total)}</b>${up ? `<span class="mo-up">+${yen(up)}</span>` : ''}<span class="mo-a">›</span>
+      ${restLine(a, A)}</button>`;
+  }
+  // こんげつの おやすみ枠（2026-11-10・表示だけ。ルールは 前と おなじ）
+  function restLine(a, A) {
+    if (a.over) return `<span class="mo-rest over">⚠️ おやすみの わくを こえたので きほん −${yen(a.over * A.missPenalty)}<small>まいにち つづければ、これいじょう へらないよ</small></span>`;
+    return `<span class="mo-rest ${a.restLeft <= 1 ? 'low' : ''}">🛌 こんげつの おやすみ のこり <b>${a.restLeft}にち</b>${a.restLeft === 0 ? `<small>あと1にち やすむと きほんが −${yen(A.missPenalty)}</small>` : ''}</span>`;
   }
   function moneyRules() {
     const { t, a, A, wb, hint, proj } = allowanceInfo();

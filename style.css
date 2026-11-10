@@ -860,3 +860,14 @@ button.winmsg.go b { color: var(--yellow); font-size: 18px; }
 .more-box > .missions { margin-top: 10px; }
 .gc-rush { background: linear-gradient(135deg, #3a2a00, #2a1240); border-color: #c79a00; }
 .dp-why { margin: -2px 0 2px; padding: 8px 10px; border-radius: 12px; background: #00000033; font-size: 12px; line-height: 1.5; color: #ffe9d6; }
+
+/* 2026-11-10 改善（hoop-v24）：お休み枠の表示・BIG WIN までの紙の残り */
+.money.mini .mo-rest { grid-column: 1 / -1; font-size: 12px; color: #9ff5d3; }
+.money.mini .mo-rest b { color: var(--green); }
+.money.mini .mo-rest.low { color: #ffcf9e; } .money.mini .mo-rest.low b { color: var(--yellow); }
+.money.mini .mo-rest.over { color: #ff9e9e; }
+.dp-big { display: block; width: 100%; margin-top: 8px; padding: 10px 12px; border-radius: 14px; background: #00000040; border: 1px dashed #ffd400; color: #ffe9b0; font-size: 14px; text-align: left; }
+.dp-big b { color: var(--yellow); font-size: 16px; }
+.dp-big small { display: block; font-size: 11px; color: #ffe2c8; margin-top: 2px; }
+.rc-boss { margin: 4px 0 6px; padding: 8px 10px; border-radius: 12px; background: #3a1640; border: 1px solid #a855f7; font-size: 14px; font-weight: 700; color: #f3d9ff; }
+.rc-boss small { display: block; font-weight: 400; font-size: 11px; color: #d8b8e8; }
