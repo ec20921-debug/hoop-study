@@ -882,3 +882,25 @@ button.winmsg.go b { color: var(--yellow); font-size: 18px; }
 .minline .ml-btn { display: block; width: 100%; margin-top: 8px; padding: 9px; border-radius: 12px; border: 1px dashed var(--orange2); color: var(--orange2); font-size: 14px; font-weight: 700; background: none; }
 .minline .ml-run { display: block; margin-top: 6px; color: var(--cyan); font-size: 13px; }
 .minline.ok { border-color: var(--green); color: var(--green); font-weight: 800; font-size: 14px; text-align: center; padding: 8px 12px; }
+
+/* 11月のテスト（2026-11-12）。試合前タブのテスト日程カードと、数学のグラフ問題 */
+.tcard { margin: 0 0 8px; border-radius: 18px; background: var(--card); border: 1px solid var(--line); overflow: hidden; }
+.tcard[open] { border-color: var(--orange); }
+.tcard > summary { list-style: none; cursor: pointer; display: flex; align-items: center; gap: 10px; padding: 12px 14px; }
+.tcard > summary::-webkit-details-marker { display: none; }
+.tc-e { font-size: 24px; }
+.tc-n { flex: 1; min-width: 0; }
+.tc-n b { display: block; font-size: 15px; }
+.tc-n small { color: var(--sub); font-size: 12px; }
+.tc-d { flex-shrink: 0; padding: 4px 10px; border-radius: 99px; background: var(--bg2); color: var(--yellow); font-weight: 800; font-size: 13px; }
+.tc-d.hot { background: var(--orange); color: #fff; }
+.tc-b { padding: 0 14px 14px; font-size: 14px; line-height: 1.65; }
+.tc-b h5 { margin: 10px 0 4px; font-size: 12px; color: var(--orange2); }
+.tc-b ul { margin: 0; padding-left: 18px; }
+.tc-b .tc-sub { color: var(--yellow); }
+.tc-go { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 12px; }
+.tc-btn { padding: 9px 12px; border-radius: 12px; background: var(--bg2); border: 1px solid var(--line); color: var(--text); font-size: 13px; font-weight: 700; }
+.mgraph { display: block; margin: 0 auto 8px; max-width: 100%; height: auto; background: #0d1426; border-radius: 12px; }
+.mg-q { font-size: 18px; }
+.mg-q small { display: block; font-size: 12px; color: var(--sub); font-weight: 400; }
+.rush .mgraph { width: 150px; }

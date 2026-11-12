@@ -319,7 +319,7 @@ function calcAllowance(st, ym, today, cfg) {
       if (r.type === '英単語') b.spell.push({ q: r.q, a: r.a, f });
       else if (r.type === '複数形') b.plural.push({ q: r.q, a: r.a, h: r.hint || '', f });
       else if (r.type === '漢字') b.kanji.push({ q: r.q, a: r.a, f });
-      else if (r.type === '一問一答') b.qa.push({ s: r.sub || 'その他', q: r.q, a: r.a, f });
+      else if (r.type === '一問一答') { const c = /[／｜]/.test(r.hint || '') ? String(r.hint).split(/[／｜]/).map((x) => x.trim()).filter((x) => x && x !== r.a) : null; b.qa.push(c && c.length ? { s: r.sub || 'その他', q: r.q, a: r.a, f, c } : { s: r.sub || 'その他', q: r.q, a: r.a, f }); }
     });
     const base = builtinBank();
     for (const k of ['spell', 'plural', 'kanji']) if (b[k].length < 4) b[k] = base[k];
@@ -629,17 +629,24 @@ function calcAllowance(st, ym, today, cfg) {
     const last = S.lastPlay[oldest];
     return { kind: oldest, why: !last ? 'まだやったことがないゲーム！' : c.length ? `${diffDays(last, todayStr())}日ぶりのゲーム` : 'もう1回、自己ベストに挑戦！' };
   }
-  const KIND_ICON = { speak: '🎤', listen: '🎧', spell: '🔤', plural: '📦', kanji: '漢', weak: '🎯', challenge: '👑', verb: '🧩', kwrite: '✍️' };
+  const KIND_ICON = { speak: '🎤', listen: '🎧', spell: '🔤', plural: '📦', kanji: '漢', weak: '🎯', challenge: '👑', verb: '🧩', third: '🅢', kwrite: '✍️' };
   const kindIcon = (k) => (k.startsWith('ek:') ? '🏆' : k.startsWith('rush:') ? '⚡' : KIND_ICON[k]) || ({ 理科: '🧪', 社会: '🗾', 数学: '📐', 国語: '✍️' }[k.slice(3)] || '📚');
   // ---------- 今日の教科（曜日割・2026-11-08）。ホームの一番上で ①②③ を順に進める ----------
   // 点数・WIN・おこづかいの数え方は変えない。見せる順番と量を絞るだけ
   function wdIdx(ds) { return (new Date(ds + 'T00:00:00Z').getUTCDay() + 6) % 7; }
+  const testPlanOn = (ds = todayStr()) => typeof TEST_PLAN !== 'undefined' && !!TEST_PLAN[ds];
+  const activeChecks = () => { const t = todayStr(); const now = TEST_CHECKS.filter((c) => c.until && t <= c.until); return now.length ? now : TEST_CHECKS.filter((c) => !c.until); };
   function planFor(ds) {
+    // 学校のテスト日程が出ている間（data.js の TEST_PLAN）は、その日の計画をそのまま出す
+    if (testPlanOn(ds)) {
+      const tp = TEST_PLAN[ds]; const T = TESTS.find((x) => x.id === tp.t);
+      return { sub: tp.sub, e: tp.e || '📋', name: tp.name, why: tp.why || '', steps: tp.steps, test: T ? Math.max(0, diffDays(ds, T.date)) : null, head: T ? T.short : '' };
+    }
     const left = S.test.date ? diffDays(ds, S.test.date) : null;
     if (left != null && left >= 0 && left <= DAY_PLAN_TEST_DAYS) {
       // 試合前モード：試合前チェックの進みが少ない3教科を、日ごとに順番に出す（毎日同じ教科にならないように）
       const subs = Object.keys(SUBJECT_STEPS);
-      const rate = (s) => { const cs = TEST_CHECKS.filter((c) => c.sub === s); return cs.length ? cs.filter((c) => S.test.checks[c.id]).length / cs.length : 1; };
+      const rate = (s) => { const cs = activeChecks().filter((c) => c.sub === s); return cs.length ? cs.filter((c) => S.test.checks[c.id]).length / cs.length : 1; };
       const low = subs.map((x, i) => [x, rate(x), i]).sort((a, b) => a[1] - b[1] || a[2] - b[2]).slice(0, 3);
       const s = low[Math.floor(Date.parse(ds + 'T00:00:00Z') / 86400000) % low.length][0];
       return { sub: s, e: '📋', name: `${s}の仕上げ`, why: SUBJECT_WHY[s] || '', steps: [...SUBJECT_STEPS[s].slice(0, 2), 'tab:test'], test: left };
@@ -683,7 +690,7 @@ function calcAllowance(st, ym, today, cfg) {
       ? `<div class="dp-step done"><span class="dp-i">✓</span><span class="dp-x"><b>${s.icon} ${esc(s.name)}</b><small>${esc(s.sub)}</small></span></div>`
       : `<button class="dp-step ${s === next ? 'next' : ''}" ${s.act}><span class="dp-i">${'①②③④'[i]}</span><span class="dp-x"><b>${s.icon} ${esc(s.name)}</b><small>${esc(s.sub)}</small></span><span class="dp-go">${s === next ? (s.k.startsWith('m:') ? 'SHOOT' : s.k.startsWith('tab:') ? 'OPEN' : 'START') : '›'}</span></button>`);
     return `<div class="dayplan ${all ? 'done' : ''}">
-      <div class="dp-h"><span class="dp-e">${p.e}</span><span class="dp-t"><small>${p.test != null ? `試合前モード ・ テストまで あと${p.test}日` : '今日の教科'}</small><b>${all ? `${esc(p.name)} クリア！` : `今日は ${esc(p.name)}！`}</b></span><span class="dp-n">${done}/${total}</span></div>
+      <div class="dp-h"><span class="dp-e">${p.e}</span><span class="dp-t"><small>${p.test != null ? (p.head ? (p.test === 0 ? `${esc(p.head)} 今日が本番！` : `${esc(p.head)}まで あと${p.test}日`) : `試合前モード ・ テストまで あと${p.test}日`) : '今日の教科'}</small><b>${all ? `${esc(p.name)} クリア！` : `今日は ${esc(p.name)}！`}</b></span><span class="dp-n">${done}/${total}</span></div>
       ${p.why && !all ? `<div class="dp-why">💡 ${esc(p.why)}</div>` : ''}
       ${steps.map(row).join('')}
       ${bigLine}
@@ -691,7 +698,8 @@ function calcAllowance(st, ym, today, cfg) {
   }
   // 教科ごとのゲーム（ゲーム画面の「今日の教科」に出す）
   function subjectGames(sub) {
-    const map = { 英語: ['speak', 'verb', 'listen', 'spell', 'plural', 'rush:verb', 'rush:ek'], 国語: ['kanji', 'kwrite', 'rush:kanji'], 全教科: ['weak', 'challenge'] };
+    const tOn = testPlanOn();
+    const map = { 英語: tOn ? ['speak', 'third', 'qa:英語', 'spell', 'rush:third', 'rush:qa:英語', 'listen', 'plural'] : ['speak', 'verb', 'listen', 'spell', 'plural', 'rush:verb', 'rush:ek'], 国語: tOn ? ['qa:国語', 'kanji', 'kwrite', 'rush:qa:国語', 'rush:kanji'] : ['kanji', 'kwrite', 'rush:kanji'], 全教科: ['weak', 'challenge'] };
     const ks = map[sub] || ['qa:' + sub, 'rush:qa:' + sub];
     const out = ks.filter((k) => (k === 'kwrite' ? true : !!stepInfo(k) && (k !== 'weak' || weakTotal() > 0)));
     return out.length ? out : sub === '全教科' ? ['challenge'] : subjectGames('全教科');
@@ -929,6 +937,7 @@ function calcAllowance(st, ym, today, cfg) {
         ${tile('spell', 'gc-spell', best('spell'))}
         ${tile('plural', 'gc-plural', best('plural'))}
         ${tile('verb', 'gc-verb', S.best.verb != null ? best('verb') : 'NEW ・ 4択で練習')}
+        ${tile('third', 'gc-verb', S.best.third != null ? best('third') : 'NEW ・ 書いて練習')}
         ${tile('kanji', 'gc-kanji', best('kanji'))}
         ${tile('kwrite', 'gc-kanji', '紙に書く ・ 漢字ミッション')}
         ${qaTiles}
@@ -939,8 +948,9 @@ function calcAllowance(st, ym, today, cfg) {
   function viewTest() {
     const t = todayStr(); const T = S.test;
     const left = T.date ? diffDays(t, T.date) : null;
-    const done = TEST_CHECKS.filter((c) => T.checks[c.id]).length;
-    const groups = [...new Set(TEST_CHECKS.map((c) => c.sub))];
+    const CK = activeChecks();
+    const done = CK.filter((c) => T.checks[c.id]).length;
+    const groups = [...new Set(CK.map((c) => c.sub))];
     const ph = phaseOf(left);
     const goalRows = ['国語', '数学', '英語', '理科', '社会'].map((s) => {
       const g = S.goals[s] || {};
@@ -957,23 +967,38 @@ function calcAllowance(st, ym, today, cfg) {
         <div class="tg-bar"><i style="width:${Math.min(100, (pSum / TEST_TARGET.total) * 100)}%"></i><span style="left:${Math.min(100, (gSum / TEST_TARGET.total) * 100)}%"></span></div>
         <div class="tg-s">${gSet ? (gSum >= TEST_TARGET.total ? `✅ 目標の合計 ${gSum}点 — ${TEST_TARGET.total}点プラン完成！` : `目標の合計 ${gSum}点 — あと${TEST_TARGET.total - gSum}点ぶん、どの教科で上げる？`) : '教科ごとの目標を入れて、400点プランを作ろう'}</div>
       </div>`;
-    return header() + ekCard() + target + `
+    const sched = testSchedule();
+    return header() + sched + ekCard() + target + `
       <div class="testhead">
         <div style="font-size:13px;color:var(--sub)">次の試合（テスト）</div>
         <div style="font-family:var(--display);font-weight:800;font-size:22px;margin:4px 0 6px">${esc(T.name)}</div>
         <div class="countdown">${left == null ? '<small>日付が決まったら入れてね ↓</small>' : left > 0 ? `あと ${left}<small>日</small>` : left === 0 ? '<small>今日が本番！ がんばれ！</small>' : '<small>おつかれさま！ 次のテストを登録しよう</small>'}</div>
         <div class="row" style="margin-top:10px"><input class="inp" id="tname" value="${esc(T.name)}" style="flex:1"><input class="inp" type="date" id="tdate" value="${esc(T.date)}"></div>
         <div class="row" style="margin-top:8px"><button class="btn" data-act="tsave">保存</button><button class="btn ghost" data-act="treset">次のテストにする</button></div>
-        <div class="progress"><i style="width:${(done / TEST_CHECKS.length) * 100}%"></i></div>
-        <div class="note" style="margin-top:6px">準備度 ${done}/${TEST_CHECKS.length} ・ チェック1つ 3P</div>
+        <div class="progress"><i style="width:${(done / CK.length) * 100}%"></i></div>
+        <div class="note" style="margin-top:6px">準備度 ${done}/${CK.length} ・ チェック1つ 3P</div>
       </div>
       <div class="sec-title"><h2>試合までの作戦</h2><span>${ph != null && ph >= 0 ? '今ここ ▶' : ''}</span></div>
       <div class="roadmap">${ROADMAP.map((p, i) => `<div class="phase ${i === ph ? 'now' : ph != null && ph >= 0 && i < ph ? 'past' : ''}"><div class="pt">${i === ph ? '▶ ' : ''}${esc(p.title)}<span>${p.from >= 999 ? `${p.to}日前まで` : p.to === 0 ? '前日〜当日' : `${p.from}〜${p.to}日前`}</span></div><div class="px">${esc(p.text)}</div></div>`).join('')}</div>
       <div class="sec-title"><h2>目標スコア</h2><span>自分で決めよう</span></div>
       <div class="goals">${goalRows}<div class="note" style="text-align:right;margin:4px 2px">前回 合計 <b>${pSum || '—'}</b> → 目標 合計 <b style="color:var(--yellow)">${gSum || '—'}</b> / ${TEST_TARGET.total}</div><button class="btn" data-act="gsave" style="width:100%;margin-top:8px">目標を保存</button></div>
       <div class="sec-title"><h2>試合前チェック</h2><span>オール5は3つの観点すべてA</span></div>
-      ${groups.map((g) => `<div class="subgroup"><h4>${esc(g)}</h4>${TEST_CHECKS.filter((c) => c.sub === g).map((c) => `
+      ${groups.map((g) => `<div class="subgroup"><h4>${esc(g)}</h4>${CK.filter((c) => c.sub === g).map((c) => `
         <button class="check ${T.checks[c.id] ? 'on' : ''}" data-act="check" data-id="${c.id}"><span class="bx">${T.checks[c.id] ? '✓' : ''}</span><span>${esc(c.label)}</span></button>`).join('')}</div>`).join('')}`;
+  }
+  // 学校のテスト日程（data.js の TESTS）。終わったテストは出さない。範囲・ポイント・提出物と、その範囲のゲームへの入口
+  function testSchedule() {
+    if (typeof TESTS === 'undefined') return '';
+    const t = todayStr(); const up = TESTS.filter((x) => (x.date2 || x.date) >= t);
+    if (!up.length) return '';
+    const li = (a) => a.map((x) => `<li>${esc(x)}</li>`).join('');
+    return `<div class="sec-title"><h2>🗓 ${esc(TESTS_TITLE)}</h2><span>タップで範囲</span></div>` + up.map((x, i) => {
+      const left = diffDays(t, x.date);
+      const games = (x.games || []).map(stepInfo).filter(Boolean);
+      return `<details class="tcard"${i === 0 ? ' open' : ''}><summary><span class="tc-e">${x.e}</span><span class="tc-n"><b>${esc(x.name)}</b><small>${esc(x.when)}</small></span><span class="tc-d ${left <= 3 ? 'hot' : ''}">${left > 0 ? `あと${left}日` : left === 0 ? '今日！' : '実施中'}</span></summary>
+        <div class="tc-b"><h5>範囲</h5><ul>${li(x.range)}</ul><h5>ここを押さえる</h5><ul>${li(x.tips)}</ul>${x.submit && x.submit.length ? `<h5>📮 提出物</h5><ul class="tc-sub">${li(x.submit)}</ul>` : ''}
+        ${games.length ? `<div class="tc-go">${games.map((g) => `<button class="tc-btn" ${g.act}>${g.icon} ${esc(g.name)}</button>`).join('')}</div>` : ''}</div></details>`;
+    }).join('');
   }
   // ---------- 声（要望・わからない・苦手を伝える） ----------
   let voiceCat = 'dunno';
@@ -1250,7 +1275,89 @@ function calcAllowance(st, ym, today, cfg) {
   function mkQa(it) {
     const same = [...new Set(BANK.qa.filter((x) => x.s === it.s).map((x) => x.a))];
     const pool = same.length >= 4 ? same : [...new Set(BANK.qa.map((x) => x.a))];
-    return { type: 'qa', key: it.q, sub: it.s, prompt: `${it.s}・答えは？`, main: esc(it.q), long: true, answer: it.a, choices: choicesFor(it.a, pool) };
+    // it.c（シートの「ヒント・意味」欄や、数学の自動問題が持つ まちがいの選択肢）があればそれだけを使う（2択・3択の問題もある）
+    let choices;
+    if (it.c && it.c.length) choices = shuffle([it.a, ...[...new Set(it.c)].filter((x) => x !== it.a).slice(0, 3)]);
+    else choices = choicesFor(it.a, pool);
+    return { type: 'qa', key: it.q, sub: it.s, prompt: `${it.s}・答えは？`, main: it.html || esc(it.q), long: true, answer: it.a, choices, gen: !!it.g };
+  }
+  // ---------- 数学：比例・反比例の問題をその場で作る（啓林館 4章「変化と対応」。数字が毎回変わる） ----------
+  // 作った問題は苦手リストに入れない（数字が毎回ちがうので、あとで出し直せないため）
+  const mNum = (n) => (n < 0 ? '−' + (-n) : String(n));
+  const rInt = (a, b) => a + Math.floor(Math.random() * (b - a + 1));
+  const rNz = (a, b) => { let v = 0; while (!v) v = rInt(a, b); return v; };
+  const eqP = (a) => `y＝${a === 1 ? '' : a === -1 ? '−' : mNum(a)}x`;
+  const eqI = (a) => `y＝${a < 0 ? '−' : ''}${Math.abs(a)}/x`;
+  const eqF = (n, d) => (d === 1 ? eqP(n) : `y＝${n < 0 ? '−' : ''}(${Math.abs(n)}/${d})x`);
+  const mPt = (x, y) => `(${mNum(x)}, ${mNum(y)})`;
+  function mathGraph(kind, a, d = 1) {
+    const R = 6; const U = 16; const W = R * 2 * U; const X = (x) => (x + R) * U; const Y = (y) => (R - y) * U;
+    let g = '';
+    for (let i = -R; i <= R; i++) g += `<path d="M${X(i)} 0V${W}M0 ${Y(i)}H${W}" stroke="#3a4668" stroke-width="${i === 0 ? 0 : 1}"/>`;
+    g += `<path d="M${X(0)} 0V${W}M0 ${Y(0)}H${W}" stroke="#cfd6ea" stroke-width="1.6"/>`;
+    g += `<text x="${W - 4}" y="${Y(0) - 5}" fill="#cfd6ea" font-size="12" text-anchor="end">x</text><text x="${X(0) + 6}" y="12" fill="#cfd6ea" font-size="12">y</text><text x="${X(0) - 5}" y="${Y(0) + 13}" fill="#cfd6ea" font-size="11" text-anchor="end">O</text>`;
+    [-5, 5].forEach((v) => { g += `<text x="${X(v)}" y="${Y(0) + 13}" fill="#9aa6c4" font-size="10" text-anchor="middle">${mNum(v)}</text><text x="${X(0) - 5}" y="${Y(v) + 4}" fill="#9aa6c4" font-size="10" text-anchor="end">${mNum(v)}</text>`; });
+    const f = kind === 'p' ? (x) => (a / d) * x : (x) => a / x;
+    const seg = (from, to) => { let dd = ''; for (let x = from; x <= to + 1e-9; x += 0.05) { const y = f(x); if (Math.abs(y) > R + 0.5) continue; dd += `${dd ? 'L' : 'M'}${X(x).toFixed(1)} ${Y(y).toFixed(1)}`; } return dd ? `<path d="${dd}" fill="none" stroke="#ffd400" stroke-width="2.6" stroke-linecap="round"/>` : ''; };
+    g += kind === 'p' ? seg(-R, R) : seg(-R, -0.05) + seg(0.05, R);
+    // 読み取りやすいように、マス目の交点を1つ ● で示す
+    const pts = []; for (let x = -R + 1; x <= R - 1; x++) { if (!x) continue; const y = f(x); if (Number.isInteger(y) && Math.abs(y) <= R - 1) pts.push([x, y]); }
+    const pt = pts.sort((u, v) => Math.abs(u[0]) - Math.abs(v[0]))[0];
+    if (pt) g += `<circle cx="${X(pt[0])}" cy="${Y(pt[1])}" r="4.5" fill="#ff7a1a" stroke="#fff" stroke-width="1.5"/>`;
+    return `<svg class="mgraph" viewBox="0 0 ${W} ${W}" width="${W}" height="${W}">${g}</svg>`;
+  }
+  const MATH_WORDS = [
+    ['時速4kmで x時間歩いたときの道のりを y km とする。y を x の式で表すと？', 'y＝4x', ['y＝4/x', 'y＝x/4', 'y＝x＋4']],
+    ['1個80円のおかしを x個買ったときの代金を y円とする。式は？', 'y＝80x', ['y＝80/x', 'y＝x＋80', 'y＝x/80']],
+    ['面積が12cm²の長方形の、縦を x cm、横を y cm とする。式は？', 'y＝12/x', ['y＝12x', 'y＝x/12', 'y＝12−x']],
+    ['60Lの水そうに毎分 xL ずつ水を入れると、y分でいっぱいになる。式は？', 'y＝60/x', ['y＝60x', 'y＝x/60', 'y＝60−x']],
+    ['底辺が x cm、高さが6cmの三角形の面積を y cm² とする。式は？', 'y＝3x', ['y＝6x', 'y＝6/x', 'y＝3/x']],
+    ['18kmの道のりを時速 x km で進むと y時間かかる。式は？', 'y＝18/x', ['y＝18x', 'y＝x/18', 'y＝18−x']],
+    ['1辺が x cm の正方形のまわりの長さを y cm とする。式は？', 'y＝4x', ['y＝x²', 'y＝4/x', 'y＝x＋4']],
+    ['1mの重さが30gの針金 x m の重さを y g とする。式は？', 'y＝30x', ['y＝30/x', 'y＝x/30', 'y＝x＋30']],
+    ['24個のあめを x人で同じ数ずつ分けると、1人分は y個。式は？', 'y＝24/x', ['y＝24x', 'y＝x/24', 'y＝24−x']],
+    ['毎分5Lずつ水を入れるとき、x分間に入る水の量を yL とする。式は？', 'y＝5x', ['y＝5/x', 'y＝x/5', 'y＝x＋5']],
+    ['100ページの本を x ページ読んだときの残りを y ページとする。y は x に…？', 'どちらでもない', ['比例する', '反比例する']],
+    ['1本120円のペンを x本買ったときの代金 y円。y は x に…？', '比例する', ['反比例する', 'どちらでもない']],
+    ['面積20cm²の平行四辺形の底辺 x cm と高さ y cm。y は x に…？', '反比例する', ['比例する', 'どちらでもない']],
+    ['300kmの道のりを時速 x km で走るとき、かかる時間 y時間。y は x に…？', '反比例する', ['比例する', 'どちらでもない']],
+  ];
+  const MATH_KINDS = [['y＝4x', 0], ['y＝−x', 0], ['y＝x/3', 0], ['y＝−2x', 0], ['y/x＝5', 0], ['y＝12/x', 1], ['xy＝8', 1], ['y＝−6/x', 1], ['xy＝−18', 1], ['y＝2x＋1', 2], ['y＝x−5', 2], ['y＝x²', 2], ['y＝10−x', 2]];
+  function genMathOne() {
+    const t = rInt(1, 15);
+    const mk = (q, a, c, html) => ({ s: '数学', q, a, c, html, f: true, g: 1 });
+    if (t === 1) { const a = rNz(-6, 6); const x = rNz(-6, 6); return mk(`${eqP(a)} で、x＝${mNum(x)} のときの y の値は？`, mNum(a * x), [mNum(-a * x), mNum(a + x), mNum(a * x + (a > 0 ? 1 : -1)), mNum(a - x)]); }
+    if (t === 2) { const y = rNz(-6, 6); const x = rNz(-6, 6); const a = x * y; return mk(`${eqI(a)} で、x＝${mNum(x)} のときの y の値は？`, mNum(y), [mNum(-y), mNum(a * x), mNum(x), mNum(y + 1)]); }
+    if (t === 3) { const a = rNz(-6, 6); const p = rNz(-5, 5); return mk(`y は x に比例し、x＝${mNum(p)} のとき y＝${mNum(a * p)}。y を x の式で表すと？`, eqP(a), [eqP(-a), eqI(a * p * p), eqP(a * p), eqP(a + 1 || 2), eqI(a)]); }
+    if (t === 4) { const p = rNz(-6, 6); const q = rNz(-6, 6); const a = p * q; return mk(`y は x に反比例し、x＝${mNum(p)} のとき y＝${mNum(q)}。y を x の式で表すと？`, eqI(a), [eqI(-a), eqP(a), eqI(q), eqP(q), eqI(a + 1 || 2)]); }
+    if (t === 5) { const a = rNz(-5, 5); const p = rNz(-4, 4); let r = rNz(-6, 6); if (r === p) r = -p; return mk(`y は x に比例し、x＝${mNum(p)} のとき y＝${mNum(a * p)}。x＝${mNum(r)} のときの y の値は？`, mNum(a * r), [mNum(-a * r), mNum(a * p + r), mNum(a * p * r), mNum(a * r + a), mNum(a + r)]); }
+    if (t === 6) { const A = pick([12, 18, 24, 36, -12, -18, -24, -36]); const ds = [1, 2, 3, 4, 6, 12].filter((v) => A % v === 0); const p = pick(ds) * pick([1, -1]); let r = pick(ds) * pick([1, -1]); if (r === p) r = -p; return mk(`y は x に反比例し、x＝${mNum(p)} のとき y＝${mNum(A / p)}。x＝${mNum(r)} のときの y の値は？`, mNum(A / r), [mNum(-A / r), mNum(A * r), mNum(A / p), mNum(A / r + 1), mNum(r)]); }
+    if (t === 7) { const k = pick(MATH_KINDS); const L = ['比例する', '反比例する', 'どちらでもない']; return mk(`「${k[0]}」のとき、y は x に…？`, L[k[1]], L.filter((x, i) => i !== k[1])); }
+    if (t === 8 || t === 9) { const w = pick(MATH_WORDS); return mk(w[0], w[1], w[2]); }
+    if (t === 10) { const a = rNz(-4, 4); const l = rInt(-5, 2); const u = l + rInt(2, 4); const lo = Math.min(a * l, a * u); const hi = Math.max(a * l, a * u); return mk(`${eqP(a)} で、x の変域が ${mNum(l)}≦x≦${mNum(u)} のとき、y の変域は？`, `${mNum(lo)}≦y≦${mNum(hi)}`, [`${mNum(-hi)}≦y≦${mNum(-lo)}`, `${mNum(l)}≦y≦${mNum(u)}`, `${mNum(lo + 1)}≦y≦${mNum(hi + 1)}`, `${mNum(lo)}≦y≦${mNum(hi + Math.abs(a))}`]); }
+    if (t === 11) { const k = pick([[1, 1], [2, 1], [3, 1], [-1, 1], [-2, 1], [-3, 1], [1, 2], [-1, 2], [1, 3], [2, 3], [-2, 3], [3, 2], [-3, 2]]); const [n, d] = k; const ans = eqF(n, d); return { ...mk(`グラフの式は？（${ans}）`, ans, [eqF(-n, d), d === 1 ? eqF(1, Math.abs(n) === 1 ? 2 : Math.abs(n)) : eqF(d * Math.sign(n), Math.abs(n)), eqI(n * (d === 1 ? 1 : d)), eqF(n + (n > 0 ? 1 : -1), d)]), q: `比例のグラフ ${ans}`, html: `${mathGraph('p', n, d)}<div class="mg-q">このグラフの式は？<small>●はグラフが通る点</small></div>` }; }
+    if (t === 12) { const a = pick([2, 3, 4, 6, 8, 12, -2, -3, -4, -6, -8, -12]); const ans = eqI(a); return { ...mk(`反比例のグラフ ${ans}`, ans, [eqI(-a), eqP(a), eqI(Math.abs(a) === 12 ? 6 * Math.sign(a) : a * 2), eqP(-a)]), html: `${mathGraph('i', a)}<div class="mg-q">このグラフの式は？<small>●はグラフが通る点</small></div>` }; }
+    if (t === 13) { const p = rNz(-6, 6); let q = rNz(-6, 6); if (q === p) q = -p; return mk(`x座標が ${mNum(p)}、y座標が ${mNum(q)} の点の座標は？`, mPt(p, q), [mPt(q, p), mPt(-p, q), mPt(p, -q), mPt(-q, -p)]); }
+    if (t === 14) { const a = rNz(-4, 4); const p = rNz(-4, 4); const on = ([x, y]) => y === a * x; return mk(`${eqP(a)} のグラフが通る点は？`, mPt(p, a * p), [[a * p, p], [p, -a * p], [p, a + p], [p, a * p + 1], [-p, a * p], [p + 1, a * p]].filter((v) => !on(v)).map((v) => mPt(v[0], v[1]))); }
+    const y = rNz(-6, 6); const x = rNz(-6, 6); const a = x * y;
+    return mk(`${eqI(a)} のグラフが通る点は？`, mPt(x, y), [[x, -y], [x, a * x], [-x, y], [x, y + 1], [y + 1, x], [x + 1, y]].filter((v) => v[0] * v[1] !== a).map((v) => mPt(v[0], v[1])));
+  }
+  function genMath(n) {
+    const out = []; const seen = new Set(); let guard = 0;
+    while (out.length < n && guard++ < n * 20) {
+      const it = genMathOne();
+      it.c = [...new Set(it.c)].filter((x) => x !== it.a);
+      // まちがいの選択肢が足りない時や、見た目が同じ点・式になった時は作り直す
+      if (it.c.length < (it.a.endsWith('ない') || it.a.endsWith('する') ? 2 : 3) || seen.has(it.q)) continue;
+      seen.add(it.q); out.push(it);
+    }
+    return out;
+  }
+  const mathGenOn = () => typeof MATH_GEN_UNTIL !== 'undefined' && todayStr() <= MATH_GEN_UNTIL;
+  // その教科の一問一答（数学は、シートの問題＋その場で作った計算・グラフの問題）
+  function qaItems(sub) {
+    const base = BANK.qa.filter((x) => x.s === sub);
+    return sub === '数学' && mathGenOn() ? base.concat(genMath(Math.max(14, base.length))) : base;
   }
   const mkPast = (w) => ({ type: 'past', key: w[0], sub: '英語', prompt: '過去形にすると？', main: `${esc(w[0])}<div style="font-size:16px;color:var(--sub);font-family:var(--body)">（${esc(w[2])}）</div>`, hint: `${w[1].length}文字`, answer: w[1] });
   const mkThird = (w) => ({ type: 'third', key: w[0], sub: '英語', prompt: '( ) の動詞を正しい形に', main: `He ___ … (${esc(w[0])})`, hint: `${w[1].length}文字`, answer: w[1] });
@@ -1376,7 +1483,8 @@ function calcAllowance(st, ym, today, cfg) {
     if (kind === 'spell') return sampleItems(BANK.spell, QUIZ_LEN, 'spell', (x) => x.a).map(mkSpell);
     if (kind === 'plural') return sampleItems(BANK.plural, QUIZ_LEN, 'plural', (x) => x.q).map(mkPlural);
     if (kind === 'kanji') return sampleItems(BANK.kanji, QUIZ_LEN, 'kanji', (x) => x.q).map(mkKanji);
-    if (kind.startsWith('qa:')) { const s = kind.slice(3); return sampleItems(BANK.qa.filter((x) => x.s === s), QUIZ_LEN, 'qa', (x) => x.q).map(mkQa); }
+    if (kind.startsWith('qa:')) { const s = kind.slice(3); return sampleItems(qaItems(s), QUIZ_LEN, 'qa', (x) => x.q).map(mkQa); }
+    if (kind === 'third') { const wk = S.weak.third || {}; const weak = shuffle(THIRD_FORMS.filter((w) => wk[w[0]])).slice(0, 4); return shuffle(weak.concat(shuffle(THIRD_FORMS.filter((w) => !weak.includes(w))).slice(0, QUIZ_LEN - weak.length)).map(mkThird)); }
     return buildWeak();
   }
   // 苦手つぶし：5問ずつのセットで最大10問。過去形・3単現の苦手を各セット3問まで先に入れ、残りはほかの苦手で埋める
@@ -1407,7 +1515,7 @@ function calcAllowance(st, ym, today, cfg) {
   function quizName(kind) {
     if (kind === 'ek:menu') return S.ek.scout ? '英検カップ 今日のメニュー' : `${EIKEN.name} 実力チェック`;
     if (kind.startsWith('rush:')) return `${RUSH.sec}秒ラッシュ ${rushName(kind.slice(5))}`;
-    return { speak: 'スピーキング', listen: 'リスニング', spell: 'スペル・シュート', plural: '複数形チャレンジ', kanji: '漢字よみ速攻', weak: '苦手つぶし', challenge: 'チャレンジ（上級）', verb: '動詞の形トレーニング', kwrite: '漢字かき取り' }[kind] || (kind.startsWith('qa:') ? kind.slice(3) + ' 一問一答' : kind);
+    return { speak: 'スピーキング', listen: 'リスニング', spell: 'スペル・シュート', plural: '複数形チャレンジ', kanji: '漢字よみ速攻', weak: '苦手つぶし', challenge: 'チャレンジ（上級）', verb: '動詞の形トレーニング', third: '3単現の s（書く）', kwrite: '漢字かき取り' }[kind] || (kind.startsWith('qa:') ? kind.slice(3) + ' 一問一答' : kind);
   }
   function quizSubject(kind) {
     return kind === 'kanji' ? '国語' : kind === 'weak' || kind === 'challenge' ? '全教科' : kind.startsWith('qa:') ? (SUBJECTS.includes(kind.slice(3)) ? kind.slice(3) : '全教科') : '英語';
@@ -1421,7 +1529,7 @@ function calcAllowance(st, ym, today, cfg) {
   // ルールカードを出すゲーム：苦手つぶし（文法の問題が入っている時）と、まだ8問以上取れていない複数形・動詞の形
   // チャレンジ（おこづかいに関係する上級ゲーム）には出さない
   const BOSS_RC = (set, noBack) => ({ types: ['past', 'third'], boss: true, set, noBack });
-  const needsRuleCard = (kind) => kind === 'weak' || ((kind === 'plural' || kind === 'verb') && (S.best[kind] || 0) < 8);
+  const needsRuleCard = (kind) => kind === 'weak' || ((kind === 'plural' || kind === 'verb' || kind === 'third') && (S.best[kind] || 0) < 8);
   function startQuiz(kind) {
     if (kind === 'kwrite') { startKwrite(); return; }
     const qs = buildQuestions(kind);
@@ -1516,7 +1624,7 @@ function calcAllowance(st, ym, today, cfg) {
       const q = qs[st.i];
       const res = val == null ? 'time' : q.choices ? (val === q.answer ? 'ok' : 'ng') : judgeText(q, val);
       const j = q$('.judge');
-      const wk = S.weak[q.type];
+      const wk = q.gen ? null : S.weak[q.type];
       if (res === 'ok') {
         st.ok++; st.combo++; st.maxCombo = Math.max(st.maxCombo, st.combo);
         const p = 1; st.pts += p;
@@ -1644,8 +1752,9 @@ function calcAllowance(st, ym, today, cfg) {
   const kwLine = (w) => esc(w[2]).replace(/〔(.+?)〕/, '<b class="kw-y">$1</b>');
   function buildKwrite() {
     const wk = S.weak.kwrite || {};
-    const weak = shuffle(KANJI_WRITE.filter((w) => wk[w[0]])).slice(0, 5);
-    return shuffle(weak.concat(shuffle(KANJI_WRITE.filter((w) => !weak.includes(w))).slice(0, KANJI_WRITE_LEN - weak.length)));
+    const SRC = typeof KANJI_WRITE_TEST !== 'undefined' && KANJI_WRITE_TEST.list.length >= KANJI_WRITE_LEN && todayStr() <= KANJI_WRITE_TEST.until ? KANJI_WRITE_TEST.list : KANJI_WRITE;
+    const weak = shuffle(SRC.filter((w) => wk[w[0]])).slice(0, 5);
+    return shuffle(weak.concat(shuffle(SRC.filter((w) => !weak.includes(w))).slice(0, KANJI_WRITE_LEN - weak.length)));
   }
   function startKwrite() {
     const qs = buildKwrite(); const t0 = Date.now(); const ng = new Set();
@@ -1705,9 +1814,9 @@ function calcAllowance(st, ym, today, cfg) {
   // 点は 正解−まちがい（1回 10Pまで）。ポイントがつくのはラッシュ全部で1日2回まで（それ以降は記録だけ。ポイントの増え方をほかのゲームとそろえる）
   // まちがえた問題は苦手リストに入る。2択なので、正解しても苦手は消さない（消えるのは苦手つぶしで正解した時）
   const RUSH = { sec: 24, penalty: 2, maxPts: 10, rounds: 2 };
-  const rushModes = () => [['verb', '🧩', '動詞の形'], ...(ekLeft() >= 0 ? [['ek', '🏆', '英検単語']] : []), ['kanji', '漢', '漢字よみ'], ...qaSubjects().map((s) => ['qa:' + s, kindIcon('qa:' + s), s])];
+  const rushModes = () => [['verb', '🧩', '動詞の形'], ['third', '🅢', '3単現の s'], ...(ekLeft() >= 0 ? [['ek', '🏆', '英検単語']] : []), ['kanji', '漢', '漢字よみ'], ...qaSubjects().map((s) => ['qa:' + s, kindIcon('qa:' + s), s])];
   const rushName = (m) => (rushModes().find((x) => x[0] === m) || [m, '', m])[2];
-  const rushSubject = (m) => (m === 'verb' || m === 'ek' ? '英語' : m === 'kanji' ? '国語' : SUBJECTS.includes(m.slice(3)) ? m.slice(3) : '全教科');
+  const rushSubject = (m) => (m === 'verb' || m === 'third' || m === 'ek' ? '英語' : m === 'kanji' ? '国語' : SUBJECTS.includes(m.slice(3)) ? m.slice(3) : '全教科');
   const rushTiles = () => rushModes().map(([m, e, n], i) => `<button class="rush-tile ${i === 0 ? 'main' : ''}" data-act="rush" data-mode="${esc(m)}"><span>${e}</span><b>${esc(n)}</b><small>${S.best['rush:' + m] != null ? `ベスト ${S.best['rush:' + m]}問` : 'NEW'}</small></button>`).join('');
   // 苦手をときどき混ぜる
   function rushPick(list, kind, keyOf) { const wk = S.weak[kind] || {}; const weak = list.filter((x) => wk[keyOf(x)]); return weak.length && Math.random() < 0.5 ? pick(weak) : pick(list); }
@@ -1720,7 +1829,8 @@ function calcAllowance(st, ym, today, cfg) {
       const w = low.length && Math.random() < 0.5 ? pick(low) : pick(all.filter((x) => x.tier === 1));
       q = { type: 'ekw', ekid: w.id, key: w.en, sub: '英語', prompt: '意味は？', main: esc(w.en), answer: w.ja, choices: ekWordChoices(w, 'ja') };
     } else if (mode === 'kanji') q = mkKanji(rushPick(BANK.kanji, 'kanji', (x) => x.q));
-    else q = mkQa(rushPick(BANK.qa.filter((x) => x.s === mode.slice(3)), 'qa', (x) => x.q));
+    else if (mode === 'third') q = mkVerbThird(rushPick(THIRD_FORMS, 'third', (w) => w[0]));
+    else q = mkQa(rushPick(qaItems(mode.slice(3)), 'qa', (x) => x.q));
     const others = q.choices.filter((c) => c !== q.answer);
     return { ...q, other: others.length ? pick(others) : '—' };
   }
@@ -1755,7 +1865,7 @@ function calcAllowance(st, ym, today, cfg) {
       } else {
         st.combo = 0; st.miss.push(q); st.end -= RUSH.penalty * 1000;
         if (q.ekid) { ekMark(q.ekid, false); save(); }
-        const wk = S.weak[q.type];
+        const wk = q.gen ? null : S.weak[q.type];
         if (wk && (wk[q.key] || (st.added || 0) < 3)) { if (!wk[q.key]) st.added = (st.added || 0) + 1; wk[q.key] = (wk[q.key] || 0) + 1; }
         b.classList.add('ng'); sfx.ng(); buzz(60);
         el.classList.remove('fever'); q$('.rush-cb').textContent = '';
@@ -2645,10 +2755,12 @@ function calcAllowance(st, ym, today, cfg) {
 
   function buildSpeak() {
     const wk = S.weak.speak;
-    const sent = sampleItems(SPEAK_SENTENCES.map((w) => ({ en: w[0], ja: w[1] })), SPEAK_PLAN.filter((m) => m !== 'talk').length, 'speak', (x) => x.en);
-    const talk = sampleItems(SPEAK_TALK.map((w) => ({ q: w[0], ja: w[1], tpl: w[2], ex: w[3] })), SPEAK_PLAN.filter((m) => m === 'talk').length, 'speak', (x) => x.q);
+    const T = typeof SPEAK_TEST !== 'undefined' && todayStr() <= SPEAK_TEST.until ? SPEAK_TEST : null;
+    const PLAN = T ? T.plan : SPEAK_PLAN;
+    const sent = sampleItems((T ? T.ask : SPEAK_SENTENCES).map((w) => ({ en: w[0], ja: w[1] })), PLAN.filter((m) => m !== 'talk').length, 'speak', (x) => x.en);
+    const talk = sampleItems((T ? T.talk : SPEAK_TALK).map((w) => ({ q: w[0], ja: w[1], tpl: w[2], ex: w[3] })), PLAN.filter((m) => m === 'talk').length, 'speak', (x) => x.q);
     let si = 0, ti = 0;
-    return SPEAK_PLAN.map((mode) => (mode === 'talk' ? { mode, key: talk[ti].q, ...talk[ti++] } : { mode, key: sent[si].en, ...sent[si++] })).map((x) => ({ ...x, weak: !!wk[x.key] }));
+    return PLAN.map((mode) => (mode === 'talk' ? { mode, key: talk[ti].q, ...talk[ti++] } : { mode, key: sent[si].en, ...sent[si++] })).map((x) => ({ ...x, weak: !!wk[x.key] }));
   }
   const firstLetters = (en) => en.replace(/[A-Za-z']+/g, (w) => w[0] + '_'.repeat(Math.max(0, w.length - 1)));
   function startSpeak() {
