@@ -871,3 +871,14 @@ button.winmsg.go b { color: var(--yellow); font-size: 18px; }
 .dp-big small { display: block; font-size: 11px; color: #ffe2c8; margin-top: 2px; }
 .rc-boss { margin: 4px 0 6px; padding: 8px 10px; border-radius: 12px; background: #3a1640; border: 1px solid #a855f7; font-size: 14px; font-weight: 700; color: #f3d9ff; }
 .rc-boss small { display: block; font-weight: 400; font-size: 11px; color: #d8b8e8; }
+
+/* 今日の5分（2026-11-12）。ホームに1行：届くまでは残り時間とバー、届いたら緑の印 */
+.minline { margin: 0 0 8px; padding: 10px 14px; border-radius: 16px; background: var(--card); border: 2px solid var(--line); }
+.minline .ml-t { font-weight: 800; font-size: 15px; display: flex; align-items: baseline; gap: 6px; }
+.minline .ml-t b { font-size: 20px; color: var(--yellow); font-variant-numeric: tabular-nums; margin-left: auto; }
+.minline .ml-bar { height: 8px; border-radius: 99px; background: var(--line); margin: 6px 0; overflow: hidden; }
+.minline .ml-bar i { display: block; height: 100%; min-width: 4px; border-radius: 99px; background: linear-gradient(90deg, var(--orange), var(--yellow)); }
+.minline small { display: block; color: var(--sub); font-size: 12px; line-height: 1.5; }
+.minline .ml-btn { display: block; width: 100%; margin-top: 8px; padding: 9px; border-radius: 12px; border: 1px dashed var(--orange2); color: var(--orange2); font-size: 14px; font-weight: 700; background: none; }
+.minline .ml-run { display: block; margin-top: 6px; color: var(--cyan); font-size: 13px; }
+.minline.ok { border-color: var(--green); color: var(--green); font-weight: 800; font-size: 14px; text-align: center; padding: 8px 12px; }

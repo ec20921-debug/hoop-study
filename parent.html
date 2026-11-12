@@ -194,6 +194,13 @@ window.KIDS = [
 })();
 </script>
 <script>
+// 「勉強した日」の数え方（cfg.minStudyFrom の日から）：ゲームで問題を解いていた時間（x.st 秒）＋紙の勉強タイマー（x.tm 分）が
+// 合計 cfg.minStudyMin 分以上。それより前の日は今までどおり（1点でも入れば勉強した日）。app.js・star/app.js と Apps Script にも同じものがある
+function dayCounts(x, ds, cfg) {
+  if (!x) return false;
+  if (!cfg || !cfg.minStudyMin || !cfg.minStudyFrom || ds < cfg.minStudyFrom) return x.pts > 0;
+  return (x.st || 0) + (x.tm || 0) * 60 >= cfg.minStudyMin * 60;
+}
 function calcAllowance(st, ym, today, cfg) {
   var A = cfg; var days = (st && st.days) || {};
   var p = ym.split('-').map(Number);
@@ -209,7 +216,7 @@ function calcAllowance(st, ym, today, cfg) {
   var missed = 0, studied = 0, bigs = 0, perfect = 0, ranks = 0, mvp = 0;
   for (var d = monthStart; d <= monthEnd && d <= today; d = add(d, 1)) {
     var x = days[d];
-    if (x && x.pts > 0) studied++;
+    if (dayCounts(x, d, A)) studied++;
     else if (d >= from && d <= lastDone) missed++;
     if (x) {
       if (isBig(x)) bigs++;
@@ -300,7 +307,11 @@ window.startParent = () => {
     logs.forEach((l) => { if (l.date) byDay[l.date] = (byDay[l.date] || 0) + l.points; });
     const sumRange = (from, to) => { let s = 0; for (let d = from; d <= to; d = addDays(d, 1)) s += byDay[d] || 0; return s; };
     const daysActive = (from, to) => { let n = 0; for (let d = from; d <= to; d = addDays(d, 1)) if ((byDay[d] || 0) > 0) n++; return n; };
-    let streak = 0; { let d = (byDay[t] || 0) > 0 ? t : addDays(t, -1); while ((byDay[d] || 0) > 0) { streak++; d = addDays(d, -1); } }
+    // 連続日数は本人のアプリと同じ数え方（5分ルールの日からは、勉強の時間が5分以上の日だけ）。古いアプリの記録にはルールが入っていないので、その時は今までどおり点で数える
+    const minCfg = (st.summary && st.summary.allowanceCfg) || {}; const ruleOn = (d) => !!(minCfg.minStudyMin && minCfg.minStudyFrom && d >= minCfg.minStudyFrom && st.days);
+    const counts = (d) => (ruleOn(d) ? dayCounts(st.days[d], d, minCfg) : (byDay[d] || 0) > 0);
+    const studyMin = (d) => { const x = (st.days || {})[d] || {}; return Math.floor(((x.st || 0) + (x.tm || 0) * 60) / 60); };
+    let streak = 0; { let d = counts(t) ? t : addDays(t, -1); while (counts(d)) { streak++; d = addDays(d, -1); } }
     const w1 = sumRange(addDays(t, -6), t), w0 = sumRange(addDays(t, -13), addDays(t, -7));
     const act7 = daysActive(addDays(t, -6), t);
     const acts = logs.filter((l) => l.type !== 'session');
@@ -310,13 +321,15 @@ window.startParent = () => {
     const rank = (st.summary && st.summary.rank) || '—';
     const todayPts = byDay[t] || 0;
 
-    $('#status').innerHTML = todayPts > 0
+    $('#status').innerHTML = ruleOn(t) && todayPts > 0 && !counts(t)
+      ? `<div class="status wait">⏳ 今日は勉強 ${studyMin(t)}分（${todayPts}ポイント）。${minCfg.minStudyMin}分に届くと「勉強した日」になります</div>`
+      : todayPts > 0
       ? `<div class="status ok">✅ 今日はもう勉強しています（${todayPts}ポイント${appMinToday ? `・アプリ ${appMinToday}分` : ''}）</div>`
       : `<div class="status wait">⏳ 今日はまだ記録がありません${lastLog ? `（最後の記録：${esc(lastLog.date.slice(5).replace('-', '/'))} ${esc(hm(lastLog.ts))}）` : ''}</div>`;
 
     const diff = w1 - w0;
     $('#kpis').innerHTML = `
-      <div class="kpi"><div class="sub">連続日数</div><div class="v">${streak}<small>日</small></div><div class="d">🔥 1日1本でもOK</div></div>
+      <div class="kpi"><div class="sub">連続日数</div><div class="v">${streak}<small>日</small></div><div class="d">${minCfg.minStudyMin ? `🔥 1日${minCfg.minStudyMin}分以上で1日` : '🔥 1日1本でもOK'}</div></div>
       <div class="kpi"><div class="sub">直近7日の学習日数</div><div class="v">${act7}<small>/7日</small></div><div class="d">${act7 >= 5 ? 'とても良いペース' : act7 >= 3 ? '良いペース' : 'これから'}</div></div>
       <div class="kpi"><div class="sub">直近7日のポイント</div><div class="v">${w1}<small>P</small></div><div class="d ${diff >= 0 ? 'up' : 'down'}">前の7日より ${diff >= 0 ? '+' : ''}${diff}</div></div>
       <div class="kpi"><div class="sub">ランク</div><div class="v" style="font-size:20px">${esc(rank)}</div><div class="d">累計 ${st.xp || 0} XP ・ 🎟️ ${st.tickets || 0}</div></div>`;

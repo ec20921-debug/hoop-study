@@ -3,6 +3,13 @@
 if (typeof EIKEN === 'undefined') {
   Object.assign(window, { EIKEN: { date: '2000-01-01', goal: 0.8, counts: {}, speed: 0.85, reward: '' }, EK_PARTS: {}, EK_PHASES: [{ title: '', until: '2000-01-01', read: [], listen: [], words: 0 }], EK_MOCKS: [], EK_MINI: {}, EK_SCOUT: {}, EK_MOCK_ONLY: {}, EK_INTERVAL: [1], EK_MASTERED_BOX: 3, EK_WORD_GOAL: 1, EK_DAY_CHECKS: [], EK_NOT_TOGETHER: [], EK_WORD_GROUPS: [], EK_R1: [], EK_R2: [], EK_R3: [], EK_R4: [], EK_L1: [], EK_L2: [], EK_L3: [] });
 }
+// 「勉強した日」の数え方（cfg.minStudyFrom の日から）：ゲームで問題を解いていた時間（x.st 秒）＋紙の勉強タイマー（x.tm 分）が
+// 合計 cfg.minStudyMin 分以上。それより前の日は今までどおり（1点でも入れば勉強した日）。parent.html と Apps Script にも同じものがある
+function dayCounts(x, ds, cfg) {
+  if (!x) return false;
+  if (!cfg || !cfg.minStudyMin || !cfg.minStudyFrom || ds < cfg.minStudyFrom) return x.pts > 0;
+  return (x.st || 0) + (x.tm || 0) * 60 >= cfg.minStudyMin * 60;
+}
 function calcAllowance(st, ym, today, cfg) {
   var A = cfg; var days = (st && st.days) || {};
   var p = ym.split('-').map(Number);
@@ -18,7 +25,7 @@ function calcAllowance(st, ym, today, cfg) {
   var missed = 0, studied = 0, bigs = 0, perfect = 0, ranks = 0, mvp = 0;
   for (var d = monthStart; d <= monthEnd && d <= today; d = add(d, 1)) {
     var x = days[d];
-    if (x && x.pts > 0) studied++;
+    if (dayCounts(x, d, A)) studied++;
     else if (d >= from && d <= lastDone) missed++;
     if (x) {
       if (isBig(x)) bigs++;
@@ -103,7 +110,7 @@ function calcAllowance(st, ym, today, cfg) {
     if (!S.days[ds]) S.days[ds] = { m: [], pts: 0, win: false, perfect: 0 };
     return S.days[ds];
   }
-  const played = (ds) => !!(S.days[ds] && S.days[ds].pts > 0);
+  const played = (ds) => dayCounts(S.days[ds], ds, ALLOWANCE);
   function streak() {
     const t = todayStr();
     let cur = played(t) ? t : addDays(t, -1);
@@ -196,6 +203,47 @@ function calcAllowance(st, ym, today, cfg) {
     logEvent('session', 'アプリを使った', '', 0, { sec: total, from: new Date(from).toISOString() });
   }
 
+  // ---------- 今日の5分（勉強している時間。2026-11-13〜 Daisuke 決定） ----------
+  // 数えるのは「ゲームの画面を開いて問題を解いている時間」と「紙の勉強タイマー」だけ。ホームやガチャを開いているだけの時間は数えない。
+  // ゲームを開いたまま90秒さわらなかったら止まる（置きっぱなしで5分にならないように）
+  const MIN_SEC = (ALLOWANCE.minStudyMin || 0) * 60;
+  const minRuleOn = (ds = todayStr()) => MIN_SEC > 0 && !!ALLOWANCE.minStudyFrom && ds >= ALLOWANCE.minStudyFrom;
+  const studySec = (d) => (d ? (d.st || 0) + (d.tm || 0) * 60 : 0);
+  const STUDY_SEL = '.ov .quiz, .ov.kw';
+  let lastTouch = Date.now(); let studyDirty = 0;
+  ['pointerdown', 'keydown', 'input'].forEach((ev) => addEventListener(ev, () => { lastTouch = Date.now(); }, true));
+  function streakBonusCheck() {
+    const st = streak(); const bonus = STREAK_BONUS[st];
+    const mkey = st + '@' + addDays(todayStr(), -(st - 1));
+    if (bonus && !S.milestones[mkey]) { S.milestones[mkey] = true; S.tickets += bonus; return bonus; }
+    return 0;
+  }
+  // 5分に届いた瞬間（ゲーム中でも、タイマーを止めた時でも）
+  function minClear() {
+    const b = streakBonusCheck(); save();
+    sfx.coin();
+    toast(`✅ 今日の${ALLOWANCE.minStudyMin}分クリア！ 🔥 ${streak()}日連続` + (b ? `\n🎟️ 連続ボーナス チケット +${b}` : ''), 3200);
+    flushSoon();
+    if (!document.querySelector('.ov')) render();
+  }
+  function studyTick() {
+    if (!S || document.visibilityState !== 'visible' || !document.querySelector(STUDY_SEL)) return;
+    if (Date.now() - lastTouch > 90000) return;
+    const d = day(); const before = studySec(d);
+    d.st = (d.st || 0) + 1;
+    if (++studyDirty >= 10) { studyDirty = 0; save(); }
+    if (minRuleOn() && before < MIN_SEC && before + 1 >= MIN_SEC) minClear();
+  }
+  setInterval(studyTick, 1000);
+  const mmss = (s) => `${Math.floor(s / 60)}:${String(s % 60).padStart(2, '0')}`;
+  // ホームに出す1行（届くまでは残り時間、届いたらクリアの印）
+  function minLine() {
+    if (!minRuleOn()) return '';
+    const M = ALLOWANCE.minStudyMin; const s = Math.min(MIN_SEC, studySec(S.days[todayStr()]));
+    if (s >= MIN_SEC) return `<div class="minline ok">✅ 今日の${M}分クリア！ 🔥連続記録と「勉強した日」にカウント</div>`;
+    return `<div class="minline"><div class="ml-t">⏱ 今日の${M}分 <b>${mmss(s)}</b> / ${M}:00</div><div class="ml-bar"><i style="width:${Math.round(s / MIN_SEC * 100)}%"></i></div><small>ゲームで問題を解いた時間＋紙の勉強タイマー。${M}分で 🔥連続記録と「勉強した日」になるよ</small>${S.timer ? `<span class="ml-run">⏱ タイマー計測中（「終わった！」で足されるよ）</span>` : `<button class="ml-btn" data-act="tstart">✍️ 紙の勉強は タイマーで数える ▶</button>`}</div>`;
+  }
+
   // ---------- 紙の勉強タイマー（紙で勉強した時間を記録する） ----------
   const timerMin = () => (S.timer ? Math.floor((Date.now() - S.timer.start) / 60000) : 0);
   const timerLabel = () => (timerMin() > TIMER.maxMin ? `${TIMER.maxMin}+` : String(timerMin()));
@@ -226,8 +274,9 @@ function calcAllowance(st, ym, today, cfg) {
     S.timer = null;
     if (min < 1) { save(); toast('記録しなかったよ'); render(); return; }
     const d = day();
-    const before = d.tm || 0;
+    const before = d.tm || 0; const secBefore = studySec(d);
     d.tm = before + min;
+    const crossed = minRuleOn() && secBefore < MIN_SEC && studySec(d) >= MIN_SEC;
     const earned = Math.min(TIMER.maxPts, Math.floor(d.tm / TIMER.perPts)) - Math.min(TIMER.maxPts, Math.floor(before / TIMER.perPts));
     const detail = { min, from: new Date(start).toISOString(), total: d.tm };
     if (earned > 0) {
@@ -239,6 +288,7 @@ function calcAllowance(st, ym, today, cfg) {
       save(); logEvent('timer', `紙の勉強 ${min}分`, '全教科', 0, detail);
       toast(`⏱ ${min}分 記録したよ（今日の合計 ${d.tm}分）`); render();
     }
+    if (crossed) minClear();
   }
   setInterval(() => { const el = $('#tmr'); if (el && S && S.timer) el.textContent = timerLabel(); }, 15000);
 
@@ -481,10 +531,7 @@ function calcAllowance(st, ym, today, cfg) {
     if (!d.win && d.pts > RIVAL.score && paperDone(d)) { d.win = true; S.tickets++; r.win = true; d.rv = todayRival().name; S.beat[d.rv] = 1; }
     const stdDone = d.m.filter((id) => ALLOWANCE.stdMissions.includes(id)).length;
     if (!d.big && stdDone >= ALLOWANCE.bigWinMissions) { d.big = true; r.big = true; }
-    const st = streak();
-    const bonus = STREAK_BONUS[st];
-    const mkey = st + '@' + addDays(todayStr(), -(st - 1));
-    if (bonus && !S.milestones[mkey]) { S.milestones[mkey] = true; S.tickets += bonus; r.streakBonus = bonus; }
+    r.streakBonus = streakBonusCheck();
     const after = rankIdx(S.xp);
     if (after > before) { r.levelUp = true; r.newRank = after; d.ru = (d.ru || 0) + (after - before); for (let k = before + 1; k <= after; k++) if (k >= ALLOWANCE.rankUpFrom) d.ru2 = (d.ru2 || 0) + 1; }
     save();
@@ -541,6 +588,7 @@ function calcAllowance(st, ym, today, cfg) {
         <div class="st-streak"><span class="flame ${today ? '' : 'cold'}">🔥</span><b>${st}</b><small>日連続</small>${best > st && best >= 3 ? `<small class="st-best">ベスト${best}日</small>` : ''}</div>
         <div class="st-score"><span class="lbl">YOU</span><b class="sc">${d.pts}</b><span class="vs">VS</span><b class="sc away">${RIVAL.score}</b><span class="lbl"><i class="rv-e">${todayRival().e}</i>${esc(todayRival().name)}</span></div>
       </div>
+      ${minLine()}
       ${winLine(d, left)}
       ${cheer}
       ${ekCard()}
@@ -773,6 +821,9 @@ function calcAllowance(st, ym, today, cfg) {
     const L = COACH_LINES; const out = [];
     const add = (k, mood) => (L[k] || []).forEach((s) => out.push({ text: fillLine(s, v), mood }));
     if (S.timer) add('timer', 'happy');
+    const needMin = minRuleOn(t) && !played(t) && d.pts > 0;
+    v.minLeft = Math.max(1, Math.ceil((MIN_SEC - studySec(d)) / 60));
+    if (needMin && !S.timer) add('needMin', 'think');
     // 連続が切れた日（今日はまだ0本）：ベスト記録を見せて、今日を「新しい1日目」にする
     const broke = !played(t) && st === 0 && best >= 3;
     if (broke) add('restart', 'fire');
@@ -805,7 +856,7 @@ function calcAllowance(st, ym, today, cfg) {
     if (played(t) && !(d.qk || []).includes('speak')) add('speakNotYet', 'wink');
     if (stdCount(d) >= ALLOWANCE.bigWinMissions) add('bigDone', 'fire');
     else if (left > 0 && left <= 2 && stdCount(d) > 0) add('nearBig', 'fire');
-    if (!played(t)) { if (!broke) add('notYet', 'think'); }
+    if (!played(t)) { if (!broke && !needMin) add('notYet', 'think'); }
     else if (d.win) add('winDone', 'wink');
     if (STREAK_BONUS[st] || [3, 5, 7, 10, 14, 21, 30, 50, 100].includes(st)) add('streakUp', 'fire');
     if (v.weak >= 5) add('weak', 'think');
@@ -3040,7 +3091,7 @@ function calcAllowance(st, ym, today, cfg) {
       がんばりボーナス <b>+${yen(a.bonus)}</b>（BIG ${a.bigs}日・MVP ${a.mvp}週・上級全問 ${a.perfect}回・ランク ${a.ranks}）<br>
       ${hint}<br>今週の BIG WIN ${wb}/${A.mvpDays}日 ${wb >= A.mvpDays ? '→ 週間MVP達成！🏅' : `（${A.mvpDays}日で週間MVP +${yen(A.mvp)}）`}<br><br>
       <b>ルール</b><br>
-      <b>基本 ${yen(A.base)}</b><br>1か月に <b>${A.restDays}日</b> までは、勉強しない日があっても大丈夫（大会・体調が悪い日用のお休み枠）。<br>それをこえて勉強しなかった日は、<b>1日 −${yen(A.missPenalty)}</b>。<br><br>
+      <b>基本 ${yen(A.base)}</b><br>1か月に <b>${A.restDays}日</b> までは、勉強しない日があっても大丈夫（大会・体調が悪い日用のお休み枠）。<br>それをこえて勉強しなかった日は、<b>1日 −${yen(A.missPenalty)}</b>。${A.minStudyMin ? `<br>「勉強した日」＝ゲームで問題を解いた時間＋紙の勉強タイマーが、合計 <b>${A.minStudyMin}分以上</b>の日（${Number(A.minStudyFrom.slice(5, 7))}月${Number(A.minStudyFrom.slice(8))}日から）。` : ''}<br><br>
       <b>がんばりボーナス 最大 +${yen(A.bonusMax)}</b><br>🔥 BIG WIN（基本ミッションを1日${A.bigWinMissions}本以上）：+${yen(A.bigWin)}<br>🏅 週間MVP（月〜日でBIG WIN ${A.mvpDays}日以上。月〜金だけでも届く！）：+${yen(A.mvp)}<br>👑 チャレンジ（上級ゲーム）全問正解：+${yen(A.perfect)}（1日${A.perfectPerDay}回まで）<br>⭐ スタメン以上にランクアップ：+${yen(A.rankUp)}<br><br>
       ※ ゲームの点数や、自分で追加したミッションはおこづかいには数えないよ。紙での勉強が勝負！<br><br>
       合計は <b>最大 ${yen(A.max)}</b>。毎日BIG WIN＋毎日チャレンジ全問正解の、完ぺきな月だけ届く金額！<br>月末にしめて、次の月のはじめにもらえるよ。</div></div>`, { lockMs: 400 });
@@ -3094,13 +3145,13 @@ function calcAllowance(st, ym, today, cfg) {
         return `<div class="bd ${got ? 'got' : ''}"><span class="bd-e">${b.e}</span><span class="bd-n">${esc(b.name)}</span><span class="bd-d">${esc(b.d)}${got ? '' : b.n > 1 ? `（${v}/${b.n}）` : ''}</span></div>`; }).join('')}</div>
       <div class="sec-title"><h2>ポイントのもらい方</h2></div>
       <div class="howto">${HOWTO_POINTS.map((h) => `<div class="hrow"><span>${h[0]}</span><span class="hl">${esc(h[1])}</span><b>${esc(h[2])}</b></div>`).join('')}</div>
-      <p class="note" style="margin-top:12px">最初の1か月は、どんどんランクが上がるよ。部活で疲れた日は「1本だけ」でOK。続けた人が一番強い！</p>`;
+      <p class="note" style="margin-top:12px">最初の1か月は、どんどんランクが上がるよ。部活で疲れた日も「5分だけ」でOK。続けた人が一番強い！</p>`;
   }
   async function tutorial() {
     const slides = [
-      { e: '🏀', t: '毎日1本、シュートを打とう', b: 'ミッションをタップするとシュートが決まる！<br>1日1本でも打てば <b>🔥連続記録</b> がのびるよ。<br>部活で疲れた日は「1本だけ」でOK。<br><br>「サボり虫（6点）」に勝つと <b>WIN</b> → ガチャチケット🎟️' },
+      { e: '🏀', t: '毎日5分、シュートを打とう', b: 'ミッションをタップするとシュートが決まる！<br>1日 <b>5分以上</b>（ゲームで問題を解いた時間＋紙の勉強タイマー）で <b>🔥連続記録</b> がのびるよ。<br>部活で疲れた日も「5分だけ」でOK。<br><br>「サボり虫（6点）」に勝つと <b>WIN</b> → ガチャチケット🎟️' },
       { e: '⭐', t: 'ポイントでランクアップ', b: `スタートは <b>🪑 ベンチ見習い</b>。<br>ポイントがたまると<br><span class="tl-ladder">🪑 → 6️⃣ → 🏀 スタメン → ⭐ エース → ©️ キャプテン → 🏅 → 🥉 → 🥈 → 🥇 → 🇯🇵 日本代表 → ✈️ → 🌎 → 👑 レジェンド</span><br>全${RANKS.length}ランク！ 最初の1か月はどんどん上がるよ。<br>上のランクのマークをタップすると<b>ランク表</b>が見られる。` },
-      { e: '💰', t: 'おこづかいと連動！', b: `毎月のおこづかいは <b>基本${ALLOWANCE.base.toLocaleString()}円</b>。<br>勉強しない日が月${ALLOWANCE.restDays}日をこえると 1日 −${ALLOWANCE.missPenalty}円。<br><br>がんばるとボーナス！<br>🔥 BIG WIN（基本ミッション${ALLOWANCE.bigWinMissions}本）+${ALLOWANCE.bigWin}円<br>🏅 週間MVP（BIG WIN 週${ALLOWANCE.mvpDays}日）+${ALLOWANCE.mvp}円<br>👑 チャレンジ全問正解 +${ALLOWANCE.perfect}円 ／ ⭐ スタメン以上にランクUP +${ALLOWANCE.rankUp}円<br><br>合計 <b>最大${ALLOWANCE.max.toLocaleString()}円</b>。完ぺきな月だけ届く本気の金額！` },
+      { e: '💰', t: 'おこづかいと連動！', b: `毎月のおこづかいは <b>基本${ALLOWANCE.base.toLocaleString()}円</b>。<br>勉強が5分に届かない日が月${ALLOWANCE.restDays}日をこえると 1日 −${ALLOWANCE.missPenalty}円。<br><br>がんばるとボーナス！<br>🔥 BIG WIN（基本ミッション${ALLOWANCE.bigWinMissions}本）+${ALLOWANCE.bigWin}円<br>🏅 週間MVP（BIG WIN 週${ALLOWANCE.mvpDays}日）+${ALLOWANCE.mvp}円<br>👑 チャレンジ全問正解 +${ALLOWANCE.perfect}円 ／ ⭐ スタメン以上にランクUP +${ALLOWANCE.rankUp}円<br><br>合計 <b>最大${ALLOWANCE.max.toLocaleString()}円</b>。完ぺきな月だけ届く本気の金額！` },
       { e: '💬', t: '声とガチャ', b: 'わからないこと・苦手なところ・「アプリこうしてほしい」は <b>💬声</b> へ。マイクで話すだけで送れるよ。<br>おうちの人から返事やエールが届く📣<br><br>チケットで <b>🎰ガチャ</b>。バスケ技カード34種類を集めよう！' },
     ];
     for (let k = 0; k < slides.length; k++) {

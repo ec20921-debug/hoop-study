@@ -1,6 +1,6 @@
 // STAR STUDY service worker — アプリ本体をスマホに保存してオフラインでも開けるようにする
-const CACHE = 'star-v12';
-const SHELL = ['./', './index.html', './style.css?v=12', './app.js?v=12', './data.js?v=12', './config.js?v=12', './manifest.webmanifest', './icons/icon-180.png', './icons/icon-192.png', './icons/coach.jpg', './icons/coach-full.jpg'];
+const CACHE = 'star-v13';
+const SHELL = ['./', './index.html', './style.css?v=13', './app.js?v=13', './data.js?v=13', './config.js?v=13', './manifest.webmanifest', './icons/icon-180.png', './icons/icon-192.png', './icons/coach.jpg', './icons/coach-full.jpg'];
 
 self.addEventListener('install', (e) => {
   e.waitUntil(caches.open(CACHE).then((c) => c.addAll(SHELL)).then(() => self.skipWaiting()));
