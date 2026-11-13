@@ -1604,6 +1604,7 @@ function calcAllowance(st, ym, today, cfg) {
         <div class="spk-ja"></div>
         <div class="row spk-listen"><button class="btn ghost" data-s="play">🔊 お手本</button><button class="btn ghost" data-s="slow">🐢 ゆっくり</button></div>
         <button class="spk-mic" data-s="mic"><span class="mic-i">🎤</span><span class="mic-t">押して話す</span></button>
+        <button class="spk-skip" data-s="skip">とばして次へ ▶</button>
         <div class="spk-heard"></div>
         <div class="judge"></div>
         <div class="row spk-next hidden" style="width:100%"><button class="btn ghost" style="flex:1" data-s="retry">もう1回</button><button class="btn" style="flex:1" data-s="next">次へ ▶</button></div>
@@ -1638,6 +1639,9 @@ function calcAllowance(st, ym, today, cfg) {
       q$('.spk-next').classList.add('hidden');
       q$('.spk-mic').classList.remove('hidden', 'rec');
       q$('.mic-t').textContent = st.auto ? '押して話す' : '押して録音';
+      // 聞き取ってもらえない時でも先に進めるように、いつでも「とばして次へ」を出す（とばした文は苦手に入って次回また出る）
+      q$('.spk-skip').classList.remove('hidden');
+      q$('.spk-skip').textContent = st.i + 1 < items.length ? 'とばして次へ ▶' : 'とばして結果へ 🏁';
       if (it.mode === 'talk') {
         q$('.spk-q').innerHTML = `${coachFace('happy')}<span><b>${esc(it.q)}</b><small>${esc(it.ja)}</small></span>`;
         q$('.spk-q').classList.remove('hidden');
@@ -1671,7 +1675,7 @@ function calcAllowance(st, ym, today, cfg) {
     function settle(pass) {
       st.tries++;
       if (pass && !st.cleared) { st.cleared = true; st.ok++; st.pts += 1; }
-      q$('.spk-next').classList.remove('hidden');
+      q$('.spk-next').classList.remove('hidden'); q$('.spk-skip').classList.add('hidden');
       q$('[data-s="retry"]').classList.toggle('hidden', st.cleared || st.tries >= 3);
       q$('.spk-mic').classList.add('hidden');
       if (st.cleared || st.tries >= 3) q$('[data-s="next"]').textContent = st.i + 1 < items.length ? '次へ ▶' : '結果を見る 🏁';
@@ -1683,6 +1687,7 @@ function calcAllowance(st, ym, today, cfg) {
         return;
       }
       st.busy = true;
+      const at = st.i;
       if (window.speechSynthesis) speechSynthesis.cancel();
       const mic = q$('.spk-mic');
       if (!st.auto) {
@@ -1695,7 +1700,7 @@ function calcAllowance(st, ym, today, cfg) {
       const r = await hearEnglish((txt) => { q$('.spk-heard').textContent = `🎧 ${txt}`; });
       mic.classList.remove('rec'); q$('.mic-t').textContent = '押して話す';
       st.busy = false;
-      if (st.ended) return;
+      if (st.ended || st.i !== at) return;
       if (r.error === 'not-allowed' || r.error === 'service-not-allowed' || r.error === 'init' || r.error === 'start' || r.error === 'audio-capture') {
         // この端末では聞き取りが使えない → 録音モードに切りかえ
         speakAuto = false; st.auto = false;
@@ -1719,11 +1724,20 @@ function calcAllowance(st, ym, today, cfg) {
       if (it.mode === 'talk') q$('.spk-en').innerHTML = `<span class="tpl">${esc(it.tpl).replace('___', '<i>＿＿＿</i>')}</span><div class="ex">例：${esc(it.ex)}</div>`;
       q$('.spk-heard').innerHTML = url ? `<button class="btn ghost" data-s="mine">▶ 自分の声</button> <button class="btn ghost" data-s="model">🔊 お手本</button><div style="margin-top:8px">お手本と聞き比べて、言えた？</div>` : '声に出して言えた？';
       if (url) { st.selfUrl = url; new Audio(url).play().catch(() => {}); }
-      q$('.spk-mic').classList.add('hidden');
+      q$('.spk-mic').classList.add('hidden'); q$('.spk-skip').classList.add('hidden');
       q$('.spk-next').classList.remove('hidden');
       q$('[data-s="retry"]').classList.remove('hidden'); q$('[data-s="retry"]').textContent = 'もう1回';
       q$('[data-s="next"]').textContent = '言えた！ ✓';
       st.selfAsk = true;
+    }
+    // とばす：聞き取り・録音を止めて、言えなかった扱いで次へ（苦手に入るので次のスピーキングにもう一度出る）
+    function skip() {
+      if (spkRec) { try { spkRec.abort(); } catch (e) { /* noop */ } }
+      if (selfRec) recordStop();
+      if (window.speechSynthesis) speechSynthesis.cancel();
+      st.busy = false; st.selfAsk = false; st.cleared = false;
+      sfx.tap();
+      next();
     }
     function next() {
       const it = cur();
@@ -1782,8 +1796,9 @@ function calcAllowance(st, ym, today, cfg) {
       else if (s === 'slow') sayEn(it.mode === 'talk' ? it.q : it.en, true);
       else if (s === 'mine') { if (st.selfUrl) new Audio(st.selfUrl).play().catch(() => {}); }
       else if (s === 'mic') onMic();
-      else if (s === 'retry') { st.selfAsk = false; q$('.spk-next').classList.add('hidden'); q$('.spk-mic').classList.remove('hidden'); if (!st.auto) q$('.spk-heard').textContent = ''; onMic(); }
+      else if (s === 'retry') { st.selfAsk = false; q$('.spk-next').classList.add('hidden'); q$('.spk-mic').classList.remove('hidden'); q$('.spk-skip').classList.remove('hidden'); if (!st.auto) q$('.spk-heard').textContent = ''; onMic(); }
       else if (s === 'next') next();
+      else if (s === 'skip') skip();
     });
     sfx.buzzer();
     show();
