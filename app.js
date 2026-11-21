@@ -84,6 +84,8 @@ function calcAllowance(st, ym, today, cfg) {
     const f = freshState();
     for (const k in f) if (s[k] === undefined) s[k] = f[k];
     for (const k of ['spell', 'plural', 'kanji', 'qa', 'past', 'third', 'hkanji', 'speak', 'listen', 'kwrite']) if (!s.weak[k]) s.weak[k] = {};
+    // 2026-11-21：問題タブの「遗跡」（中国の漢字）を「遺跡」に直した。苦手リストのキーも合わせる
+    for (const k of Object.keys(s.weak.qa)) if (k.includes('遗')) { const nk = k.replace(/遗/g, '遺'); s.weak.qa[nk] = (s.weak.qa[nk] || 0) + s.weak.qa[k]; delete s.weak.qa[k]; }
     if (s.ek && EIKEN.grade && s.ek.g !== EIKEN.grade) {
       // 受ける級が変わった（2026-11-06 5級 → 4級）：形式ごとの正答率・模試・過去問・実力チェック・当日チェックを新しくする。
       // おぼえ直しの記録は単語だけ残す（同じ単語は4級にも出る）。メニューのクリア日数はそのまま。合格の記録は別の級なので消す
@@ -315,6 +317,7 @@ function calcAllowance(st, ym, today, cfg) {
     const b = { spell: [], plural: [], kanji: [], qa: [] };
     (j.questions || []).forEach((r) => {
       const f = !!r.focus;
+      for (const x of ['q', 'a', 'hint']) if (typeof r[x] === 'string') r[x] = r[x].replace(/遗/g, '遺');
       if (!r.q || !r.a) return;
       if (r.type === '英単語') b.spell.push({ q: r.q, a: r.a, f });
       else if (r.type === '複数形') b.plural.push({ q: r.q, a: r.a, h: r.hint || '', f });
@@ -660,6 +663,7 @@ function calcAllowance(st, ym, today, cfg) {
       const m = S.missions.find((x) => x.id === k.slice(2)); if (!m) return null;
       return { k, icon: m.icon || '🏀', name: m.label, sub: `紙のミッション ・ ${m.pts}P`, done: (d.m || []).includes(m.id), act: `data-act="mission" data-id="${esc(m.id)}"` };
     }
+    if (k === 'sum:社会') { if (!socSumOn()) return null; return { k, icon: '📖', name: '社会まとめを読む（3分）', sub: '読むだけ ・ 流れとセットで覚える', done: !!d.socsum, opt: true, act: 'data-act="socsum"' }; }
     if (k === 'tab:test') return { k, icon: '📋', name: '試合前チェックに印をつける', sub: 'できたものをタップ', done: false, opt: true, act: 'data-tab="test"' };
     if (k === 'ek:menu') { if (ekLeft() <= 0) return null; return { k, icon: '🏆', name: '英検カップ 今日のメニュー', sub: 'ゲーム ・ 約7分', done: !ekMenuLeft().length, act: `data-act="omakase" data-kind="ek:menu"` }; }
     if (k.startsWith('rush:') && !rushModes().some((x) => 'rush:' + x[0] === k)) return null;
@@ -943,6 +947,21 @@ function calcAllowance(st, ym, today, cfg) {
         ${qaTiles}
       </div></details>
       <p class="note" style="margin-top:14px">全問正解で +2P ＆ 🎟️（1日2枚まで）。今日の WIN には紙のミッション1本か ⏱タイマー10分が必要だよ ✍️</p>`;
+  }
+  // ---------- 社会まとめ（data.js の SOC_SUMMARY・2026-11-21） ----------
+  function socSumOn() { return typeof SOC_SUMMARY !== 'undefined' && todayStr() <= SOC_SUMMARY.until; }
+  function openSocSum() {
+    if (typeof SOC_SUMMARY === 'undefined') return;
+    const d = day(); if (!d.socsum) { d.socsum = 1; save(); }
+    const sec = (x) => `<div class="ss-sec"><h4>${x.e} ${esc(x.h)}</h4>${x.rows ? x.rows.map((r) => `<div class="ss-row"><b>${esc(r[0])}</b><span>${esc(r[1])}</span></div>`).join('') : ''}${x.table ? `<div class="ss-tw"><table class="ss-t">${x.table.map((r, i) => `<tr>${r.map((c) => (i ? `<td>${esc(c)}</td>` : `<th>${esc(c)}</th>`)).join('')}</tr>`).join('')}</table></div>` : ''}${x.note ? `<div class="ss-note">💡 ${esc(x.note)}</div>` : ''}</div>`;
+    return overlay(`<div class="tut ss"><div class="tut-t">📖 ${esc(SOC_SUMMARY.title)}</div>
+      <div class="coach-mini" style="margin:0 0 10px">${coachFace('wink')}<span>社会は「流れ」と「なぜ？」で覚えると一気にラクになるぞ。3分で読んでから一問一答だ！</span></div>
+      ${SOC_SUMMARY.sections.map(sec).join('')}
+      <button class="btn big" style="width:100%;margin-top:12px" data-ss="go">🗾 社会の一問一答へ ▶</button>
+      <button class="btn ghost" style="width:100%;margin-top:8px" data-ss="close">とじる</button></div>`, {
+      closeOnTap: false, cls: 'solid scroll',
+      onMount: (o, close) => { o.addEventListener('click', (e) => { const b = e.target.closest('[data-ss]'); if (!b) return; sfx.tap(); close(); if (b.dataset.ss === 'go') startQuiz('qa:社会'); else render(); }); },
+    });
   }
   function phaseOf(left) { return left == null ? null : ROADMAP.findIndex((p) => left <= p.from && left >= p.to); }
   function viewTest() {
@@ -1272,6 +1291,11 @@ function calcAllowance(st, ym, today, cfg) {
   const mkSpell = (it) => ({ type: 'spell', key: it.a, sub: '英語', prompt: '英語で書くと？', main: esc(it.q), hint: it.a[0] + ' ' + '_ '.repeat(it.a.length - 1).trim(), answer: it.a });
   const mkPlural = (it) => ({ type: 'plural', key: it.q, sub: '英語', prompt: '複数形にすると？', main: `${esc(it.q)}${it.h ? `<div style="font-size:16px;color:var(--sub);font-family:var(--body)">（${esc(it.h)}）</div>` : ''}`, hint: `${it.a.length}文字`, answer: it.a });
   const mkKanji = (it) => ({ type: 'kanji', key: it.q, sub: '国語', prompt: '読みは？', main: esc(it.q), answer: it.a, choices: choicesFor(it.a, [...new Set(BANK.kanji.map((k) => k.a))]) });
+  // 一問一答の「なぜ？」（data.js の QA_WHY。いまは社会だけ・2026-11-21）
+  function whyOf(q) {
+    if (!q || q.type !== 'qa' || typeof QA_WHY === 'undefined') return '';
+    const m = QA_WHY[q.sub]; return (m && m[q.answer]) || '';
+  }
   function mkQa(it) {
     const same = [...new Set(BANK.qa.filter((x) => x.s === it.s).map((x) => x.a))];
     const pool = same.length >= 4 ? same : [...new Set(BANK.qa.map((x) => x.a))];
@@ -1637,14 +1661,16 @@ function calcAllowance(st, ym, today, cfg) {
         bossDraw(true);
         // リスニングは正解でも意味を見せる（聞いた英語と意味を結びつける）
         if (q.say) q$('.answer').innerHTML = listenLine(q);
+        // 社会は正解でも「なぜ？」を見せる（理由とセットで覚える）
+        else if (whyOf(q)) q$('.answer').innerHTML = `<div class="rule why">📖 ${esc(whyOf(q))}</div>`;
       } else {
         st.combo = 0;
         wk[q.key] = (wk[q.key] || 0) + 1;
         if (q.type === 'calc') { const ks = Object.keys(wk); if (ks.length > 30) delete wk[ks[0]]; }
         st.miss.push(q);
         j.textContent = res === 'time' ? '⏰ ショットクロック！' : res === 'case' ? 'おしい！ 大文字に注意' : 'MISS…'; j.className = 'judge ng';
-        const tip = ruleTip(q);
-        q$('.answer').innerHTML = `正解：${esc(q.answer)}${listenLine(q)}${tip ? `<div class="rule">💡 ${esc(tip)}</div>` : ''}`;
+        const tip = ruleTip(q); const why = whyOf(q);
+        q$('.answer').innerHTML = `正解：${esc(q.answer)}${listenLine(q)}${tip ? `<div class="rule">💡 ${esc(tip)}</div>` : ''}${why ? `<div class="rule why">📖 なぜ？ ${esc(why)}</div>` : ''}`;
         res === 'time' ? sfx.buzzer() : sfx.ng();
         if (btn) btn.classList.add('ng');
         buzz(60); q$('.qmain').classList.add('shake-x'); setTimeout(() => q$('.qmain') && q$('.qmain').classList.remove('shake-x'), 400);
@@ -1654,7 +1680,7 @@ function calcAllowance(st, ym, today, cfg) {
       }
       save();
       setCombo();
-      const wait = res === 'ok' ? (q.say ? 1800 : 550) : q.say ? 4200 : ruleTip(q) ? 3200 : 1500; // テンポよく次へ
+      const wait = res === 'ok' ? (q.say ? 1800 : whyOf(q) ? 2000 : 550) : q.say ? 4200 : whyOf(q) ? 4500 : ruleTip(q) ? 3200 : 1500; // テンポよく次へ（「なぜ？」は読める長さ）
       setTimeout(() => { if (st.ended) return; st.i++; if (st.i >= qs.length) finish(false); else if (setOf && st.i % setOf === 0) setBreak(); else show(); }, wait);
     }
     // セットの区切り。ここで終わっても「途中でやめた」にはならない（5問以上ぜんぶ正解ならチケットもそのまま）
@@ -1719,9 +1745,10 @@ function calcAllowance(st, ym, today, cfg) {
         ${ticket ? '<div class="newtag">全問正解ボーナス 🎟️ +1</div>' : ''}
         ${weakTicket ? '<div class="newtag">🎯 苦手つぶしボーナス 🎟️ +1</div>' : ''}
         ${perfect && kind === 'challenge' && (d.cp || 0) <= ALLOWANCE.perfectPerDay ? `<div class="reward-big">💰 チャレンジ全問正解！ おこづかい +${ALLOWANCE.perfect}円</div>` : ''}
-        ${st.miss.length ? `<ul>${st.miss.map((q) => `<li>${['kanji', 'qa', 'hkanji', 'past', 'third', 'listen', 'calc'].includes(q.type) ? esc(q.key) + ' → ' + esc(q.answer) : esc(q.answer)}</li>`).join('')}</ul><div class="note">↑ 紙に3回書いて覚えよう ✍️（苦手つぶしにも出るよ）</div>` : ''}
+        ${st.miss.length ? `<ul>${st.miss.map((q) => `<li>${['kanji', 'qa', 'hkanji', 'past', 'third', 'listen', 'calc'].includes(q.type) ? esc(q.key) + ' → ' + esc(q.answer) : esc(q.answer)}${whyOf(q) ? `<div class="miss-why">📖 ${esc(whyOf(q))}</div>` : ''}</li>`).join('')}</ul><div class="note">↑ 紙に3回書いて覚えよう ✍️（苦手つぶしにも出るよ）</div>` : ''}
         ${coachQuizLine(perfect || allOk, st.ok, n)}
         ${tips.length ? `<div class="rulebox"><b>💡 ルールのおさらい</b>${tips.map((t) => `<div>・${esc(t)}</div>`).join('')}</div>` : ''}
+        ${socSumOn() && (kind === 'qa:社会' || st.miss.some((q) => q.sub === '社会')) ? '<button class="btn ghost" style="width:100%;margin-top:10px" data-q="socsum">📖 社会まとめで流れを確認する ›</button>' : ''}
         ${kind !== 'verb' && PAST_FORMS.length && st.miss.some((q) => q.type === 'past' || q.type === 'third') ? '<button class="btn ghost" style="width:100%;margin-top:10px" data-q="verb">🧩 動詞の形トレーニング（4択）で練習する ›</button>' : ''}
         ${paperNudge()}
         <div class="row" style="width:100%;margin-top:14px"><button class="btn ghost" style="flex:1" data-q="again">${kind === 'weak' ? 'もう1セット' : 'もう1回'}</button><button class="btn" style="flex:1" data-q="close">とじる</button></div>
@@ -1733,6 +1760,7 @@ function calcAllowance(st, ym, today, cfg) {
         if (r) await afterEffects(r); else render();
         if (a.dataset.q === 'again') startQuiz(kind);
         else if (a.dataset.q === 'verb') startQuiz('verb');
+        else if (a.dataset.q === 'socsum') openSocSum();
       });
     }
     el.addEventListener('click', (e) => {
@@ -3062,6 +3090,7 @@ function calcAllowance(st, ym, today, cfg) {
     if (act === 'mission') onMission(a.dataset.id);
     else if (act === 'check') onCheck(a.dataset.id);
     else if (act === 'quiz') { sfx.tap(); startQuiz(a.dataset.kind); }
+    else if (act === 'socsum') { sfx.tap(); openSocSum(); }
     else if (act === 'speak') { sfx.tap(); startSpeak(); }
     else if (act === 'omakase') { sfx.tap(); playKind(a.dataset.kind); }
     else if (act === 'rush') { sfx.tap(); startRush(a.dataset.mode); }
