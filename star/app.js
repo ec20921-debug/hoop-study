@@ -73,6 +73,7 @@ function calcAllowance(st, ym, today, cfg) {
       goals: {}, voices: [], voiceDays: {}, voiceWeek: '', cheerLog: [], startDate: todayStr(),
       milestones: {}, cheersSeen: [], lastCheer: null, lastSync: 0, syncError: null,
       timer: null, moneySeen: null, complete: '', beat: {}, badges: {}, chal: 0, recapSeen: '', boss: 0,
+      fans: 0, calcLv: 0, calcH: [], wear: {},
       device: rid(20), created: Date.now(), updated: Date.now(),
     };
   }
@@ -118,6 +119,7 @@ function calcAllowance(st, ym, today, cfg) {
   const paperDone = (d) => !!d && ((d.m || []).length > 0 || d.ck > 0 || (d.tm || 0) >= TIMER.winMin);
 
   // ---------- 記録の送信（Google スプレッドシート） ----------
+  let LIVE = null; // ライブ中だけ 入る（下の「ライブ」の節）
   function loadQueue() { try { return JSON.parse(localStorage.getItem(Q_KEY) || '[]'); } catch (e) { return []; } }
   // 500件を超えたら、まず「アプリを使った時間」の記録から古い順に捨てる（声やミッションを残すため）
   function saveQueue(q) {
@@ -130,6 +132,7 @@ function calcAllowance(st, ym, today, cfg) {
     q.push({ id: Date.now().toString(36) + Math.random().toString(36).slice(2, 7), ts: new Date().toISOString(), date: todayStr(), type, item, subject: subject || '', points: points || 0, detail: detail || {} });
     saveQueue(q);
     flushSoon();
+    if (LIVE && type === 'quiz') liveSong(detail || {});
   }
   function snapshot() {
     const r = RANKS[rankIdx(S.xp)];
@@ -215,19 +218,43 @@ function calcAllowance(st, ym, today, cfg) {
   function studyTick() {
     if (!S || document.visibilityState !== 'visible' || !document.querySelector(STUDY_SEL)) return;
     if (Date.now() - lastTouch > 90000) return;
+    if (S.timer) return; // 紙のタイマーが動いている間は、ゲームの時間を重ねて数えない
     const d = day(); const before = studySec(d);
     d.st = (d.st || 0) + 1;
     if (++studyDirty >= 10) { studyDirty = 0; save(); }
     if (minRuleOn() && before < MIN_SEC && before + 1 >= MIN_SEC) minClear();
+    tierCheck(before, before + 1);
+  }
+  // きょうの じかんの 節目（10ぷん・15ふん・30ぷん）。見た目の おいわい だけで、おこづかい・チケット・ポイントは かわらない
+  const TIME_TIERS = [[10, '🎤', 'ライブ せいこう'], [15, '⭐', 'アンコール'], [30, '👑', 'ダブル アンコール']];
+  const tierOf = (sec) => { let t = null; TIME_TIERS.forEach((x) => { if (sec >= x[0] * 60) t = x; }); return t; };
+  function tierCheck(before, after) {
+    const t = TIME_TIERS.filter((x) => before < x[0] * 60 && after >= x[0] * 60).pop(); if (!t) return;
+    save(); sfx.fanfare(); confetti(200); emojiRain([t[1], '💖', '✨', '🎉'], 26);
+    toast(`${t[1]} きょう ${t[0]}${t[0] === 15 ? 'ふん' : 'ぷん'}！ ${t[2]}！`, 3600);
+    logEvent('tier', `きょうの ${t[0]}分`, '', 0, { min: t[0] });
+    if (!document.querySelector('.ov')) render();
   }
   setInterval(studyTick, 1000);
   const mmss = (s) => `${Math.floor(s / 60)}:${String(s % 60).padStart(2, '0')}`;
-  // ホームに出す1行（届くまでは残り時間、届いたらクリアの印）
+  // ホームの「きょうの じかん」：5ふん（れんぞくに カウント）→ 10ぷん → 15ふん → 30ぷん。直近7日の しるしも 出す
   function minLine() {
-    if (!minRuleOn()) return '';
-    const M = ALLOWANCE.minStudyMin; const s = Math.min(MIN_SEC, studySec(S.days[todayStr()]));
-    if (s >= MIN_SEC) return `<div class="minline ok">✅ きょうの${M}ふん クリア！ 🔥れんぞくに カウント</div>`;
-    return `<div class="minline"><div class="ml-t">⏱ きょうの${M}ふん <b>${mmss(s)}</b> / ${M}:00</div><div class="ml-bar"><i style="width:${Math.round(s / MIN_SEC * 100)}%"></i></div><small>ゲームで もんだいを といた じかん＋かみの べんきょうタイマー。${M}ふんで 🔥れんぞくと「べんきょうした日」に なるよ</small>${S.timer ? `<span class="ml-run">⏱ タイマー けいそくちゅう（「おわった！」で たされるよ）</span>` : `<button class="ml-btn" data-act="tstart">✍️ かみの べんきょうは タイマーで かぞえる ▶</button>`}</div>`;
+    const t = todayStr(); const s = studySec(S.days[t]); const M = ALLOWANCE.minStudyMin || 5;
+    const goals = [[M, '🔥', 'れんぞくに カウント'], ...TIME_TIERS];
+    const nx = goals.find((g) => s < g[0] * 60);
+    const top = goals[goals.length - 1][0] * 60;
+    const C = 2 * Math.PI * 34;
+    const week = Array.from({ length: 7 }, (_, i) => {
+      const ds = addDays(t, i - 6); const sec = studySec(S.days[ds]); const tr = tierOf(sec);
+      const cls = tr ? 'g' : sec >= M * 60 ? 'o' : sec > 0 ? 'l' : '';
+      return `<span class="wk ${cls} ${ds === t ? 'td' : ''}"><i>${tr ? tr[1] : sec >= M * 60 ? '🔥' : sec > 0 ? '·' : ''}</i><small>${'日月火水木金土'[new Date(ds + 'T00:00:00Z').getUTCDay()]}</small></span>`;
+    }).join('');
+    return `<div class="ringcard"><div class="rg-ring"><svg width="84" height="84"><circle cx="42" cy="42" r="34" stroke="#3d2a5c" stroke-width="9" fill="none"/><circle cx="42" cy="42" r="34" stroke="url(#rgg)" stroke-width="9" fill="none" stroke-linecap="round" stroke-dasharray="${C.toFixed(1)}" stroke-dashoffset="${(C * (1 - Math.min(1, s / top))).toFixed(1)}" transform="rotate(-90 42 42)"/><defs><linearGradient id="rgg" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#ff6fb5"/><stop offset="1" stop-color="#ffd400"/></linearGradient></defs></svg><b>${mmss(s)}</b></div>
+      <div class="rg-t"><div class="rg-h">⏱ きょうの じかん</div>
+        <div class="rg-g">${goals.map((g) => `<span class="${s >= g[0] * 60 ? 'on' : nx === g ? 'nx' : ''}">${g[1]}<small>${g[0]}</small></span>`).join('')}</div>
+        <div class="rg-n">${nx ? `あと <b>${mmss(nx[0] * 60 - s)}</b> で ${nx[1]} ${nx[2]}` : '👑 きょうは さいこうの ステージ！'}</div></div>
+      <div class="rg-w">${week}</div>
+      ${S.timer ? '<span class="ml-run">⏱ タイマー けいそくちゅう（「おわった！」で たされるよ）</span>' : ''}</div>`;
   }
 
   // ---------- 紙の勉強タイマー（紙で勉強した時間を記録する） ----------
@@ -237,10 +264,11 @@ function calcAllowance(st, ym, today, cfg) {
     const tm = (S.days[todayStr()] || {}).tm || 0;
     if (S.timer) {
       const over = timerMin() > TIMER.maxMin || (S.timer.date && S.timer.date !== todayStr());
-      return `<div class="timer on"><div class="tm-l">⏱ 勉強タイマー <span class="tm-live">計測中</span></div>
+      const tmM = S.timer.mid && S.missions.find((x) => x.id === S.timer.mid);
+      return `<div class="timer on"><div class="tm-l">⏱ ${tmM ? esc((MISSION_LOOK[tmM.id] || [tmM.label])[0]) + ' を やっているよ' : '勉強タイマー'} <span class="tm-live">計測中</span></div>
         <div class="tm-n"><b id="tmr">${timerLabel()}</b>分</div>
         ${over ? '<div class="tm-s">止め忘れてない？ 押すと、やった分だけ入力できるよ</div>' : ''}
-        <button class="btn big" data-act="tstop">⏹ 終わった！</button></div>`;
+        <button class="btn big" data-act="tstop">⏹ おわった！</button></div>`;
     }
     return `<div class="timer mini"><div class="grow"><div class="tm-l">⏱ 勉強タイマー${tm ? `<span class="tm-today">今日 ${tm}分</span>` : ''}</div>
       <div class="tm-s">${TIMER.winMin}分で WIN の条件クリア ・ ${TIMER.perPts}分ごとに +1P</div></div>
@@ -249,6 +277,7 @@ function calcAllowance(st, ym, today, cfg) {
   function startTimer() { S.timer = { start: Date.now(), date: todayStr() }; save(); sfx.buzzer(); toast('⏱ スタート！ 終わったら「終わった！」を押してね'); render(); }
   async function stopTimer() {
     if (!S.timer) return;
+    const mid = S.timer.mid;
     const start = S.timer.start; const sameDay = !S.timer.date || S.timer.date === todayStr();
     let min = Math.floor((Date.now() - start) / 60000);
     // 止め忘れ（日またぎ・上限超え）は自動で入れず、本人に「何分やったか」を入れてもらう
@@ -258,7 +287,7 @@ function calcAllowance(st, ym, today, cfg) {
       min = Math.max(0, Math.min(TIMER.manualMax, parseInt(String(ans).replace(/[^0-9]/g, ''), 10) || 0));
     }
     S.timer = null;
-    if (min < 1) { save(); toast('記録しなかったよ'); render(); return; }
+    if (min < 1) { save(); toast(mid ? '1ぷん より みじかかったので、じかんは 入らなかったよ' : '記録しなかったよ'); render(); if (mid && !day().m.includes(mid)) await onMission(mid, true); return; }
     const d = day();
     const before = d.tm || 0; const secBefore = studySec(d);
     d.tm = before + min;
@@ -275,6 +304,9 @@ function calcAllowance(st, ym, today, cfg) {
       toast(`⏱ ${min}分 記録したよ（今日の合計 ${d.tm}分）`); render();
     }
     if (crossed) minClear();
+    tierCheck(secBefore, studySec(d));
+    // ミッションから はじめた タイマーは、止めたら その ミッションも「できた！」に する
+    if (mid && !day().m.includes(mid)) await onMission(mid, true);
   }
   setInterval(() => { const el = $('#tmr'); if (el && S && S.timer) el.textContent = timerLabel(); }, 15000);
 
@@ -570,7 +602,7 @@ function calcAllowance(st, ym, today, cfg) {
     const h1 = stepHead(1, x, 'べんきょう', 'おわったら おす！');
     const h2 = stepHead(2, x, 'ゲーム', `${SHORT_LEN}もん だけ！`);
     const h3 = stepHead(3, x, 'ガチャ', S.tickets > 0 ? `チケットが ${S.tickets}まい あるよ` : x.s3 ? 'きょうは まわしたよ' : `べんきょう ${need}つで チケットが もらえる`);
-    return header() + (S.timer ? timerCard() : '') + coachBox() + cheer + minLine() + `
+    return header() + (S.timer ? timerCard() : '') + coachBox() + cheer + minLine() + liveHero() + closetCard() + `
       <div class="today"><span class="td-h">きょう やること</span>${d.pts > 0 ? `<span class="td-pts">+${d.pts}P</span>` : ''}<span class="td-p"><b>${x.done}</b>/3</span></div>
       <section class="step ${h1.cls}">${h1.html}
         <div class="st-goal"><span class="dots">${dots}</span><span class="st-gt">${x.s1 ? `🎉 おこづかい +${ALLOWANCE.bigWin}円 ゲット！` : `${need}つで おこづかい <b>+${ALLOWANCE.bigWin}円</b>`}</span></div>
@@ -591,7 +623,7 @@ function calcAllowance(st, ym, today, cfg) {
   // 5もんの ゲームでは「ぜんぶ せいかいで 🎟️」はない（10問の時だけ。チケットの くばり方は前と同じ）
   function shortGames() {
     const more = [['kr', '<b class="ti-kr">한</b>', 'かんこくご'], ['listen', '🎧', 'リスニング'], ...(qaSubjects().includes('都道府県') ? [['qa:都道府県', '🗾', 'とどうふけん']] : [])];
-    return `<button class="bigbtn short" data-act="short" data-kind="calc">🧮 けいさん ${SHORT_LEN}もん<small>さっと おわるよ ▶</small></button>
+    return `<button class="bigbtn short" data-act="short" data-kind="calc">🧮 けいさん ${SHORT_LEN}もん<small>レベル ${'★'.repeat(calcLv())}${'☆'.repeat(CALC_LV_MAX - calcLv())} ・ さっと おわるよ ▶</small></button>
       <button class="bigbtn rush" data-act="rushmenu">⚡ ${RUSH.sec}びょう ラッシュ<small>けいさん・とどうふけん・えいご・かんこくご</small></button>
       <div class="shorts three">${more.map(([k, e, n]) => `<button class="sbtn" data-act="short" data-kind="${esc(k)}">${e} ${n}<small>${SHORT_LEN}もん</small></button>`).join('')}</div>`;
   }
@@ -958,9 +990,26 @@ function calcAllowance(st, ym, today, cfg) {
   }
 
   // ---------- 操作 ----------
-  async function onMission(id) {
+  // かみの べんきょうの じかんは タイマーでしか かぞえられない → おす時に「いまから やる」を えらべるように する
+  function missionAsk(m) {
+    let how = '';
+    const name = (MISSION_LOOK[m.id] || [m.label])[0];
+    return overlay(`<div class="tut"><div class="tut-e">${m.icon || '⭐'}</div><div class="tut-t">${esc(name)}</div>
+      <button class="bigbtn live" data-ma="timer">⏱ いまから やる<small>タイマーで「きょうの じかん」に 入るよ</small></button>
+      <button class="bigbtn done2" data-ma="done">✓ もう おわった</button>
+      <button class="btn ghost" style="width:100%;margin-top:12px" data-ma="x">やめる</button></div>`, {
+      closeOnTap: false, cls: 'solid',
+      onMount: (el, close) => el.addEventListener('click', (e) => { const b = e.target.closest('[data-ma]'); if (!b) return; how = b.dataset.ma === 'x' ? '' : b.dataset.ma; sfx.tap(); close(); }),
+    }).then(() => how);
+  }
+  async function onMission(id, skipAsk) {
     const m = S.missions.find((x) => x.id === id); if (!m) return;
     const d = day();
+    if (!d.m.includes(id) && !skipAsk && !S.timer) {
+      const how = await missionAsk(m);
+      if (!how) return;
+      if (how === 'timer') { S.timer = { start: Date.now(), date: todayStr(), mid: id }; save(); sfx.buzzer(); toast('⏱ スタート！ おわったら「おわった！」を おしてね', 3000); render(); scrollTo(0, 0); return; }
+    }
     if (d.m.includes(id)) {
       if (!confirm(`「${(MISSION_LOOK[id] || [m.label])[0]}」を まちがえて おした？ とりけす？`)) return;
       d.m = d.m.filter((x) => x !== id);
@@ -1144,6 +1193,7 @@ function calcAllowance(st, ym, today, cfg) {
     if (!q) return '';
     if (q.type === 'plural' || q.type === 'third') return sRule(q.key, q.answer);
     if (q.type === 'past') return pastRule(q.key, q.answer);
+    if (q.type === 'calc') return calcTip(q.key);
     return '';
   }
   // リスニング：英語を聞いて答える（意味を選ぶ／聞こえた単語を選ぶ／質問への返事を選ぶ）
@@ -1203,7 +1253,56 @@ function calcAllowance(st, ym, today, cfg) {
     if ((m = key.match(/^(\d+) × (\d+)$/))) return calcQ('mul', key, String(+m[1] * +m[2]));
     if ((m = key.match(/^(\d+)\.(\d) ([+−]) (\d+)\.(\d)$/))) { const b = +m[1] * 10 + +m[2], c = +m[4] * 10 + +m[5]; return calcQ('deci', key, String(Math.round(m[3] === '+' ? b + c : b - c) / 10)); }
     if ((m = key.match(/^(\d+)億 ＋ (\d+)億$/))) return calcQ('big', key, `${+m[1] + +m[2]}億`);
+    if ((m = key.match(/^(\d+) ([+−]) (\d+)$/))) return calcQ('int', key, String(m[2] === '+' ? +m[1] + +m[3] : +m[1] - +m[3]));
     return null;
+  }
+  // けいさんの レベル（1〜4）。「5もん」・ライブ・ラッシュで つかう（10問の 計算ダッシュは 今までどおり 小4の 内容）。
+  // ねらい：正答率 42% は むずかしすぎ。8割くらい できる ところから はじめて、できたら 上がる
+  const CALC_LV_MAX = 4;
+  const calcLv = () => Math.min(CALC_LV_MAX, Math.max(1, S.calcLv || 2));
+  function mkCalcLv() {
+    const lv = calcLv();
+    if (lv >= CALC_LV_MAX) return { ...mkCalc(SHORT_CALC_KINDS), lv };
+    const k = pick(lv === 1 ? ['kuku', 'add1', 'sub1'] : lv === 2 ? ['add2', 'sub2', 'kdiv', 'tens'] : ['mul3', 'deci0', 'div0', 'add2', 'sub2']);
+    let q, a, kk = 'int';
+    if (k === 'kuku') { const m = ri(2, 9), n = ri(2, 9); q = `${m} × ${n}`; a = m * n; }
+    else if (k === 'add1') { const m = ri(11, 89), n = ri(2, 9); q = `${m} + ${n}`; a = m + n; }
+    else if (k === 'sub1') { const m = ri(11, 99), n = ri(2, 9); q = `${m} − ${n}`; a = m - n; }
+    else if (k === 'add2') { const m = ri(12, 68), n = ri(11, 29); q = `${m} + ${n}`; a = m + n; }
+    else if (k === 'sub2') { const n = ri(11, 39), m = n + ri(5, 55); q = `${m} − ${n}`; a = m - n; }
+    else if (k === 'kdiv') { const b = ri(2, 9), c = ri(2, 9); q = `${b * c} ÷ ${b}`; a = c; }
+    else if (k === 'tens') { const m = ri(2, 9) * 10, n = ri(2, 9); q = `${m} × ${n}`; a = m * n; }
+    else if (k === 'mul3') { const m = ri(11, 29), n = ri(2, 5); q = `${m} × ${n}`; a = m * n; }
+    else if (k === 'div0') { const b = ri(2, 9), c = ri(2, 9) * 10; q = `${b * c} ÷ ${b}`; a = c; }
+    else { const x = ri(1, 5), y = ri(1, 4), p = ri(1, 4), r = ri(1, 5); q = `${x}.${p} + ${y}.${r}`; a = (x * 10 + p + y * 10 + r) / 10; kk = 'deci'; }
+    return { ...calcQ(kk, q, String(a)), lv };
+  }
+  // 直近の できぐあいで レベルを 上げ下げ する（上がる：直近8問で 7問 正解／下がる：直近6問で 2問 以下）
+  function calcHit(ok) {
+    const h = (S.calcH || []).concat(ok ? 1 : 0).slice(-8); S.calcH = h;
+    const sum = (a) => a.reduce((x, y) => x + y, 0);
+    const lv = calcLv();
+    if (h.length >= 8 && sum(h) >= 7 && lv < CALC_LV_MAX) { S.calcLv = lv + 1; S.calcH = []; sfx.fanfare(); toast(`🧮 けいさん レベル ${lv + 1} に アップ！ ${'★'.repeat(lv + 1)}`, 3200); logEvent('calclv', `けいさん レベル ${lv + 1}`, '算数', 0, { lv: lv + 1 }); }
+    else if (h.length >= 6 && sum(h.slice(-6)) <= 2 && lv > 1) { S.calcLv = lv - 1; S.calcH = []; logEvent('calclv', `けいさん レベル ${lv - 1}`, '算数', 0, { lv: lv - 1 }); }
+    else if (!S.calcLv) S.calcLv = lv;
+  }
+  // まちがえた時に 出す、その式の ときかた（1行）
+  function calcTip(key) {
+    let m;
+    if ((m = key.match(/^(\d+) × (\d+)$/))) {
+      const a = +m[1], b = +m[2];
+      if (a < 10) return `${a}のだん：${a}×${b}＝${a * b}`;
+      const t = Math.floor(a / 10) * 10, o = a % 10;
+      return o ? `わけて かける：${t}×${b}＝${t * b} と ${o}×${b}＝${o * b} を たして ${a * b}` : `${t / 10}×${b}＝${(t / 10) * b} に 0を 1つ つけて ${a * b}`;
+    }
+    if ((m = key.match(/^(\d+) ÷ (\d+)$/))) { const n = +m[1], b = +m[2], c = Math.floor(n / b), r = n % b; return `かけ算で たしかめ：${b}×${c}＝${b * c}${r ? `、のこり ${r} が あまり` : ''}`; }
+    if ((m = key.match(/^(\d+)\.(\d) ([+−]) (\d+)\.(\d)$/))) { const b = +m[1] * 10 + +m[2], c = +m[4] * 10 + +m[5]; const v = m[3] === '+' ? b + c : b - c; return `10ばいして かんがえる：${b} ${m[3]} ${c} ＝ ${v} → 小数点を もどして ${v / 10}`; }
+    if ((m = key.match(/^(\d+) ([+−]) (\d+)$/))) {
+      const a = +m[1], b = +m[3]; const t = Math.floor(b / 10) * 10, o = b % 10; const sg = m[2] === '+' ? 1 : -1;
+      return t && o ? `2かいに わける：${a} ${m[2]} ${t} ＝ ${a + sg * t}、そこから ${m[2]} ${o} で ${a + sg * b}` : '';
+    }
+    if (/億/.test(key)) return '「億」は そのまま。数だけ たそう';
+    return '';
   }
   function calcQ(k, q, a) {
     const near = new Set([a]);
@@ -1223,7 +1322,7 @@ function calcAllowance(st, ym, today, cfg) {
       if (kind === 'listen') return buildListenShort();
       if (kind === 'calc') {
         const weak = shuffle(Object.keys(S.weak.calc || {})).slice(0, 1).map(calcFromKey).filter(Boolean);
-        return shuffle(weak.concat(Array.from({ length: SHORT_LEN - weak.length }, () => mkCalc(SHORT_CALC_KINDS))));
+        return shuffle(weak.concat(Array.from({ length: SHORT_LEN - weak.length }, () => mkCalcLv())));
       }
       if (kind.startsWith('qa:')) { const s = kind.slice(3); return sampleItems(BANK.qa.filter((x) => x.s === s), SHORT_LEN, 'qa', (x) => x.q, 1).map(mkQa); }
       return buildQuestions(kind).slice(0, SHORT_LEN);
@@ -1242,8 +1341,10 @@ function calcAllowance(st, ym, today, cfg) {
     if (kind === 'plural') return sampleItems(BANK.plural, QUIZ_LEN, 'plural', (x) => x.q).map(mkPlural);
     if (kind === 'kanji') return sampleItems(BANK.kanji, QUIZ_LEN, 'kanji', (x) => x.q).map(mkKanji);
     if (kind.startsWith('qa:')) { const s = kind.slice(3); return sampleItems(BANK.qa.filter((x) => x.s === s), QUIZ_LEN, 'qa', (x) => x.q).map(mkQa); }
-    return shuffle(weakPool()).slice(0, QUIZ_LEN);
+    const wc = (q) => (S.weak[q.type] || {})[q.key] || 0;
+    return shuffle(shuffle(weakPool()).sort((a, b) => wc(a) - wc(b)).slice(0, BOSS_LEN));
   }
+  const BOSS_LEN = 5;
   // 苦手つぶしで実際に出せる問題（スプレッドシートで「お休み」にした問題などは入らない）
   function weakPool() {
     const qs = [];
@@ -1353,9 +1454,10 @@ function calcAllowance(st, ym, today, cfg) {
       const res = val == null ? 'time' : q.choices ? (val === q.answer ? 'ok' : 'ng') : judgeText(q, val);
       const j = q$('.judge');
       const wk = S.weak[q.type];
+      if (q.type === 'calc' && q.lv && !q.retry) calcHit(res === 'ok');
       if (res === 'ok') {
         st.ok++; st.combo++; st.maxCombo = Math.max(st.maxCombo, st.combo);
-        const p = 1; st.pts += p;
+        const p = q.retry ? 0 : 1; st.pts += p; // リベンジの正解は点に入れない（点の入り方は前と同じ）
         j.textContent = st.combo >= 3 ? `🔥 ${pick(SHOT_WORDS)}` : `NICE! +${p}`; j.className = 'judge ok';
         if (wk[q.key]) { wk[q.key]--; if (wk[q.key] <= 0) delete wk[q.key]; }
         sfx.combo(st.combo); if (st.combo >= 3) confetti(25);
@@ -1372,7 +1474,9 @@ function calcAllowance(st, ym, today, cfg) {
         wk[q.key] = (wk[q.key] || 0) + 1;
         if (q.type === 'kr') krHit(q.key, false);
         if (q.type === 'calc') { const ks = Object.keys(wk); if (ks.length > 30) delete wk[ks[0]]; }
-        st.miss.push(q);
+        if (!q.retry) st.miss.push(q);
+        // リベンジ：5もんの ゲームでは、まちがえた 問題を さいごに もう1回 出す（答えを 見た あとなので できる → 苦手も その場で きえる）
+        if (short && !q.retry && (st.retries = (st.retries || 0) + 1) <= 2) qs.push({ ...q, retry: true, prompt: '🔁 リベンジ！ ' + q.prompt, choices: q.choices ? shuffle(q.choices) : q.choices });
         j.textContent = res === 'time' ? '⏰ ショットクロック！' : res === 'case' ? 'おしい！ 大文字に注意' : 'MISS…'; j.className = 'judge ng';
         const tip = ruleTip(q);
         q$('.answer').innerHTML = `正解：${esc(q.answer)}${listenLine(q)}${tip ? `<div class="rule">💡 ${esc(tip)}</div>` : ''}`;
@@ -1386,8 +1490,11 @@ function calcAllowance(st, ym, today, cfg) {
       save();
       setCombo();
       // テンポよく 次へ（かんこくごは 音を 聞く時間だけ 待つ）
-      const wait = res === 'ok' ? (q.lang === 'ko' ? 1150 : q.say ? 1800 : 550) : q.lang === 'ko' ? Math.max(2600, q.say.length * 250) : q.say ? 4200 : ruleTip(q) ? 3200 : 1500;
-      setTimeout(() => { if (st.ended) return; st.i++; if (st.i < qs.length) show(); else finish(false); }, wait);
+      const wait = res === 'ok' ? (q.lang === 'ko' ? 1150 : q.say ? 1800 : 550) : q.lang === 'ko' ? Math.max(2600, q.say.length * 250) : q.say ? 4200 : ruleTip(q) ? (q.type === 'calc' ? 5200 : 3200) : 1500;
+      const adv = () => { if (st.ended || st.adv !== adv) return; st.adv = null; st.i++; if (st.i < qs.length) show(); else finish(false); };
+      st.adv = adv; st.advAt = Date.now();
+      setTimeout(adv, wait);
+      if (res !== 'ok' && wait > 2000) q$('.answer').insertAdjacentHTML('beforeend', '<div class="tapnext">タップで つぎへ ▶</div>');
     }
     function finish(quit) {
       if (st.ended) return;
@@ -1398,13 +1505,13 @@ function calcAllowance(st, ym, today, cfg) {
       const n = quit ? st.answered : qs.length;
       if (quit && n === 0) { el.remove(); return; }
       const d = day();
-      const perfect = !quit && n >= QUIZ_LEN && st.ok === n;
+      const perfect = !quit && n >= QUIZ_LEN && st.ok === n && !st.miss.length;
       let ticket = false;
       if (perfect) { st.pts += 2; if (d.perfect < 2) { d.perfect++; S.tickets++; ticket = true; } if (kind === 'challenge') d.cp = (d.cp || 0) + 1; }
       // 苦手つぶし：WEAK_BONUS_MIN 問以上を全問正解でチケット（1日1回。10問の全問正解チケットとは別枠）
       let weakTicket = false;
       if (kind === 'weak' && !quit && n >= WEAK_BONUS_MIN && st.ok === n && !d.wkt) { d.wkt = 1; S.tickets++; weakTicket = true; }
-      const allOk = !quit && n > 0 && st.ok === n; // 見出し・コーチの ことば用（5もんで ぜんぶ せいかいも PERFECT。チケットの 判定には 使わない）
+      const allOk = !quit && n > 0 && st.ok === n && !st.miss.length; // 見出し・コーチの ことば用（5もんで ぜんぶ せいかいも PERFECT。チケットの 判定には 使わない）
       const bossDown = kind === 'weak' && !quit && st.ok === qs.length;
       if (bossDown) S.boss = (S.boss || 0) + 1;
       // 5もんの ゲームは ベスト（10問の記録）に入れない
@@ -1449,7 +1556,9 @@ function calcAllowance(st, ym, today, cfg) {
     }
     el.addEventListener('click', (e) => {
       const lb = e.target.closest('[data-listen]'); if (lb) { const q = qs[st.i]; if (q && q.say) sayQ(q, lb.dataset.listen === 'slow'); return; }
-      const c = e.target.closest('.choice'); if (c) { answer(c.dataset.c, c); return; }
+      const c = e.target.closest('.choice'); if (c && !st.locked) { answer(c.dataset.c, c); return; }
+      // まちがえた あとの 待ち時間は、画面を タップすると すぐ 次へ
+      if (st.locked && st.adv && !st.ended && el.querySelector('.tapnext') && Date.now() - st.advAt > 700 && !e.target.closest('button:not(.choice)')) { st.adv(); return; }
       const qz = e.target.closest('[data-q="quit"]');
       if (qz) { if (confirm('やめる？（ここまでの正解は得点になるよ）')) finish(true); }
     });
@@ -2134,10 +2243,10 @@ function calcAllowance(st, ym, today, cfg) {
     if (mode === 'calc') {
       const wk = Object.keys(S.weak.calc || {});
       if (wk.length && Math.random() < 0.3) q = calcFromKey(pick(wk));
-      if (!q) q = mkCalc(SHORT_CALC_KINDS);
+      if (!q) q = mkCalcLv();
     } else q = mkQa(rushPick(BANK.qa.filter((x) => x.s === '都道府県'), 'qa', (x) => x.q));
     const others = q.choices.filter((c) => c !== q.answer);
-    return { type: q.type, key: q.key, answer: q.answer, other: others.length ? pick(others) : '—', main: `<div class="rush-m ${q.long ? 'long' : ''}">${q.main}</div>`, missHtml: `${esc(q.key)} → ${esc(q.answer)}` };
+    return { type: q.type, key: q.key, lv: q.lv, answer: q.answer, other: others.length ? pick(others) : '—', main: `<div class="rush-m ${q.long ? 'long' : ''}">${q.main}</div>`, missHtml: `${esc(q.key)} → ${esc(q.answer)}` };
   }
   function startRush(mode) {
     if (!rushModeIds().includes(mode)) { toast('もんだいが 見つからなかったよ'); render(); return; }
@@ -2165,6 +2274,7 @@ function calcAllowance(st, ym, today, cfg) {
       if (st.locked || st.ended) return;
       st.locked = true;
       const q = st.q;
+      if (q.type === 'calc' && q.lv) calcHit(val === q.answer);
       if (val === q.answer) {
         st.ok++; st.combo++; st.maxCombo = Math.max(st.maxCombo, st.combo);
         // 韓国語は 2択なので「おぼえた」には しない（見たことがある に するだけ）
@@ -2536,6 +2646,175 @@ function calcAllowance(st, ym, today, cfg) {
     }
     S.syncError = null; S.everSynced = true; save(); flush(); checkCheers(); toast('つながったよ！'); render();
   }
+  // ---------- クローゼット（ステージの いしょう）----------
+  // 本人が アパレル・おしゃれに きょうみが ある（2026-11-25 Daisuke）。ファンが ふえると アイテムが ふえて、じぶんで コーデを くめる。
+  // ブランドの 名前・ロゴは 入れない（オリジナルの アイテムだけ）。ポイント・チケット・おこづかいは かわらない
+  const CLOSET_SLOTS = [['top', 'ふく'], ['shoes', 'くつ'], ['bag', 'バッグ'], ['acc', 'アクセ']];
+  const CLOSET = [
+    [0, 'top', '👕', 'しろい Tシャツ'], [0, 'shoes', '👟', 'スニーカー'],
+    [20, 'acc', '🎀', 'リボン'], [40, 'top', '👚', 'フリルの ブラウス'], [60, 'bag', '👜', 'ミニバッグ'], [90, 'shoes', '🩰', 'バレエシューズ'],
+    [120, 'acc', '🧢', 'キャップ'], [160, 'top', '👗', 'チェックの ワンピース'], [200, 'shoes', '👢', 'あつぞこ ブーツ'], [250, 'acc', '📿', 'パールの ネックレス'],
+    [300, 'top', '🧥', 'ライダース ジャケット'], [360, 'bag', '👛', 'ハートの ポーチ'], [430, 'acc', '🕶️', 'サングラス'], [500, 'shoes', '👠', 'ヒール'],
+    [600, 'top', '🥻', 'ステージ ドレス'], [700, 'bag', '🎒', 'リュック'], [820, 'acc', '👒', 'リボンの ぼうし'], [950, 'acc', '💍', 'リング'],
+    [1100, 'acc', '🧣', 'チェックの マフラー'], [1300, 'acc', '👑', 'おうかん'],
+  ];
+  const closetOpen = (it) => (S.fans || 0) >= it[0];
+  const wearOf = (slot) => { const w = (S.wear || {})[slot]; const it = CLOSET.find((x) => x[1] === slot && x[3] === w && closetOpen(x)); return it || CLOSET.filter((x) => x[1] === slot && x[0] === 0)[0] || null; };
+  const coord = () => CLOSET_SLOTS.map(([k]) => wearOf(k)).filter(Boolean).map((x) => x[2]).join('');
+  const closetNext = () => CLOSET.find((x) => !closetOpen(x));
+  function closetCard() {
+    const nx = closetNext(); const have = CLOSET.filter(closetOpen).length;
+    return `<button class="closetbtn" data-live="closet"><span class="cl-c">${coord()}</span><span class="cl-t"><b>👗 クローゼット</b><small>${have}/${CLOSET.length} アイテム${nx ? ` ・ つぎは ファン ${nx[0]}人で ${nx[2]}` : ' ・ コンプリート 👑'}</small></span><span class="cl-a">›</span></button>`;
+  }
+  function closetOv() {
+    if (document.querySelector('.ov')) return;
+    sfx.tap();
+    const html = () => `<div class="tut closet"><div class="cl-big">${coord()}</div><div class="tut-t">きょうの コーデ</div>
+      ${CLOSET_SLOTS.map(([k, name]) => `<div class="cl-h">${name}</div><div class="cl-g">${CLOSET.filter((x) => x[1] === k).map((x) => { const on = wearOf(k) === x; const ok = closetOpen(x); return `<button class="cl-i ${on ? 'on' : ''} ${ok ? '' : 'lock'}" ${ok ? `data-cw="${k}" data-n="${esc(x[3])}"` : ''}><span>${ok ? x[2] : '🔒'}</span><small>${ok ? esc(x[3]) : `ファン ${x[0]}人`}</small></button>`; }).join('')}${k === 'bag' || k === 'acc' ? `<button class="cl-i ${wearOf(k) ? '' : 'on'}" data-cw="${k}" data-n=""><span>✖️</span><small>つけない</small></button>` : ''}</div>`).join('')}
+      <p class="note" style="text-align:center">🎤 ライブで ファンが ふえると、アイテムが ふえるよ</p>
+      <button class="btn big" style="width:100%" data-cw="x">これで きまり！</button></div>`;
+    overlay(html(), { closeOnTap: false, cls: 'solid', onMount: (el, close) => el.addEventListener('click', (e) => {
+      const b = e.target.closest('[data-cw]'); if (!b) return;
+      if (b.dataset.cw === 'x') { sfx.coin(); logEvent('wear', coord(), '', 0, { ...S.wear }); close(); render(); return; }
+      S.wear = S.wear || {}; S.wear[b.dataset.cw] = b.dataset.n; save(); sfx.tap();
+      el.querySelector('.tut').outerHTML = html();
+    }) });
+  }
+  // ---------- ライブ（10ぷん つづく しくみ・2026-11-25） ----------
+  // ねらい：ゲームが 1回 40びょうほどで おわり、そこで アプリを とじていた（勉強の時間が 1日 0〜1ぷん）。
+  // 「きょく（＝みじかい ゲーム）」を じどうで つなげて、10ぷんの ステージに する。
+  // じかんの かぞえ方は「きょうの 5ふん」と 同じ（studySec）。おこづかい・チケット・ポイントの ルールは かえない。
+  // ライブで ふえるのは ファンの 数と かいじょうの 大きさ（見た目だけの ごほうび）。
+  const VENUES = [[0, '🎸', 'ろじょう ライブ'], [80, '🏠', 'ライブハウス'], [250, '🏛️', 'ホール'], [600, '🏟️', 'アリーナ'], [1200, '🌃', 'ドーム'], [2500, '🌍', 'ワールドツアー']];
+  const venueIdx = (f) => { let i = 0; VENUES.forEach((v, j) => { if (f >= v[0]) i = j; }); return i; };
+  const liveSec = () => studySec(S.days[todayStr()]);
+  const nextTier = (s) => TIME_TIERS.find((x) => s < x[0] * 60);
+  function liveHero() {
+    const s = liveSec(); const v = VENUES[venueIdx(S.fans || 0)]; const nx = nextTier(s);
+    const sub = !nx ? 'きょうは さいこう！ もっと うたう？' : nx[0] === TIME_TIERS[0][0] && s < 60 ? 'ゲームが つぎつぎ はじまるよ。10ぷんで ライブ せいこう！' : `あと ${mmss(nx[0] * 60 - s)} で ${nx[1]} ${nx[2]}`;
+    return `<button class="livebtn" data-live="start"><span class="lv-t">🎤 ${s >= TIME_TIERS[0][0] * 60 ? 'アンコール ライブ' : 'ライブ スタート'}</span><span class="lv-s">${sub}</span><span class="lv-v">${coord()} ・ ${v[1]} ${v[2]} ・ 💖 ファン ${S.fans || 0}人</span><span class="lv-a">▶</span></button>`;
+  }
+  // きょくの ならび：はじめは「できる」ものから（けいさんは レベルに 合わせた 問題・カードあわせ）。2しゅう目からは まぜる
+  function liveSetlist(first) {
+    const pref = qaSubjects().includes('都道府県');
+    const a = [['short:calc', '🧮', 'けいさん 5もん'], ['krmatch', '🃏', 'カードあわせ'], ['rush:calc', '⚡', 'けいさん ラッシュ'], ['short:listen', '🎧', 'リスニング 5もん'], ['krlesson', '📇', 'かんこくご レッスン'], ['rush:kr', '⚡', 'かんこくご ラッシュ']];
+    const b = [['rush:en', '⚡', 'えいご ラッシュ'], ['short:kr', '🇰🇷', 'かんこくご 5もん'], ...(pref ? [['short:qa:都道府県', '🗾', 'とどうふけん 5もん'], ['rush:pref', '⚡', 'とどうふけん ラッシュ']] : [])];
+    return first ? a.concat(shuffle(b)) : shuffle(a.concat(b));
+  }
+  function livePeek() {
+    if (!LIVE.q.length) LIVE.q = liveSetlist(false);
+    // 3きょく おわったら 1回だけ ボスせん（まちがえた問題が 3つ以上 ある時）
+    if (LIVE.songs >= 3 && !LIVE.boss && weakTotal() >= 3) { LIVE.boss = 1; LIVE.q.unshift(['weak', '👾', 'ボスせん']); }
+    if (LIVE.cur && LIVE.q[0][0] === LIVE.cur[0] && LIVE.q.length > 1) LIVE.q.push(LIVE.q.shift());
+    return LIVE.q[0];
+  }
+  function liveStart() {
+    if (LIVE || document.querySelector('.ov')) return;
+    sfx.fanfare();
+    LIVE = { n: 0, songs: 0, fans: 0, gain: 0, items: [], itemNew: [], q: liveSetlist(true), cur: null, pending: null, boss: 0, venueUp: null, t0: Date.now(), sec0: liveSec() };
+    liveHud(); liveNext();
+  }
+  function liveNext() {
+    if (!LIVE) return;
+    const song = livePeek(); LIVE.q.shift();
+    LIVE.cur = song; LIVE.n++;
+    toast(`♪ ${LIVE.n}きょくめ：${song[2]}`, 1800);
+    const k = song[0];
+    if (k.startsWith('short:')) startQuiz(k.slice(6), true);
+    else if (k.startsWith('rush:')) startRush(k.slice(5));
+    else if (k === 'krmatch') startKrMatch();
+    else if (k === 'krlesson') { const ws = krLessonWords(); startKrCards(ws, () => startQuiz('kr', true, ws)); }
+    else startQuiz('weak');
+  }
+  // 1きょく おわるたび（ゲームの 記録が 入った時）に よばれる
+  function liveSong(detail) {
+    const gain = 3 + (detail.ok || 0) * 2 + ((detail.maxCombo || 0) >= 5 ? 5 : 0);
+    const v0 = venueIdx(S.fans || 0); const c0 = CLOSET.filter(closetOpen).length;
+    S.fans = (S.fans || 0) + gain; LIVE.fans += gain; LIVE.songs++; LIVE.gain = gain;
+    const d = day(); d.lv = (d.lv || 0) + 1;
+    if (venueIdx(S.fans) > v0) LIVE.venueUp = VENUES[venueIdx(S.fans)];
+    CLOSET.filter(closetOpen).slice(c0).forEach((x) => { LIVE.items.push(x); LIVE.itemNew = (LIVE.itemNew || []).concat([x]); });
+    save();
+  }
+  // ゲームの 結果の 画面に「つぎの きょく」を 足す（どの ゲームの 結果にも 同じ 形で 入る）
+  function liveInject(r) {
+    const s = liveSec(); const nx = nextTier(s); const song = livePeek();
+    const box = document.createElement('div'); box.className = 'live-res';
+    box.innerHTML = `<div class="lr-f">💖 ファン <b>+${LIVE.gain || 0}</b>${LIVE.venueUp ? `<span class="lr-v">${LIVE.venueUp[1]} かいじょうが「${LIVE.venueUp[2]}」に なった！</span>` : ''}${(LIVE.itemNew || []).map((x) => `<span class="lr-v">${x[2]} あたらしい アイテム「${esc(x[3])}」ゲット！</span>`).join('')}</div>
+      <div class="lr-t">⏱ ${mmss(s)}${nx ? ` ・ あと ${mmss(nx[0] * 60 - s)} で ${nx[1]} ${nx[2]}` : ' ・ 👑 さいこうの ステージ！'}</div>
+      <button class="bigbtn live" data-live="next">▶ つぎの きょく<small>${song[1]} ${song[2]}</small></button>
+      <button class="live-end" data-live="end">きょうの ライブを おわる</button>`;
+    r.insertBefore(box, r.firstChild);
+    r.scrollTop = 0; const sc = r.closest('.quiz'); if (sc) sc.scrollTop = 0;
+    LIVE.gain = 0; LIVE.venueUp = null; LIVE.itemNew = [];
+  }
+  new MutationObserver(() => {
+    if (!LIVE) return;
+    const r = document.querySelector('.ov .qbody.result');
+    if (r && !r.querySelector('.live-res')) liveInject(r);
+  }).observe(document.body, { childList: true, subtree: true });
+  // 上に 出す 小さい 帯（ライブ中 ずっと）
+  function liveHud() {
+    let h = document.getElementById('livehud');
+    if (!LIVE) { if (h) h.remove(); document.body.classList.remove('live-on'); return; }
+    if (!h) { h = document.createElement('div'); h.id = 'livehud'; document.body.appendChild(h); document.body.classList.add('live-on'); }
+    const s = liveSec(); const nx = nextTier(s);
+    const html = `<b>🎤 LIVE</b><span>⏱ ${mmss(s)}${nx ? ` / ${nx[0]}:00` : ' 👑'}</span><i><u style="width:${nx ? Math.min(100, (s / (nx[0] * 60)) * 100).toFixed(1) : 100}%"></u></i><span>💖 ${LIVE.fans}</span>`;
+    if (h.dataset.h !== html) { h.dataset.h = html; h.innerHTML = html; }
+  }
+  // きょくを とちゅうで やめた時などに 出す「ライブの とちゅう」
+  function liveHub() {
+    const song = livePeek(); const s = liveSec();
+    const el = document.createElement('div'); el.className = 'ov solid live-hub';
+    el.innerHTML = `<div class="tut"><div class="tut-e">🎤</div><div class="tut-t">ライブの とちゅう</div>
+      <p class="note" style="text-align:center;margin:0 0 6px;font-size:16px">⏱ ${mmss(s)} ・ 💖 ファン +${LIVE.fans}</p>
+      <button class="bigbtn live" data-live="next">▶ つぎの きょく<small>${song[1]} ${song[2]}</small></button>
+      <button class="live-end" data-live="end">きょうの ライブを おわる</button></div>`;
+    document.body.appendChild(el);
+  }
+  async function liveFinish() {
+    const L = LIVE; LIVE = null; liveHud();
+    const s = liveSec(); const v = venueIdx(S.fans || 0); const nv = VENUES[v + 1]; const nx = nextTier(s); const tr = tierOf(s);
+    if (L.songs) logEvent('live', 'ライブ', '', 0, { songs: L.songs, fans: L.fans, sec: Math.round((Date.now() - L.t0) / 1000), study: s - L.sec0, today: s });
+    save();
+    if (!L.songs) { render(); return; }
+    sfx.fanfare(); confetti(160);
+    let again = false;
+    await overlay(`<div class="tut"><div class="tut-e">${tr ? tr[1] : '🎤'}</div><div class="tut-t">${tr ? tr[2] + '！' : 'ライブ おつかれさま！'}</div>
+      <div class="tut-b" style="text-align:center">♪ <b>${L.songs}きょく</b> ・ ⏱ きょう <b>${mmss(s)}</b><br>💖 ファン <b>+${L.fans}</b>（ぜんぶで ${S.fans}人）<br>${VENUES[v][1]} ${VENUES[v][2]}${nv ? `<br><small>つぎの「${nv[2]}」まで あと ${nv[0] - S.fans}人</small>` : ''}${L.items.length ? `<br>👗 あたらしい アイテム：${L.items.map((x) => x[2]).join(' ')}<br><small>ホームの クローゼットで きがえて みよう</small>` : ''}</div>
+      ${nx ? `<button class="bigbtn live" data-lf="again">▶ もうすこし うたう<small>あと ${mmss(nx[0] * 60 - s)} で ${nx[1]} ${nx[2]}</small></button>` : ''}
+      <button class="btn ghost" style="width:100%;margin-top:12px" data-lf="x">おわる</button></div>`, {
+      closeOnTap: false, cls: 'solid',
+      onMount: (el, close) => el.addEventListener('click', (e) => { const b = e.target.closest('[data-lf]'); if (!b) return; again = b.dataset.lf === 'again'; sfx.tap(); close(); }),
+    });
+    render(); scrollTo(0, 0);
+    if (again) liveStart();
+  }
+  // 画面に 何も 出ていない 時だけ 次へ すすむ（WIN・ランクアップなどの おいわいが 終わるのを 待つ）
+  let liveIdle = 0;
+  setInterval(() => {
+    if (!LIVE) return;
+    liveHud();
+    if (document.querySelector('.ov')) { liveIdle = 0; return; }
+    if (++liveIdle < 2) return;
+    liveIdle = 0;
+    if (LIVE.pending === 'end') liveFinish();
+    else if (LIVE.pending === 'next') { LIVE.pending = null; liveNext(); }
+    else liveHub();
+  }, 300);
+  document.addEventListener('click', (e) => {
+    const b = e.target.closest('[data-live]'); if (!b) return;
+    e.stopPropagation();
+    const k = b.dataset.live;
+    if (k === 'start') { liveStart(); return; }
+    if (k === 'closet') { closetOv(); return; }
+    if (!LIVE) return;
+    LIVE.pending = k; sfx.tap();
+    const ov = b.closest('.ov');
+    const c = ov && ov.querySelector('[data-q="close"], [data-u="close"], [data-m="close"]');
+    if (c) c.click(); else if (ov) ov.remove();
+  }, true);
+
   document.addEventListener('click', (e) => {
     const t = e.target.closest('[data-tab]');
     if (t) { stopDictation(); tab = t.dataset.tab; krStage = null; krStopReading(); sfx.tap(); render(); scrollTo(0, 0); if (tab === 'korean' && !S.kr.intro) krIntro(); return; }

@@ -75,7 +75,7 @@ function calcAllowance(st, ym, today, cfg) {
       test: { name: '後期期末テスト', date: '', checks: {} },
       goals: {}, voices: [], voiceDays: {}, voiceWeek: '', cheerLog: [], startDate: todayStr(),
       milestones: {}, cheersSeen: [], lastCheer: null, lastSync: 0, syncError: null,
-      timer: null, moneySeen: null, complete: '', beat: {}, badges: {}, chal: 0, recapSeen: '', boss: 0,
+      timer: null, moneySeen: null, complete: '', beat: {}, badges: {}, chal: 0, recapSeen: '', boss: 0, fans: 0,
       ek: { g: EIKEN.grade || '', sr: {}, rc: {}, st: {}, mocks: {}, past: {}, checks: {}, scout: '', menus: 0, pass: '' },
       device: rid(20), created: Date.now(), updated: Date.now(),
     };
@@ -134,6 +134,7 @@ function calcAllowance(st, ym, today, cfg) {
   const paperDone = (d) => !!d && ((d.m || []).length > 0 || d.ck > 0 || (d.tm || 0) >= TIMER.winMin);
 
   // ---------- 記録の送信（Google スプレッドシート） ----------
+  let LIVE = null; // 試合中だけ入る（下の「試合モード」の節）
   function loadQueue() { try { return JSON.parse(localStorage.getItem(Q_KEY) || '[]'); } catch (e) { return []; } }
   // 500件を超えたら、まず「アプリを使った時間」の記録から古い順に捨てる（声やミッションを残すため）
   function saveQueue(q) {
@@ -146,10 +147,11 @@ function calcAllowance(st, ym, today, cfg) {
     q.push({ id: Date.now().toString(36) + Math.random().toString(36).slice(2, 7), ts: new Date().toISOString(), date: todayStr(), type, item, subject: subject || '', points: points || 0, detail: detail || {} });
     saveQueue(q);
     flushSoon();
+    if (LIVE && type === 'quiz') liveSong(detail || {});
   }
   function snapshot() {
     const r = RANKS[rankIdx(S.xp)];
-    return { ...S, summary: { rank: r[1], streak: streak(), cardKinds: Object.keys(S.cards).length, allowanceCfg: ALLOWANCE, ek: { name: EIKEN.name, date: EIKEN.date, goal: EIKEN.goal, rTotal: ekTotal('r'), lTotal: ekTotal('l'), url: EIKEN.officialUrl, words: ekMastered(), wordGoal: EK_WORD_GOAL, wordTotal: ekBank('w').length, phase: EK_PHASES[ekPhaseIdx()].title, reward: EIKEN.reward } } };
+    return { ...S, summary: { rank: r[1], streak: streak(), cardKinds: Object.keys(S.cards).length, cardTotal: CARDS.length + CARDS2.length + (s3Open() ? CARDS3.length : 0), allowanceCfg: ALLOWANCE, ek: { name: EIKEN.name, date: EIKEN.date, goal: EIKEN.goal, rTotal: ekTotal('r'), lTotal: ekTotal('l'), url: EIKEN.officialUrl, words: ekMastered(), wordGoal: EK_WORD_GOAL, wordTotal: ekBank('w').length, phase: EK_PHASES[ekPhaseIdx()].title, reward: EIKEN.reward } } };
   }
   let flushTimer = null;
   let flushing = false;
@@ -231,19 +233,43 @@ function calcAllowance(st, ym, today, cfg) {
   function studyTick() {
     if (!S || document.visibilityState !== 'visible' || !document.querySelector(STUDY_SEL)) return;
     if (Date.now() - lastTouch > 90000) return;
+    if (S.timer) return; // 紙のタイマーが動いている間は、ゲームの時間を重ねて数えない
     const d = day(); const before = studySec(d);
     d.st = (d.st || 0) + 1;
     if (++studyDirty >= 10) { studyDirty = 0; save(); }
     if (minRuleOn() && before < MIN_SEC && before + 1 >= MIN_SEC) minClear();
+    tierCheck(before, before + 1);
+  }
+  // 今日の時間の節目（10分・15分・30分）。見た目のお祝いだけで、おこづかい・チケット・ポイントは変わらない
+  const TIME_TIERS = [[10, '🏀', '1試合クリア'], [15, '⭐', '延長戦クリア'], [30, '👑', 'MVP級の30分']];
+  const tierOf = (sec) => { let t = null; TIME_TIERS.forEach((x) => { if (sec >= x[0] * 60) t = x; }); return t; };
+  function tierCheck(before, after) {
+    const t = TIME_TIERS.filter((x) => before < x[0] * 60 && after >= x[0] * 60).pop(); if (!t) return;
+    save(); sfx.fanfare(); confetti(200); emojiRain([t[1], '🔥', '✨', '🎉'], 26);
+    toast(`${t[1]} 今日 ${t[0]}分！ ${t[2]}！`, 3600);
+    logEvent('tier', `今日の ${t[0]}分`, '', 0, { min: t[0] });
+    if (!document.querySelector('.ov')) render();
   }
   setInterval(studyTick, 1000);
   const mmss = (s) => `${Math.floor(s / 60)}:${String(s % 60).padStart(2, '0')}`;
-  // ホームに出す1行（届くまでは残り時間、届いたらクリアの印）
+  // ホームの「今日の時間」：5分（連続にカウント）→ 10分 → 15分 → 30分。直近7日の印も出す
   function minLine() {
-    if (!minRuleOn()) return '';
-    const M = ALLOWANCE.minStudyMin; const s = Math.min(MIN_SEC, studySec(S.days[todayStr()]));
-    if (s >= MIN_SEC) return `<div class="minline ok">✅ 今日の${M}分クリア！ 🔥連続記録と「勉強した日」にカウント</div>`;
-    return `<div class="minline"><div class="ml-t">⏱ 今日の${M}分 <b>${mmss(s)}</b> / ${M}:00</div><div class="ml-bar"><i style="width:${Math.round(s / MIN_SEC * 100)}%"></i></div><small>ゲームで問題を解いた時間＋紙の勉強タイマー。${M}分で 🔥連続記録と「勉強した日」になるよ</small>${S.timer ? `<span class="ml-run">⏱ タイマー計測中（「終わった！」で足されるよ）</span>` : `<button class="ml-btn" data-act="tstart">✍️ 紙の勉強は タイマーで数える ▶</button>`}</div>`;
+    const t = todayStr(); const s = studySec(S.days[t]); const M = ALLOWANCE.minStudyMin || 5;
+    const goals = [[M, '🔥', '連続にカウント'], ...TIME_TIERS];
+    const nx = goals.find((g) => s < g[0] * 60);
+    const top = goals[goals.length - 1][0] * 60;
+    const C = 2 * Math.PI * 34;
+    const week = Array.from({ length: 7 }, (_, i) => {
+      const ds = addDays(t, i - 6); const sec = studySec(S.days[ds]); const tr = tierOf(sec);
+      const cls = tr ? 'g' : sec >= M * 60 ? 'o' : sec > 0 ? 'l' : '';
+      return `<span class="wk ${cls} ${ds === t ? 'td' : ''}"><i>${tr ? tr[1] : sec >= M * 60 ? '🔥' : sec > 0 ? Math.floor(sec / 60) + '分' : ''}</i><small>${'日月火水木金土'[new Date(ds + 'T00:00:00Z').getUTCDay()]}</small></span>`;
+    }).join('');
+    return `<div class="ringcard"><div class="rg-ring"><svg width="84" height="84"><circle cx="42" cy="42" r="34" stroke="#26324f" stroke-width="9" fill="none"/><circle cx="42" cy="42" r="34" stroke="url(#rgg)" stroke-width="9" fill="none" stroke-linecap="round" stroke-dasharray="${C.toFixed(1)}" stroke-dashoffset="${(C * (1 - Math.min(1, s / top))).toFixed(1)}" transform="rotate(-90 42 42)"/><defs><linearGradient id="rgg" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#ff6a00"/><stop offset="1" stop-color="#ffd400"/></linearGradient></defs></svg><b>${mmss(s)}</b></div>
+      <div class="rg-t"><div class="rg-h">⏱ 今日の勉強時間<small>ゲーム＋紙のタイマー</small></div>
+        <div class="rg-g">${goals.map((g) => `<span class="${s >= g[0] * 60 ? 'on' : nx === g ? 'nx' : ''}">${g[1]}<small>${g[0]}分</small></span>`).join('')}</div>
+        <div class="rg-n">${nx ? `あと <b>${mmss(nx[0] * 60 - s)}</b> で ${nx[1]} ${nx[2]}` : '👑 今日は最高の試合！'}</div></div>
+      <div class="rg-w">${week}</div>
+      ${S.timer ? '<span class="ml-run">⏱ タイマー計測中（「終わった！」で足されるよ）</span>' : ''}</div>`;
   }
 
   // ---------- 紙の勉強タイマー（紙で勉強した時間を記録する） ----------
@@ -253,7 +279,8 @@ function calcAllowance(st, ym, today, cfg) {
     const tm = (S.days[todayStr()] || {}).tm || 0;
     if (S.timer) {
       const over = timerMin() > TIMER.maxMin || (S.timer.date && S.timer.date !== todayStr());
-      return `<div class="timer on"><div class="tm-l">⏱ 紙の勉強タイマー <span class="tm-live">計測中</span></div>
+      const tmM = S.timer.mid && S.missions.find((x) => x.id === S.timer.mid);
+      return `<div class="timer on"><div class="tm-l">⏱ ${tmM ? esc(tmM.label) : '紙の勉強タイマー'} <span class="tm-live">計測中</span></div>
         <div class="tm-n"><b id="tmr">${timerLabel()}</b>分</div>
         ${over ? '<div class="tm-s">止め忘れてない？ 押すと、やった分だけ入力できるよ</div>' : ''}
         <button class="btn big" data-act="tstop">⏹ 終わった！</button></div>`;
@@ -265,6 +292,7 @@ function calcAllowance(st, ym, today, cfg) {
   function startTimer() { S.timer = { start: Date.now(), date: todayStr() }; save(); sfx.buzzer(); toast('⏱ スタート！ 終わったら「終わった！」を押してね'); render(); }
   async function stopTimer() {
     if (!S.timer) return;
+    const mid = S.timer.mid;
     const start = S.timer.start; const sameDay = !S.timer.date || S.timer.date === todayStr();
     let min = Math.floor((Date.now() - start) / 60000);
     // 止め忘れ（日またぎ・上限超え）は自動で入れず、本人に「何分やったか」を入れてもらう
@@ -274,7 +302,7 @@ function calcAllowance(st, ym, today, cfg) {
       min = Math.max(0, Math.min(TIMER.manualMax, parseInt(String(ans).replace(/[^0-9]/g, ''), 10) || 0));
     }
     S.timer = null;
-    if (min < 1) { save(); toast('記録しなかったよ'); render(); return; }
+    if (min < 1) { save(); toast(mid ? '1分より短かったので、時間は入らなかったよ' : '記録しなかったよ'); render(); if (mid && !day().m.includes(mid)) await onMission(mid, true); return; }
     const d = day();
     const before = d.tm || 0; const secBefore = studySec(d);
     d.tm = before + min;
@@ -291,6 +319,9 @@ function calcAllowance(st, ym, today, cfg) {
       toast(`⏱ ${min}分 記録したよ（今日の合計 ${d.tm}分）`); render();
     }
     if (crossed) minClear();
+    tierCheck(secBefore, studySec(d));
+    // ミッションから始めたタイマーは、止めたらそのミッションも IN にする
+    if (mid && !day().m.includes(mid)) await onMission(mid, true);
   }
   setInterval(() => { const el = $('#tmr'); if (el && S && S.timer) el.textContent = timerLabel(); }, 15000);
 
@@ -586,12 +617,11 @@ function calcAllowance(st, ym, today, cfg) {
           <div class="tx"><div class="lb">${esc(m.label)}</div><div class="mt">${esc(m.sub)} ・ ${m.pts}P${ALLOWANCE.stdMissions.includes(m.id) ? '' : ' ・ おこづかい対象外'}</div>${m.id === 'kanji' && !done ? `<button class="kw-go" data-act="quiz" data-kind="kwrite">✍️ 漢字かき取り（アプリが${KANJI_WRITE_LEN}問出す）›</button>` : ''}</div>
           <button class="shoot-btn" data-act="mission" data-id="${esc(m.id)}">${done ? '✓ IN' : 'SHOOT'}</button></div>`;
     };
-    return header() + coachBox() + dayCard() + `
+    return header() + (S.timer ? timerCard() : '') + coachBox() + dayCard() + minLine() + liveHero() + `
       <div class="status">
         <div class="st-streak"><span class="flame ${today ? '' : 'cold'}">🔥</span><b>${st}</b><small>日連続</small>${best > st && best >= 3 ? `<small class="st-best">ベスト${best}日</small>` : ''}</div>
         <div class="st-score"><span class="lbl">YOU</span><b class="sc">${d.pts}</b><span class="vs">VS</span><b class="sc away">${RIVAL.score}</b><span class="lbl"><i class="rv-e">${todayRival().e}</i>${esc(todayRival().name)}</span></div>
       </div>
-      ${minLine()}
       ${winLine(d, left)}
       ${cheer}
       ${ekCard()}
@@ -601,7 +631,7 @@ function calcAllowance(st, ym, today, cfg) {
       <div class="missions">${front.map(missionRow).join('')}</div>
       ${rest.length ? `<details class="more-box"${restOpen ? ' open' : ''}><summary>ほかのミッション（${rest.length}本${restDone ? `・${restDone}本IN` : ''}）<small>${big ? '' : 'BIG WIN にはここからもOK'}</small></summary>
         <div class="missions">${rest.map(missionRow).join('')}</div></details>` : ''}
-      ${timerCard()}
+      ${S.timer ? '' : timerCard()}
       ${chalRow()}
       <div class="sync" id="sync"></div>`;
   }
@@ -765,6 +795,7 @@ function calcAllowance(st, ym, today, cfg) {
     if (fresh.length) { fresh.forEach((b) => { S.badges[b.id] = t; logEvent('badge', b.name, '', 0, { id: b.id }); }); celebQ.push({ type: 'badge', list: fresh }); changed = true; }
     // ガチャ シーズン2 の解放（シーズン1 の UR 以外がそろった時。1回だけ）
     if (s2Open() && !S.s2) { S.s2 = t; changed = true; celebQ.push({ type: 's2' }); logEvent('season2', 'ガチャ シーズン2 解放', '', 0, { kinds: own1(), pulls: S.pulls }); }
+    if (s3Open() && !S.s3) { S.s3 = t; changed = true; celebQ.push({ type: 's3' }); logEvent('season3', 'ガチャ シーズン3 解放', '', 0, { kinds: own1() + own2(), pulls: S.pulls }); }
     if (changed) save();
     if (celebQ.length) { clearTimeout(celebTimer); celebTimer = setTimeout(showCelebs, 700); }
   }
@@ -776,6 +807,11 @@ function calcAllowance(st, ym, today, cfg) {
       await overlay(`<div class="stamp">挑戦状<br>クリア</div><div class="lvup-name" style="font-size:22px;margin-top:12px">📜 ${esc(x.c.text)}</div>
         <div class="coach-mini" style="max-width:340px">${coachFace('fire')}<span>${esc(pick(['さすがだ！ 明日の挑戦状も楽しみにしてろよ', 'ナイス！ その集中力、本物だ 🔥', 'やりきったな！ これがエースの1日だ']))}</span></div>
         <div class="note">挑戦状クリア 通算 ${S.chal}回</div>`, { lockMs: 1000, cls: 'solid' });
+    } else if (x.type === 's3') {
+      await overlay(`<div class="lvup-title rainbow" style="font-size:38px">新シリーズ解放！</div><div class="lvup-rank">🏀🗾</div>
+        <div class="lvup-name" style="font-size:22px">${esc(CARDS3_NAME)}</div>
+        <div class="badge-d">新しいカード ${CARDS3.length}種が ガチャに登場！<br>トレードでも まだ持っていないシーズン3 のカードがもらえるよ</div>
+        <div class="note" style="margin-top:10px">シーズン1 の UR は、これからもガチャで出るよ 👑</div>`, { lockMs: 1200, cls: 'solid' });
     } else if (x.type === 's2') {
       await overlay(`<div class="lvup-title rainbow" style="font-size:38px">新シリーズ解放！</div><div class="lvup-rank">🏀✨</div>
         <div class="lvup-name" style="font-size:22px">${esc(CARDS2_NAME)}</div>
@@ -1062,6 +1098,10 @@ function calcAllowance(st, ym, today, cfg) {
     const s2Html = s2 ? `<div class="sec-title"><h2>🆕 ${esc(CARDS2_NAME)}</h2><span>${o2}/${CARDS2.length}${o2 >= CARDS2.length ? ' 👑' : ''}</span></div>
       ${S.complete2 ? `<div class="complete-banner">👑 シーズン2 コンプリート！（${esc(S.complete2.slice(5).replace('-', '/'))}）</div>` : `<div class="colgoal">🆕 シーズン2 あと <b class="cg-n">${CARDS2.length - o2}種</b>でコンプリート！</div>`}
       <div class="collection">${ccHtml(CARDS2)}</div>` : '';
+    const s3 = s3Open(); const o3 = own3();
+    const s3Html = s3 ? `<div class="sec-title"><h2>🆕 ${esc(CARDS3_NAME)}</h2><span>${o3}/${CARDS3.length}${o3 >= CARDS3.length ? ' 👑' : ''}</span></div>
+      ${S.complete3 ? `<div class="complete-banner">👑 シーズン3 コンプリート！（${esc(S.complete3.slice(5).replace('-', '/'))}）</div>` : `<div class="colgoal">🆕 シーズン3 あと <b class="cg-n">${CARDS3.length - o3}種</b>でコンプリート！</div>`}
+      <div class="collection">${ccHtml(CARDS3)}</div>` : '';
     const ex = extraCards();
     const canTrade = ex >= TRADE_COST && tradable().length > 0;
     const nextMs = COLLECTION_MILESTONES.find((m) => m > owned);
@@ -1079,9 +1119,10 @@ function calcAllowance(st, ym, today, cfg) {
       <div class="trade">
         <div class="tr-t">🔄 トレード <span>ダブり ${ex}枚</span></div>
         <div class="tr-s">ダブり${TRADE_COST}枚で、<b>まだ持っていないカード</b>が1枚もらえる！（レア度はガチャと同じ確率・UR はガチャだけ）</div>
-        <button class="btn" data-act="trade" ${canTrade ? '' : 'disabled style="opacity:.4"'}>${owned >= CARDS.length && (!s2 || o2 >= CARDS2.length) ? 'もう全部持ってる！' : !tradable().length ? '残りは UR だけ！ UR はガチャでしか出ないよ' : canTrade ? `ダブり${TRADE_COST}枚でトレード` : `あと${TRADE_COST - ex}枚ダブったらトレードできる`}</button>
+        <button class="btn" data-act="trade" ${canTrade ? '' : 'disabled style="opacity:.4"'}>${owned >= CARDS.length && (!s2 || o2 >= CARDS2.length) && (!s3 || o3 >= CARDS3.length) ? 'もう全部持ってる！' : !tradable().length ? '残りは UR だけ！ UR はガチャでしか出ないよ' : canTrade ? `ダブり${TRADE_COST}枚でトレード` : `あと${TRADE_COST - ex}枚ダブったらトレードできる`}</button>
       </div>
       <p class="note" style="margin:12px 2px">チケットのもらい方：今日のWIN ／ ミニゲーム全問正解 ／ 苦手つぶし全問正解 ／ 連続日数ボーナス（3・7・14・21・30日…）／ コレクション${COLLECTION_MILESTONES.join('・')}種 ／ おうちからのエール</p>
+      ${s3Html}
       ${s2Html}
       <div class="sec-title"><h2>コレクション${s2 ? '（シーズン1）' : ''}</h2><span>${owned}/${CARDS.length}${nextMs ? `（${nextMs}種で 🎟️${nextMs >= CARDS.length ? ' ＋👑' : ''}）` : ''}</span></div>
       <div class="collection">${ccHtml(CARDS)}</div>`;
@@ -1119,9 +1160,25 @@ function calcAllowance(st, ym, today, cfg) {
   }
 
   // ---------- 操作 ----------
-  async function onMission(id) {
+  // 紙の勉強の時間はタイマーでしか数えられない → SHOOT の時に「今からやる」を選べるようにする
+  function missionAsk(m) {
+    let how = '';
+    return overlay(`<div class="tut"><div class="tut-e">${m.icon || '🏀'}</div><div class="tut-t">${esc(m.label)}</div>
+      <button class="bigbtn live" data-ma="timer">⏱ 今からやる<small>タイマーで「今日の勉強時間」に入る</small></button>
+      <button class="bigbtn done2" data-ma="done">✓ もう終わった（SHOOT）</button>
+      <button class="btn ghost" style="width:100%;margin-top:12px" data-ma="x">やめる</button></div>`, {
+      closeOnTap: false, cls: 'solid',
+      onMount: (el, close) => el.addEventListener('click', (e) => { const b = e.target.closest('[data-ma]'); if (!b) return; how = b.dataset.ma === 'x' ? '' : b.dataset.ma; sfx.tap(); close(); }),
+    }).then(() => how);
+  }
+  async function onMission(id, skipAsk) {
     const m = S.missions.find((x) => x.id === id); if (!m) return;
     const d = day();
+    if (!d.m.includes(id) && !skipAsk && !S.timer) {
+      const how = await missionAsk(m);
+      if (!how) return;
+      if (how === 'timer') { S.timer = { start: Date.now(), date: todayStr(), mid: id }; save(); sfx.buzzer(); toast('⏱ スタート！ 終わったら「終わった！」を押してね', 3000); render(); scrollTo(0, 0); return; }
+    }
     if (d.m.includes(id)) {
       if (!confirm(`「${m.label}」を取り消す？`)) return;
       d.m = d.m.filter((x) => x !== id);
@@ -1169,7 +1226,7 @@ function calcAllowance(st, ym, today, cfg) {
     }
     if (['SR', 'SSR', 'UR'].includes(rar)) S.pity = 0;
     // シーズン2 が解放されたら、UR 以外はシーズン2 から出る（排出率はそのまま）
-    const pool = s2Open() && rar !== 'UR' ? CARDS2 : CARDS;
+    const pool = rar === 'UR' ? CARDS : s3Open() ? CARDS3 : s2Open() ? CARDS2 : CARDS;
     const cands = pool.filter((c) => c.r === rar);
     const card = pick(cands.length ? cands : CARDS.filter((c) => c.r === rar));
     const dup = !!S.cards[card.id];
@@ -1189,6 +1246,7 @@ function calcAllowance(st, ym, today, cfg) {
     const r = { ticket: 0, complete: false, owned };
     COLLECTION_MILESTONES.forEach((m) => { const k = 'col' + m; if (owned >= m && !S.milestones[k]) { S.milestones[k] = true; S.tickets++; r.ticket++; } });
     if (owned >= CARDS.length && !S.complete) { S.complete = todayStr(); r.complete = true; logEvent('complete', 'コレクション コンプリート', '', 0, { kinds: owned, pulls: S.pulls }); }
+    if (s3Open() && own3() >= CARDS3.length && !S.complete3) { S.complete3 = todayStr(); r.complete3 = true; logEvent('complete3', 'シーズン3 コンプリート', '', 0, { kinds: own3(), pulls: S.pulls }); }
     if (own2() >= CARDS2.length && !S.complete2) { S.complete2 = todayStr(); r.complete2 = true; logEvent('complete2', 'シーズン2 コンプリート', '', 0, { kinds: own2(), pulls: S.pulls }); }
     return r;
   }
@@ -1199,6 +1257,10 @@ function calcAllowance(st, ym, today, cfg) {
       await overlay(`<div class="lvup-title" style="font-size:46px">COMPLETE!!</div><div class="lvup-rank">👑</div>
         <div class="lvup-name">バスケ技カード ${CARDS.length}種類 コンプリート！</div>
         <div class="reward-big">🏅 殿堂入り！${col.ticket ? `　🎟️ +${col.ticket}` : ''}${COMPLETE_REWARD ? `<br>🎁 ごほうび：${esc(COMPLETE_REWARD)}<br><small>この画面をおうちの人に見せてね</small>` : ''}</div>`, { lockMs: 1400 });
+    } else if (col.complete3) {
+      sfx.fanfare(); confetti(220);
+      await overlay(`<div class="lvup-title" style="font-size:40px">COMPLETE!!</div><div class="lvup-rank">👑🗾</div>
+        <div class="lvup-name">${esc(CARDS3_NAME)} ${CARDS3.length}種 コンプリート！</div>`, { lockMs: 1200 });
     } else if (col.complete2) {
       sfx.fanfare(); confetti(220);
       await overlay(`<div class="lvup-title" style="font-size:40px">COMPLETE!!</div><div class="lvup-rank">👑🤝</div>
@@ -1206,7 +1268,10 @@ function calcAllowance(st, ym, today, cfg) {
     } else if (col.ticket) { sfx.coin(); toast(`📚 コレクション ${col.owned}種たっせい！ 🎟️ +${col.ticket}`, 3000); }
   }
   // ダブり（2枚目以降）を TRADE_COST 枚使って、まだ持っていないカードを1枚もらう（シーズン2 解放後はシーズン2 から）
-  const tradable = () => (s2Open() ? CARDS2 : CARDS).filter((c) => !S.cards[c.id] && c.r !== 'UR');
+  const tradable = () => (s3Open() ? CARDS3 : s2Open() ? CARDS2 : CARDS).filter((c) => !S.cards[c.id] && c.r !== 'UR');
+  const own3 = () => CARDS3.filter((c) => S.cards[c.id]).length;
+  // シーズン3 の解放：シーズン2 が全部そろった時
+  const s3Open = () => s2Open() && CARDS2.every((c) => S.cards[c.id]);
   const own1 = () => CARDS.filter((c) => S.cards[c.id]).length;
   const own2 = () => CARDS2.filter((c) => S.cards[c.id]).length;
   // シーズン2 の解放：シーズン1 の UR 以外が全部そろった時（UR はガチャでしか出ないので、そこで止まらないように）
@@ -3082,6 +3147,150 @@ function calcAllowance(st, ym, today, cfg) {
     }
     S.syncError = null; S.everSynced = true; save(); flush(); checkCheers(); toast('つながったよ！'); render();
   }
+  // ---------- 試合モード（10分つづく仕組み・2026-11-25） ----------
+  // ねらい：ゲームを1回（1〜3分）やって閉じる日が多く、問題を解いている時間は1日5分前後だった。
+  // 「クォーター（＝ゲーム1回）」を自動でつなげて、10分で1試合にする。今日の教科のゲームから順に出す。
+  // 時間の数え方は「今日の5分」と同じ（studySec）。おこづかい・チケット・ポイントのルールは変えない。
+  // 試合で増えるのは観客の数と会場の大きさ（見た目だけのごほうび）。
+  const VENUES = [[0, '🏞️', '公園のコート'], [80, '🏫', '学校の体育館'], [250, '🏟️', '市民体育館'], [600, '🎪', 'アリーナ'], [1200, '🌃', 'ドーム'], [2500, '🌍', 'ワールドカップ']];
+  const venueIdx = (f) => { let i = 0; VENUES.forEach((v, j) => { if (f >= v[0]) i = j; }); return i; };
+  const liveSec = () => studySec(S.days[todayStr()]);
+  const nextTier = (s) => TIME_TIERS.find((x) => s < x[0] * 60);
+  const EK_DAILY_FROM = '2026-11-28'; // 11月のテスト（理科・社会・数学）が終わったら、試合の第1Qを英検の5分メニューにする
+  const qName = (n) => (n <= 4 ? `第${n}Q` : `延長${n - 4}`);
+  function liveHero() {
+    const s = liveSec(); const v = VENUES[venueIdx(S.fans || 0)]; const nx = nextTier(s);
+    const sub = !nx ? '今日は最高の試合！ まだいける？' : nx[0] === TIME_TIERS[0][0] && s < 60 ? '今日の教科のゲームが次々始まる。10分で1試合！' : `あと ${mmss(nx[0] * 60 - s)} で ${nx[1]} ${nx[2]}`;
+    return `<button class="livebtn" data-live="start"><span class="lv-t">🏀 ${s >= TIME_TIERS[0][0] * 60 ? '延長戦に入る' : '試合開始（TIP OFF）'}</span><span class="lv-s">${sub}</span><span class="lv-v">${v[1]} ${v[2]} ・ 📣 観客 ${S.fans || 0}人</span><span class="lv-a">▶</span></button>`;
+  }
+  // クォーターの並び：今日の教科のゲーム → ほかの教科。声を使うゲーム・自己採点のかき取り・上級は入れない
+  function liveSetlist(first) {
+    const skip = (k) => k === 'speak' || k === 'kwrite' || k === 'challenge' || k === 'weak' || k.startsWith('ek:') || k.startsWith('m:') || k.startsWith('sum:') || k.startsWith('tab:');
+    const mk = (k) => { const s = stepInfo(k); return s && s.k === k ? [k, s.icon, s.name] : null; };
+    const pl = planFor(todayStr());
+    const seen = new Set();
+    const uniq = (ks) => ks.filter((k) => !skip(k) && !seen.has(k) && seen.add(k)).map(mk).filter(Boolean);
+    const mine = uniq([...pl.steps, ...subjectGames(pl.sub)]);
+    const rest = uniq([...rushModes().map((x) => 'rush:' + x[0]), ...qaSubjects().map((x) => 'qa:' + x), 'kanji', 'verb', 'listen', 'spell']);
+    const out = first ? mine.concat(shuffle(rest)) : shuffle(mine.concat(rest));
+    // 英検まで日があり、今日のメニューが残っていれば、第1Qは英検の5分メニュー
+    if (first && todayStr() >= EK_DAILY_FROM && ekLeft() > 0 && ekMenuLeft().length) out.unshift(['ek:menu', '🏆', '英検カップ 今日のメニュー']);
+    return out;
+  }
+  function livePeek() {
+    if (!LIVE.q.length) LIVE.q = liveSetlist(false);
+    if (!LIVE.q.length) LIVE.q = [['kanji', '漢', '漢字よみ速攻']]; // 問題が1つも読めていない時の保険
+    // 2Q 終わったら1回だけボス戦（苦手が1セット分たまっている時）
+    if (LIVE.songs >= 2 && !LIVE.boss && weakTotal() >= WEAK_SET) { LIVE.boss = 1; LIVE.q.unshift(['weak', '👾', 'ボス戦（苦手つぶし）']); }
+    if (LIVE.cur && LIVE.q[0][0] === LIVE.cur[0] && LIVE.q.length > 1) LIVE.q.push(LIVE.q.shift());
+    return LIVE.q[0];
+  }
+  function liveStart() {
+    if (LIVE || document.querySelector('.ov')) return;
+    sfx.buzzer();
+    LIVE = { n: 0, songs: 0, fans: 0, gain: 0, q: liveSetlist(true), cur: null, pending: null, boss: 0, venueUp: null, t0: Date.now(), sec0: liveSec() };
+    liveHud(); liveNext();
+  }
+  function liveNext() {
+    if (!LIVE) return;
+    const song = livePeek(); LIVE.q.shift();
+    LIVE.cur = song; LIVE.n++;
+    toast(`🏀 ${qName(LIVE.n)}：${song[2]}`, 1800);
+    playKind(song[0]);
+  }
+  // 1クォーター終わるたび（ゲームの記録が入った時）に呼ばれる
+  function liveSong(detail) {
+    const gain = 3 + (detail.ok || 0) * 2 + ((detail.maxCombo || 0) >= 5 ? 5 : 0);
+    const v0 = venueIdx(S.fans || 0);
+    S.fans = (S.fans || 0) + gain; LIVE.fans += gain; LIVE.songs++; LIVE.gain = gain;
+    const d = day(); d.lv = (d.lv || 0) + 1;
+    if (venueIdx(S.fans) > v0) LIVE.venueUp = VENUES[venueIdx(S.fans)];
+    save();
+  }
+  // ゲームの結果の画面に「次のクォーター」を足す（どのゲームの結果にも同じ形で入る）
+  function liveInject(r) {
+    const s = liveSec(); const nx = nextTier(s);
+    // 英検メニューの途中（次のパートがある）なら、そのまま次のパートへ進むボタンにする
+    const go = r.querySelector('[data-e="go"]');
+    const song = go ? ['', '🏆', go.textContent.replace('▶', '').trim()] : livePeek();
+    const box = document.createElement('div'); box.className = 'live-res';
+    box.innerHTML = `<div class="lr-f">📣 観客 <b>+${LIVE.gain || 0}</b>${LIVE.venueUp ? `<span class="lr-v">${LIVE.venueUp[1]} 会場が「${LIVE.venueUp[2]}」になった！</span>` : ''}</div>
+      <div class="lr-t">⏱ ${mmss(s)}${nx ? ` ・ あと ${mmss(nx[0] * 60 - s)} で ${nx[1]} ${nx[2]}` : ' ・ 👑 最高の試合！'}</div>
+      <button class="bigbtn live" data-live="next">▶ ${go ? '次へ' : qName(LIVE.n + 1) + ' へ'}<small>${song[1]} ${esc(song[2])}</small></button>
+      <button class="live-end" data-live="end">今日の試合を終わる</button>`;
+    r.insertBefore(box, r.firstChild);
+    r.scrollTop = 0; const sc = r.closest('.quiz'); if (sc) sc.scrollTop = 0;
+    LIVE.gain = 0; LIVE.venueUp = null;
+  }
+  new MutationObserver(() => {
+    if (!LIVE) return;
+    const r = document.querySelector('.ov .qbody.result');
+    if (r && !r.querySelector('.live-res')) liveInject(r);
+  }).observe(document.body, { childList: true, subtree: true });
+  // 上に出す小さい帯（試合中ずっと）
+  function liveHud() {
+    let h = document.getElementById('livehud');
+    if (!LIVE) { if (h) h.remove(); document.body.classList.remove('live-on'); return; }
+    if (!h) { h = document.createElement('div'); h.id = 'livehud'; document.body.appendChild(h); document.body.classList.add('live-on'); }
+    const s = liveSec(); const nx = nextTier(s);
+    const html = `<b>🏀 ${qName(Math.max(1, LIVE.n))}</b><span>⏱ ${mmss(s)}${nx ? ` / ${nx[0]}:00` : ' 👑'}</span><i><u style="width:${nx ? Math.min(100, (s / (nx[0] * 60)) * 100).toFixed(1) : 100}%"></u></i><span>📣 ${LIVE.fans}</span>`;
+    if (h.dataset.h !== html) { h.dataset.h = html; h.innerHTML = html; }
+  }
+  // クォーターを途中でやめた時などに出す「タイムアウト」
+  function liveHub() {
+    const song = livePeek(); const s = liveSec();
+    const el = document.createElement('div'); el.className = 'ov solid live-hub';
+    el.innerHTML = `<div class="tut"><div class="tut-e">⏸️</div><div class="tut-t">タイムアウト</div>
+      <p class="note" style="text-align:center;margin:0 0 6px;font-size:15px">⏱ ${mmss(s)} ・ 📣 観客 +${LIVE.fans}</p>
+      <button class="bigbtn live" data-live="next">▶ ${qName(LIVE.n + 1)} へ<small>${song[1]} ${esc(song[2])}</small></button>
+      <button class="live-end" data-live="end">今日の試合を終わる</button></div>`;
+    document.body.appendChild(el);
+  }
+  async function liveFinish() {
+    const L = LIVE; LIVE = null; liveHud();
+    const s = liveSec(); const v = venueIdx(S.fans || 0); const nv = VENUES[v + 1]; const nx = nextTier(s); const tr = tierOf(s);
+    if (L.songs) logEvent('live', '試合', '', 0, { songs: L.songs, fans: L.fans, sec: Math.round((Date.now() - L.t0) / 1000), study: s - L.sec0, today: s });
+    save();
+    if (!L.songs) { render(); return; }
+    sfx.fanfare(); confetti(160);
+    let again = false;
+    await overlay(`<div class="tut"><div class="tut-e">${tr ? tr[1] : '🏀'}</div><div class="tut-t">${tr ? tr[2] + '！' : 'ナイスゲーム！'}</div>
+      <div class="tut-b" style="text-align:center">🏀 <b>${L.songs}クォーター</b> ・ ⏱ 今日 <b>${mmss(s)}</b><br>📣 観客 <b>+${L.fans}</b>（合計 ${S.fans}人）<br>${VENUES[v][1]} ${VENUES[v][2]}${nv ? `<br><small>次の「${nv[2]}」まで あと ${nv[0] - S.fans}人</small>` : ''}</div>
+      ${nx ? `<button class="bigbtn live" data-lf="again">▶ もう少しやる<small>あと ${mmss(nx[0] * 60 - s)} で ${nx[1]} ${nx[2]}</small></button>` : ''}
+      <button class="btn ghost" style="width:100%;margin-top:12px" data-lf="x">終わる</button></div>`, {
+      closeOnTap: false, cls: 'solid',
+      onMount: (el, close) => el.addEventListener('click', (e) => { const b = e.target.closest('[data-lf]'); if (!b) return; again = b.dataset.lf === 'again'; sfx.tap(); close(); }),
+    });
+    render(); scrollTo(0, 0);
+    if (again) liveStart();
+  }
+  // 画面に何も出ていない時だけ次へ進む（WIN・ランクアップなどのお祝いが終わるのを待つ）
+  let liveIdle = 0;
+  setInterval(() => {
+    if (!LIVE) return;
+    liveHud();
+    if (document.querySelector('.ov')) { liveIdle = 0; return; }
+    if (++liveIdle < 2) return;
+    liveIdle = 0;
+    if (LIVE.pending === 'end') liveFinish();
+    else if (LIVE.pending === 'next') { LIVE.pending = null; liveNext(); }
+    else liveHub();
+  }, 300);
+  document.addEventListener('click', (e) => {
+    const b = e.target.closest('[data-live]'); if (!b) return;
+    e.stopPropagation();
+    const k = b.dataset.live;
+    if (k === 'start') { liveStart(); return; }
+    if (!LIVE) return;
+    sfx.tap();
+    const ov = b.closest('.ov');
+    const go = k === 'next' && ov && ov.querySelector('[data-e="go"]');
+    if (go) { go.click(); return; }
+    LIVE.pending = k;
+    const c = ov && ov.querySelector('[data-q="close"], [data-u="close"], [data-e="close"]');
+    if (c) c.click(); else if (ov) ov.remove();
+  }, true);
+
   document.addEventListener('click', (e) => {
     const t = e.target.closest('[data-tab]');
     if (t) { stopDictation(); tab = t.dataset.tab; sfx.tap(); render(); scrollTo(0, 0); return; }
