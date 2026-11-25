@@ -1081,3 +1081,5 @@ body.live-on .qbody.result > .row, body.live-on .qbody.result [data-q="gacha"], 
 .cl-i span { font-size: 28px; } .cl-i small { font-size: 10px; line-height: 1.2; color: var(--sub); }
 .cl-i.on { border-color: var(--yellow); background: #3b2a07; box-shadow: 0 0 12px #ffd40055; } .cl-i.on small { color: var(--yellow); }
 .cl-i.lock { opacity: .5; }
+/* ライブ／試合の あいだは、下の ホームや タブを 押せないように する（連打で 下の ボタンに 当たらない） */
+body.live-on #app, body.live-on .tabbar { pointer-events: none; }

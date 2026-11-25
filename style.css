@@ -971,3 +971,5 @@ body.live-on .qbody.result > .row, body.live-on .qbody.result [data-q="gacha"], 
 .rg-h small { display: block; font-size: 11px; color: var(--sub); font-weight: 500; }
 .rg-g span small { white-space: nowrap; }
 body.live-on .qbody.result [data-e="go"], body.live-on .qbody.result [data-e="again2"] { display: none; }
+/* ライブ／試合の あいだは、下の ホームや タブを 押せないように する（連打で 下の ボタンに 当たらない） */
+body.live-on #app, body.live-on .tabbar { pointer-events: none; }

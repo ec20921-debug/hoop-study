@@ -292,7 +292,7 @@ function calcAllowance(st, ym, today, cfg) {
   function startTimer() { S.timer = { start: Date.now(), date: todayStr() }; save(); sfx.buzzer(); toast('⏱ スタート！ 終わったら「終わった！」を押してね'); render(); }
   async function stopTimer() {
     if (!S.timer) return;
-    const mid = S.timer.mid;
+    const mid = !S.timer.date || S.timer.date === todayStr() ? S.timer.mid : null; // 日をまたいだ タイマーは ミッションと つなげない
     const start = S.timer.start; const sameDay = !S.timer.date || S.timer.date === todayStr();
     let min = Math.floor((Date.now() - start) / 60000);
     // 止め忘れ（日またぎ・上限超え）は自動で入れず、本人に「何分やったか」を入れてもらう
@@ -3185,8 +3185,11 @@ function calcAllowance(st, ym, today, cfg) {
     if (LIVE.cur && LIVE.q[0][0] === LIVE.cur[0] && LIVE.q.length > 1) LIVE.q.push(LIVE.q.shift());
     return LIVE.q[0];
   }
+  // iPhone は タップの 中で 1回 声を 出しておかないと、あとから 自動で 始まる ゲームの 読み上げが 鳴らないことがある
+  function liveUnlock() { try { if (window.speechSynthesis) { const u = new SpeechSynthesisUtterance(' '); u.volume = 0; speechSynthesis.speak(u); } } catch (e) { /* noop */ } }
   function liveStart() {
     if (LIVE || document.querySelector('.ov')) return;
+    liveUnlock();
     sfx.buzzer();
     LIVE = { n: 0, songs: 0, fans: 0, gain: 0, q: liveSetlist(true), cur: null, pending: null, boss: 0, venueUp: null, t0: Date.now(), sec0: liveSec() };
     liveHud(); liveNext();
@@ -3200,6 +3203,7 @@ function calcAllowance(st, ym, today, cfg) {
   }
   // 1クォーター終わるたび（ゲームの記録が入った時）に呼ばれる
   function liveSong(detail) {
+    if (detail.quit && !detail.ok) return; // すぐ やめた回は 数えない
     const gain = 3 + (detail.ok || 0) * 2 + ((detail.maxCombo || 0) >= 5 ? 5 : 0);
     const v0 = venueIdx(S.fans || 0);
     S.fans = (S.fans || 0) + gain; LIVE.fans += gain; LIVE.songs++; LIVE.gain = gain;
@@ -3285,6 +3289,7 @@ function calcAllowance(st, ym, today, cfg) {
     sfx.tap();
     const ov = b.closest('.ov');
     const go = k === 'next' && ov && ov.querySelector('[data-e="go"]');
+    if (k === 'next') liveUnlock();
     if (go) { go.click(); return; }
     LIVE.pending = k;
     const c = ov && ov.querySelector('[data-q="close"], [data-u="close"], [data-e="close"]');

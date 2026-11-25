@@ -277,7 +277,7 @@ function calcAllowance(st, ym, today, cfg) {
   function startTimer() { S.timer = { start: Date.now(), date: todayStr() }; save(); sfx.buzzer(); toast('⏱ スタート！ 終わったら「終わった！」を押してね'); render(); }
   async function stopTimer() {
     if (!S.timer) return;
-    const mid = S.timer.mid;
+    const mid = !S.timer.date || S.timer.date === todayStr() ? S.timer.mid : null; // 日をまたいだ タイマーは ミッションと つなげない
     const start = S.timer.start; const sameDay = !S.timer.date || S.timer.date === todayStr();
     let min = Math.floor((Date.now() - start) / 60000);
     // 止め忘れ（日またぎ・上限超え）は自動で入れず、本人に「何分やったか」を入れてもらう
@@ -1519,7 +1519,7 @@ function calcAllowance(st, ym, today, cfg) {
       markPlayed(kind, st.ok, st.maxCombo);
       const subject = quizSubject(kind);
       const sec = Math.round((Date.now() - st.t0) / 1000);
-      const info = { kind, n, ok: st.ok, maxCombo: st.maxCombo, miss: st.miss.map((q) => q.key), sec, quit: quit || undefined, weakBonus: weakTicket || undefined, short: short || undefined };
+      const info = { kind, n, ok: st.ok, maxCombo: st.maxCombo, miss: st.miss.map((q) => q.key), sec, quit: quit || undefined, weakBonus: weakTicket || undefined, short: short || undefined, retry: st.retries ? Math.min(2, st.retries) : undefined };
       const r = st.pts > 0 ? addPoints(st.pts, 'quiz', names[kind], subject, info) : null;
       if (!r) { save(); logEvent('quiz', names[kind], subject, 0, info); }
       const tips = [...new Set(st.miss.map(ruleTip).filter(Boolean))];
@@ -2708,8 +2708,11 @@ function calcAllowance(st, ym, today, cfg) {
     if (LIVE.cur && LIVE.q[0][0] === LIVE.cur[0] && LIVE.q.length > 1) LIVE.q.push(LIVE.q.shift());
     return LIVE.q[0];
   }
+  // iPhone は タップの 中で 1回 声を 出しておかないと、あとから 自動で 始まる ゲームの 読み上げが 鳴らないことがある
+  function liveUnlock() { try { if (window.speechSynthesis) { const u = new SpeechSynthesisUtterance(' '); u.volume = 0; speechSynthesis.speak(u); } } catch (e) { /* noop */ } }
   function liveStart() {
     if (LIVE || document.querySelector('.ov')) return;
+    liveUnlock();
     sfx.fanfare();
     LIVE = { n: 0, songs: 0, fans: 0, gain: 0, items: [], itemNew: [], q: liveSetlist(true), cur: null, pending: null, boss: 0, venueUp: null, t0: Date.now(), sec0: liveSec() };
     liveHud(); liveNext();
@@ -2728,6 +2731,7 @@ function calcAllowance(st, ym, today, cfg) {
   }
   // 1きょく おわるたび（ゲームの 記録が 入った時）に よばれる
   function liveSong(detail) {
+    if (detail.quit && !detail.ok) return; // すぐ やめた回は 数えない
     const gain = 3 + (detail.ok || 0) * 2 + ((detail.maxCombo || 0) >= 5 ? 5 : 0);
     const v0 = venueIdx(S.fans || 0); const c0 = CLOSET.filter(closetOpen).length;
     S.fans = (S.fans || 0) + gain; LIVE.fans += gain; LIVE.songs++; LIVE.gain = gain;
@@ -2809,7 +2813,7 @@ function calcAllowance(st, ym, today, cfg) {
     if (k === 'start') { liveStart(); return; }
     if (k === 'closet') { closetOv(); return; }
     if (!LIVE) return;
-    LIVE.pending = k; sfx.tap();
+    LIVE.pending = k; sfx.tap(); if (k === 'next') liveUnlock();
     const ov = b.closest('.ov');
     const c = ov && ov.querySelector('[data-q="close"], [data-u="close"], [data-m="close"]');
     if (c) c.click(); else if (ov) ov.remove();
