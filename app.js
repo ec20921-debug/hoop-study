@@ -70,7 +70,7 @@ function calcAllowance(st, ym, today, cfg) {
   function freshState() {
     return {
       v: 1, nick: '', sound: true, xp: 0, tickets: 1, days: {}, cards: {}, pulls: 0, pity: 0,
-      weak: { spell: {}, plural: {}, kanji: {}, qa: {}, past: {}, third: {}, hkanji: {}, speak: {}, listen: {}, kwrite: {} }, best: {}, lastPlay: {},
+      weak: { spell: {}, plural: {}, kanji: {}, qa: {}, past: {}, third: {}, hkanji: {}, speak: {}, listen: {}, kwrite: {}, swrite: {} }, best: {}, lastPlay: {},
       missions: DEFAULT_MISSIONS.map((m) => ({ ...m })),
       test: { name: '後期期末テスト', date: '', checks: {} },
       goals: {}, voices: [], voiceDays: {}, voiceWeek: '', cheerLog: [], startDate: todayStr(),
@@ -83,7 +83,7 @@ function calcAllowance(st, ym, today, cfg) {
   function migrate(s) {
     const f = freshState();
     for (const k in f) if (s[k] === undefined) s[k] = f[k];
-    for (const k of ['spell', 'plural', 'kanji', 'qa', 'past', 'third', 'hkanji', 'speak', 'listen', 'kwrite']) if (!s.weak[k]) s.weak[k] = {};
+    for (const k of ['spell', 'plural', 'kanji', 'qa', 'past', 'third', 'hkanji', 'speak', 'listen', 'kwrite', 'swrite']) if (!s.weak[k]) s.weak[k] = {};
     // 2026-11-21：問題タブの「遗跡」（中国の漢字）を「遺跡」に直した。苦手リストのキーも合わせる
     for (const k of Object.keys(s.weak.qa)) if (k.includes('遗')) { const nk = k.replace(/遗/g, '遺'); s.weak.qa[nk] = (s.weak.qa[nk] || 0) + s.weak.qa[k]; delete s.weak.qa[k]; }
     if (s.ek && EIKEN.grade && s.ek.g !== EIKEN.grade) {
@@ -662,7 +662,7 @@ function calcAllowance(st, ym, today, cfg) {
     const last = S.lastPlay[oldest];
     return { kind: oldest, why: !last ? 'まだやったことがないゲーム！' : c.length ? `${diffDays(last, todayStr())}日ぶりのゲーム` : 'もう1回、自己ベストに挑戦！' };
   }
-  const KIND_ICON = { speak: '🎤', listen: '🎧', spell: '🔤', plural: '📦', kanji: '漢', weak: '🎯', challenge: '👑', verb: '🧩', third: '🅢', kwrite: '✍️' };
+  const KIND_ICON = { speak: '🎤', listen: '🎧', spell: '🔤', plural: '📦', kanji: '漢', weak: '🎯', challenge: '👑', verb: '🧩', third: '🅢', kwrite: '✍️', swrite: '🖊️' };
   const kindIcon = (k) => (k.startsWith('ek:') ? '🏆' : k.startsWith('rush:') ? '⚡' : KIND_ICON[k]) || ({ 理科: '🧪', 社会: '🗾', 数学: '📐', 国語: '✍️' }[k.slice(3)] || '📚');
   // ---------- 今日の教科（曜日割・2026-11-08）。ホームの一番上で ①②③ を順に進める ----------
   // 点数・WIN・おこづかいの数え方は変えない。見せる順番と量を絞るだけ
@@ -733,9 +733,9 @@ function calcAllowance(st, ym, today, cfg) {
   // 教科ごとのゲーム（ゲーム画面の「今日の教科」に出す）
   function subjectGames(sub) {
     const tOn = testPlanOn();
-    const map = { 英語: tOn ? ['speak', 'third', 'qa:英語', 'spell', 'rush:third', 'rush:qa:英語', 'listen', 'plural'] : ['speak', 'verb', 'listen', 'spell', 'plural', 'rush:verb', 'rush:ek'], 国語: tOn ? ['qa:国語', 'kanji', 'kwrite', 'rush:qa:国語', 'rush:kanji'] : ['kanji', 'kwrite', 'rush:kanji'], 全教科: ['weak', 'challenge'] };
+    const map = { 英語: tOn ? ['speak', 'third', 'qa:英語', 'spell', 'rush:third', 'rush:qa:英語', 'listen', 'plural'] : ['speak', 'verb', 'listen', 'spell', 'plural', 'rush:verb', 'rush:ek'], 国語: tOn ? ['qa:国語', 'kanji', 'kwrite', 'rush:qa:国語', 'rush:kanji'] : ['kanji', 'kwrite', 'rush:kanji'], 社会: ['qa:社会', 'swrite', 'rush:qa:社会'], 全教科: ['weak', 'challenge'] };
     const ks = map[sub] || ['qa:' + sub, 'rush:qa:' + sub];
-    const out = ks.filter((k) => (k === 'kwrite' ? true : !!stepInfo(k) && (k !== 'weak' || weakTotal() > 0)));
+    const out = ks.filter((k) => (k === 'kwrite' || k === 'swrite' ? true : !!stepInfo(k) && (k !== 'weak' || weakTotal() > 0)));
     return out.length ? out : sub === '全教科' ? ['challenge'] : subjectGames('全教科');
   }
   function playKind(kind) { if (kind === 'ek:menu') ekStartMenu(); else if (kind === 'speak') startSpeak(); else if (kind.startsWith('rush:')) startRush(kind.slice(5)); else startQuiz(kind); }
@@ -960,8 +960,8 @@ function calcAllowance(st, ym, today, cfg) {
     const speakCard = `<button class="speakcard" data-act="speak"><span class="sp-e">🎤</span><span class="sp-t"><b>スピーキング</b><small>お手本を聞いて、英語で話そう ・ 5問</small></span><span class="sp-b">${best('speak', SPEAK_LEN)}</span></button>`;
     // 今日の教科のゲームだけを上に。ほかは下にたたむ（2026-11-08 曜日割）
     const pl = planFor(todayStr());
-    const GC = { speak: 'gc-listen', listen: 'gc-listen', spell: 'gc-spell', plural: 'gc-plural', verb: 'gc-verb', kanji: 'gc-kanji', kwrite: 'gc-kanji', weak: 'gc-weak', challenge: 'gc-challenge' };
-    const todayTiles = subjectGames(pl.sub).map((k) => `<button class="tile ${GC[k] || (k.startsWith('rush:') ? 'gc-rush' : 'gc-qa')}" data-act="${k === 'kwrite' ? 'quiz' : 'omakase'}" data-kind="${esc(k)}"><span class="t-e">${kindIcon(k)}</span><span class="t-n">${esc(quizName(k))}</span><span class="t-b">${playedToday(k) ? '✓ 今日やった' : k === 'weak' ? `👾 苦手 ${weakN}問` : S.best[k] != null ? `ベスト ${S.best[k]}` : 'NEW'}</span></button>`).join('');
+    const GC = { speak: 'gc-listen', listen: 'gc-listen', spell: 'gc-spell', plural: 'gc-plural', verb: 'gc-verb', kanji: 'gc-kanji', kwrite: 'gc-kanji', swrite: 'gc-kanji', weak: 'gc-weak', challenge: 'gc-challenge' };
+    const todayTiles = subjectGames(pl.sub).map((k) => `<button class="tile ${GC[k] || (k.startsWith('rush:') ? 'gc-rush' : 'gc-qa')}" data-act="${k === 'kwrite' || k === 'swrite' ? 'quiz' : 'omakase'}" data-kind="${esc(k)}"><span class="t-e">${kindIcon(k)}</span><span class="t-n">${esc(quizName(k))}</span><span class="t-b">${playedToday(k) ? '✓ 今日やった' : k === 'weak' ? `👾 苦手 ${weakN}問` : S.best[k] != null ? `ベスト ${S.best[k]}` : 'NEW'}</span></button>`).join('');
     return header() + paperNudge() + ekCard() + `
       <div class="sec-title"><h2>${pl.e} 今日は ${esc(pl.name)}</h2><span>まずはここから</span></div>
       <div class="tiles">${todayTiles}</div>
@@ -980,6 +980,7 @@ function calcAllowance(st, ym, today, cfg) {
         ${tile('third', 'gc-verb', S.best.third != null ? best('third') : 'NEW ・ 書いて練習')}
         ${tile('kanji', 'gc-kanji', best('kanji'))}
         ${tile('kwrite', 'gc-kanji', '紙に書く ・ 漢字ミッション')}
+        ${tile('swrite', 'gc-kanji', '紙に書く ・ 社会の言葉を漢字で')}
         ${qaTiles}
       </div></details>
       <p class="note" style="margin-top:14px">全問正解で +2P ＆ 🎟️（1日2枚まで）。今日の WIN には紙のミッション1本か ⏱タイマー10分が必要だよ ✍️</p>`;
@@ -1604,7 +1605,7 @@ function calcAllowance(st, ym, today, cfg) {
   function quizName(kind) {
     if (kind === 'ek:menu') return S.ek.scout ? '英検カップ 今日のメニュー' : `${EIKEN.name} 実力チェック`;
     if (kind.startsWith('rush:')) return `${RUSH.sec}秒ラッシュ ${rushName(kind.slice(5))}`;
-    return { speak: 'スピーキング', listen: 'リスニング', spell: 'スペル・シュート', plural: '複数形チャレンジ', kanji: '漢字よみ速攻', weak: '苦手つぶし', challenge: 'チャレンジ（上級）', verb: '動詞の形トレーニング', third: '3単現の s（書く）', kwrite: '漢字かき取り' }[kind] || (kind.startsWith('qa:') ? kind.slice(3) + ' 一問一答' : kind);
+    return { speak: 'スピーキング', listen: 'リスニング', spell: 'スペル・シュート', plural: '複数形チャレンジ', kanji: '漢字よみ速攻', weak: '苦手つぶし', challenge: 'チャレンジ（上級）', verb: '動詞の形トレーニング', third: '3単現の s（書く）', kwrite: '漢字かき取り', swrite: '社会の用語かき取り' }[kind] || (kind.startsWith('qa:') ? kind.slice(3) + ' 一問一答' : kind);
   }
   function quizSubject(kind) {
     return kind === 'kanji' ? '国語' : kind === 'weak' || kind === 'challenge' ? '全教科' : kind.startsWith('qa:') ? (SUBJECTS.includes(kind.slice(3)) ? kind.slice(3) : '全教科') : '英語';
@@ -1620,7 +1621,7 @@ function calcAllowance(st, ym, today, cfg) {
   const BOSS_RC = (set, noBack) => ({ types: ['past', 'third'], boss: true, set, noBack });
   const needsRuleCard = (kind) => kind === 'weak' || ((kind === 'plural' || kind === 'verb' || kind === 'third') && (S.best[kind] || 0) < 8);
   function startQuiz(kind) {
-    if (kind === 'kwrite') { startKwrite(); return; }
+    if (kind === 'kwrite' || kind === 'swrite') { startKwrite(kind === 'swrite'); return; }
     const qs = buildQuestions(kind);
     if (!qs.length) { toast('苦手リストは空っぽ！ すごい！'); return; }
     // ボス戦は、最初のセットに出る過去形・3単現だけを1枚で見せる（2セット目の前にもう1枚）
@@ -1845,24 +1846,25 @@ function calcAllowance(st, ym, today, cfg) {
   // ① 読みを見て紙に書く → ② 答えを見て、書けなかった漢字をタップ → ③ 記録。終わると「漢字」ミッションが SHOOT される
   // （ミッションの点・BIG WIN の数え方はいつもと同じ。書けなかった漢字は次のかき取りで先に出る）
   const kwLine = (w) => esc(w[2]).replace(/〔(.+?)〕/, '<b class="kw-y">$1</b>');
-  function buildKwrite() {
-    const wk = S.weak.kwrite || {};
-    const SRC = typeof KANJI_WRITE_TEST !== 'undefined' && KANJI_WRITE_TEST.list.length >= KANJI_WRITE_LEN && todayStr() <= KANJI_WRITE_TEST.until ? KANJI_WRITE_TEST.list : KANJI_WRITE;
+  // soc＝社会の用語かき取り（SOC_WRITE から出す。苦手は S.weak.swrite に分けて持つ）
+  function buildKwrite(soc) {
+    const wk = (soc ? S.weak.swrite : S.weak.kwrite) || {};
+    const SRC = soc ? SOC_WRITE : typeof KANJI_WRITE_TEST !== 'undefined' && KANJI_WRITE_TEST.list.length >= KANJI_WRITE_LEN && todayStr() <= KANJI_WRITE_TEST.until ? KANJI_WRITE_TEST.list : KANJI_WRITE;
     const weak = shuffle(SRC.filter((w) => wk[w[0]])).slice(0, 5);
     return shuffle(weak.concat(shuffle(SRC.filter((w) => !weak.includes(w))).slice(0, KANJI_WRITE_LEN - weak.length)));
   }
-  function startKwrite() {
-    const qs = buildKwrite(); const t0 = Date.now(); const ng = new Set();
+  function startKwrite(soc) {
+    const qs = buildKwrite(soc); const t0 = Date.now(); const ng = new Set();
     const el = document.createElement('div'); el.className = 'ov solid kw';
     const step1 = () => {
-      el.innerHTML = `<div class="tut kw-box"><div class="tut-step">✍️ 漢字かき取り ${qs.length}問</div>
-        <div class="coach-mini" style="margin:6px 0 10px">${coachFace('wink')}<span>紙とえんぴつを用意！ <b class="kw-y">黄色の読み</b>を漢字にして、紙に書こう。全部書けたら答え合わせだ</span></div>
+      el.innerHTML = `<div class="tut kw-box"><div class="tut-step">${soc ? '🖊️ 社会の用語かき取り' : '✍️ 漢字かき取り'} ${qs.length}問</div>
+        <div class="coach-mini" style="margin:6px 0 10px">${coachFace('wink')}<span>紙とえんぴつを用意！ <b class="kw-y">黄色の読み</b>を漢字にして、紙に書こう。全部書けたら答え合わせだ${soc ? '。頭に浮かんだら、手で書けるかが勝負！' : ''}</span></div>
         <ol class="kw-list">${qs.map((w) => `<li>${kwLine(w)}</li>`).join('')}</ol>
         <button class="btn big" data-kw="check">書けた！ 答え合わせ ▶</button><button class="btn ghost" data-kw="quit" style="margin-top:10px">やめる</button></div>`;
     };
     const step2 = () => {
       el.innerHTML = `<div class="tut kw-box"><div class="tut-step">✅ 答え合わせ</div>
-        <p class="note" style="margin:0 0 8px">紙と見くらべて、<b>書けなかった・まちがえた漢字</b>をタップして ❌ にしてね</p>
+        <p class="note" style="margin:0 0 8px">紙と見くらべて、<b>書けなかった・まちがえた${soc ? '言葉' : '漢字'}</b>をタップして ❌ にしてね</p>
         <div class="kw-ans">${qs.map((w, i) => `<button class="kw-a ${ng.has(i) ? 'ng' : ''}" data-kwi="${i}"><span class="kw-m">${ng.has(i) ? '❌' : '⭕'}</span><span class="kw-r">${esc(w[1])}</span><b class="kw-k">${esc(w[0])}</b></button>`).join('')}</div>
         <div class="kw-sum">⭕ <b>${qs.length - ng.size}</b> / ${qs.length}</div>
         <button class="btn big" data-kw="done">記録する ✍️</button><button class="btn ghost" data-kw="back" style="margin-top:10px">← 問題にもどる</button></div>`;
@@ -1878,28 +1880,29 @@ function calcAllowance(st, ym, today, cfg) {
       if (k === 'quit') { if (confirm('やめる？（記録はされないよ）')) el.remove(); }
       else if (k === 'check') { step2(); el.scrollTop = 0; }
       else if (k === 'back') { step1(); el.scrollTop = 0; }
-      else if (k === 'done') { el.remove(); finishKwrite(qs, ng, t0); }
+      else if (k === 'done') { el.remove(); finishKwrite(qs, ng, t0, soc); }
     });
   }
-  async function finishKwrite(qs, ng, t0) {
-    const wk = S.weak.kwrite;
+  async function finishKwrite(qs, ng, t0, soc) {
+    const kind = soc ? 'swrite' : 'kwrite';
+    const wk = S.weak[kind];
     qs.forEach((w, i) => { if (ng.has(i)) wk[w[0]] = (wk[w[0]] || 0) + 1; else if (wk[w[0]]) { wk[w[0]]--; if (wk[w[0]] <= 0) delete wk[w[0]]; } });
     const ok = qs.length - ng.size; const miss = qs.filter((w, i) => ng.has(i));
-    markPlayed('kwrite', ok, 0);
+    markPlayed(kind, ok, 0);
     save();
-    logEvent('quiz', quizName('kwrite'), '国語', 0, { kind: 'kwrite', n: qs.length, ok, miss: miss.map((w) => w[0]), sec: Math.round((Date.now() - t0) / 1000) });
-    const hasM = S.missions.some((m) => m.id === 'kanji'); const done = (S.days[todayStr()] || { m: [] }).m.includes('kanji');
+    logEvent('quiz', quizName(kind), soc ? '社会' : '国語', 0, { kind, n: qs.length, ok, miss: miss.map((w) => w[0]), sec: Math.round((Date.now() - t0) / 1000) });
+    const hasM = !soc && S.missions.some((m) => m.id === 'kanji'); const done = (S.days[todayStr()] || { m: [] }).m.includes('kanji');
     // 先にミッションを SHOOT（結果画面のまま閉じられても、ミッションは入るように）
     if (hasM && !done) await onMission('kanji');
     if (ok === qs.length) { sfx.fanfare(); confetti(160); } else sfx.coin();
     let goBoss = false;
     await overlay(`<div class="qbody result" style="max-width:420px">
-      <div style="font-family:var(--display);font-weight:800;font-size:18px">✍️ 漢字かき取り</div>
+      <div style="font-family:var(--display);font-weight:800;font-size:18px">${soc ? '🖊️ 社会の用語かき取り' : '✍️ 漢字かき取り'}</div>
       <div class="big">${ok}<span style="font-size:28px">/${qs.length}</span></div>
       <div class="lvup-title" style="font-size:30px">${ok === qs.length ? 'PERFECT!!' : ok >= qs.length * 0.7 ? 'GREAT!' : 'NICE TRY!'}</div>
       ${miss.length ? `<ul>${miss.map((w) => `<li>${esc(w[1])} → ${esc(w[0])}</li>`).join('')}</ul><div class="note">↑ 紙にあと3回書いて覚えよう ✍️（次のかき取りで先に出るよ）</div>` : ''}
-      <div class="coach-mini">${coachFace(ok === qs.length ? 'fire' : 'wink')}<span>${esc(ok === qs.length ? '全部書けた！ 漢字もエース級だ 🔥' : '書いた分だけ覚えるぞ。まちがえた字こそ宝物だ')}</span></div>
-      <div class="newtag">${!hasM ? '漢字ミッションがリストにないので、記録だけしたよ' : done ? '今日の漢字ミッションは もう IN ✓ 練習ナイス！' : '✍️ 漢字ミッション IN！'}</div>
+      <div class="coach-mini">${coachFace(ok === qs.length ? 'fire' : 'wink')}<span>${esc(ok === qs.length ? soc ? '全部書けた！ これでテストでも書けるぞ 🔥' : '全部書けた！ 漢字もエース級だ 🔥' : '書いた分だけ覚えるぞ。まちがえた字こそ宝物だ')}</span></div>
+      <div class="newtag">${soc ? '🖊️ 記録したよ。書けた言葉は、テストでそのまま点になる！' : !hasM ? '漢字ミッションがリストにないので、記録だけしたよ' : done ? '今日の漢字ミッションは もう IN ✓ 練習ナイス！' : '✍️ 漢字ミッション IN！'}</div>
       ${weakTotal() ? `<button class="btn rush-next" data-kwnext="1">👾 つぎは ボス戦 ${WEAK_SET}問 ▶</button>` : ''}</div>`, { lockMs: 900, cls: 'solid kw', onMount: (o, close) => { o.addEventListener('click', (e) => { if (e.target.closest('[data-kwnext]')) { goBoss = true; close(); } }); } });
     render();
     if (goBoss) startQuiz('weak');
@@ -3167,7 +3170,7 @@ function calcAllowance(st, ym, today, cfg) {
   }
   // クォーターの並び：今日の教科のゲーム → ほかの教科。声を使うゲーム・自己採点のかき取り・上級は入れない
   function liveSetlist(first) {
-    const skip = (k) => k === 'speak' || k === 'kwrite' || k === 'challenge' || k === 'weak' || k.startsWith('ek:') || k.startsWith('m:') || k.startsWith('sum:') || k.startsWith('tab:');
+    const skip = (k) => k === 'speak' || k === 'kwrite' || k === 'swrite' || k === 'challenge' || k === 'weak' || k.startsWith('ek:') || k.startsWith('m:') || k.startsWith('sum:') || k.startsWith('tab:');
     const mk = (k) => { const s = stepInfo(k); return s && s.k === k ? [k, s.icon, s.name] : null; };
     const pl = planFor(todayStr());
     const seen = new Set();
