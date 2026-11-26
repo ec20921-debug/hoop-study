@@ -1712,6 +1712,9 @@ function calcAllowance(st, ym, today, cfg) {
       clearInterval(st.timer);
       const q = qs[st.i];
       const res = val == null ? 'time' : q.choices ? (val === q.answer ? 'ok' : 'ng') : judgeText(q, val);
+      // 次の問題へ進む予約を先に入れる（このあとの演出や記録で何か起きても、画面が固まらないように）
+      const wait = res === 'ok' ? (q.say ? 1800 : whyOf(q) ? 2000 : 550) : q.say ? 4200 : whyOf(q) ? 4500 : ruleTip(q) ? 3200 : 1500; // テンポよく次へ（「なぜ？」は読める長さ）
+      setTimeout(() => { if (st.ended) return; st.i++; if (st.i >= qs.length) finish(false); else if (setOf && st.i % setOf === 0) setBreak(); else show(); }, wait);
       const j = q$('.judge');
       const wk = q.gen ? null : S.weak[q.type];
       if (res === 'ok') {
@@ -1719,7 +1722,7 @@ function calcAllowance(st, ym, today, cfg) {
         const p = 1; st.pts += p;
         j.textContent = st.combo >= 3 ? `🔥 ${pick(SHOT_WORDS)}` : `NICE! +${p}`; j.className = 'judge ok';
         // 動詞の形（4択の練習）では苦手を消さない。消えるのは苦手つぶし・チャレンジで書いて正解した時
-        if (wk[q.key] && !q.drill) { wk[q.key]--; if (wk[q.key] <= 0) delete wk[q.key]; }
+        if (wk && wk[q.key] && !q.drill) { wk[q.key]--; if (wk[q.key] <= 0) delete wk[q.key]; }
         sfx.combo(st.combo); if (st.combo >= 3) confetti(25);
         if (btn) btn.classList.add('ok');
         juiceHit(btn, st.combo, Date.now() - st.qt0);
@@ -1730,8 +1733,9 @@ function calcAllowance(st, ym, today, cfg) {
         else if (whyOf(q)) q$('.answer').innerHTML = `<div class="rule why">📖 ${esc(whyOf(q))}</div>`;
       } else {
         st.combo = 0;
-        wk[q.key] = (wk[q.key] || 0) + 1;
-        if (q.type === 'calc') { const ks = Object.keys(wk); if (ks.length > 30) delete wk[ks[0]]; }
+        // 自動で作る数学の問題（q.gen）は毎回数字が変わるので、苦手には入れない（wk が無い）
+        if (wk) wk[q.key] = (wk[q.key] || 0) + 1;
+        if (wk && q.type === 'calc') { const ks = Object.keys(wk); if (ks.length > 30) delete wk[ks[0]]; }
         st.miss.push(q);
         j.textContent = res === 'time' ? '⏰ ショットクロック！' : res === 'case' ? 'おしい！ 大文字に注意' : 'MISS…'; j.className = 'judge ng';
         const tip = ruleTip(q); const why = whyOf(q);
@@ -1745,8 +1749,6 @@ function calcAllowance(st, ym, today, cfg) {
       }
       save();
       setCombo();
-      const wait = res === 'ok' ? (q.say ? 1800 : whyOf(q) ? 2000 : 550) : q.say ? 4200 : whyOf(q) ? 4500 : ruleTip(q) ? 3200 : 1500; // テンポよく次へ（「なぜ？」は読める長さ）
-      setTimeout(() => { if (st.ended) return; st.i++; if (st.i >= qs.length) finish(false); else if (setOf && st.i % setOf === 0) setBreak(); else show(); }, wait);
     }
     // セットの区切り。ここで終わっても「途中でやめた」にはならない（5問以上ぜんぶ正解ならチケットもそのまま）
     function setBreak() {
