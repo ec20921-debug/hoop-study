@@ -1580,7 +1580,7 @@ function calcAllowance(st, ym, today, cfg) {
   // 苦手つぶし：5問ずつのセットで最大10問。過去形・3単現の苦手を各セット3問まで先に入れ、残りはほかの苦手で埋める
   function buildWeak() {
     const isVerb = (q) => q.type === 'past' || q.type === 'third';
-    const pool = weakPool(); const verb = shuffle(pool.filter(isVerb)); const other = shuffle(pool.filter((q) => !isVerb(q)));
+    const pool = weakPool(); const verb = shuffle(pool.filter(isVerb)); const other = recentFirst(pool.filter((q) => !isVerb(q)));
     const out = [];
     while (out.length < QUIZ_LEN && (verb.length || other.length)) {
       const set = verb.splice(0, 3);
@@ -1588,6 +1588,13 @@ function calcAllowance(st, ym, today, cfg) {
       out.push(...shuffle(set));
     }
     return out.slice(0, QUIZ_LEN);
+  }
+  // 2026-11-28：苦手リスト（一問一答など）が60問ほどにふくらみ、まだ習っていない範囲の古い苦手もまざって、ボス戦の正答率が 46%・途中でやめた 6/12回だった
+  // → 最近まちがえた問題（苦手リストに後から入ったもの）を QUIZ_LEN 問まで先に出す（その中は毎回まぜる）。古い苦手は消さず、そのあとに回す
+  function recentFirst(list) {
+    const rank = (q) => { const ks = Object.keys(S.weak[q.type] || {}); const i = ks.indexOf(q.key); return i < 0 ? 1e9 : ks.length - 1 - i; };
+    const sorted = shuffle(list).sort((a, b) => rank(a) - rank(b));
+    return shuffle(sorted.slice(0, QUIZ_LEN)).concat(shuffle(sorted.slice(QUIZ_LEN)));
   }
   // 苦手つぶしで実際に出せる問題（スプレッドシートで「お休み」にした問題などは入らない）
   function weakPool() {

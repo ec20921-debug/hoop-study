@@ -1059,6 +1059,7 @@ canvas.confetti { position: fixed; inset: 0; z-index: 65; pointer-events: none; 
 .bigbtn.live small { display: block; font-size: 15px; font-weight: 800; opacity: .95; margin-top: 3px; }
 .bigbtn.live:active { box-shadow: 0 1px 0 #5b1a7a; }
 .bigbtn.done2 { background: var(--bg2); border: 2px solid var(--line); color: var(--text); font-size: 20px; }
+.bigbtn.done2 small { display: block; font-size: 14px; font-weight: 700; color: var(--sub); margin-top: 3px; }
 .live-res { width: 100%; margin: 0 0 14px; padding: 12px 12px 10px; border-radius: 20px; background: #0007; border: 2px solid var(--pink); text-align: center; animation: pop .4s; }
 .lr-f { font-family: var(--display); font-weight: 900; font-size: 20px; } .lr-f b { color: var(--yellow); font-size: 26px; }
 .lr-v { display: block; margin-top: 4px; font-size: 15px; color: var(--yellow); }

@@ -994,9 +994,11 @@ function calcAllowance(st, ym, today, cfg) {
   function missionAsk(m) {
     let how = '';
     const name = (MISSION_LOOK[m.id] || [m.label])[0];
+    // 2026-11-28：紙はやっているのに「もう おわった」だけで 分数が 0 の日が つづいた → 🔥まで あと何分かと、「もう おわった」は じかんに 入らないことを 見せる（数え方は かえない）
+    const need = needMin();
     return overlay(`<div class="tut"><div class="tut-e">${m.icon || '⭐'}</div><div class="tut-t">${esc(name)}</div>
-      <button class="bigbtn live" data-ma="timer">⏱ いまから やる<small>タイマーで「きょうの じかん」に 入るよ</small></button>
-      <button class="bigbtn done2" data-ma="done">✓ もう おわった</button>
+      <button class="bigbtn live" data-ma="timer">⏱ いまから やる<small>タイマーで「きょうの じかん」に 入るよ${need ? `（🔥まで あと ${need}ふん）` : ''}</small></button>
+      <button class="bigbtn done2" data-ma="done">✓ もう おわった${need ? '<small>ポイントは 入るけど、じかんには 入らないよ</small>' : ''}</button>
       <button class="btn ghost" style="width:100%;margin-top:12px" data-ma="x">やめる</button></div>`, {
       closeOnTap: false, cls: 'solid',
       onMount: (el, close) => el.addEventListener('click', (e) => { const b = e.target.closest('[data-ma]'); if (!b) return; how = b.dataset.ma === 'x' ? '' : b.dataset.ma; sfx.tap(); close(); }),
@@ -1005,8 +1007,9 @@ function calcAllowance(st, ym, today, cfg) {
   async function onMission(id, skipAsk) {
     const m = S.missions.find((x) => x.id === id); if (!m) return;
     const d = day();
+    let asked = '';
     if (!d.m.includes(id) && !skipAsk && !S.timer) {
-      const how = await missionAsk(m);
+      const how = await missionAsk(m); asked = how;
       if (!how) return;
       if (how === 'timer') { S.timer = { start: Date.now(), date: todayStr(), mid: id }; save(); sfx.buzzer(); toast('⏱ スタート！ おわったら「おわった！」を おしてね', 3000); render(); scrollTo(0, 0); return; }
     }
@@ -1025,6 +1028,15 @@ function calcAllowance(st, ym, today, cfg) {
     // おこづかいの手応え：基本ミッションを決めるたびに BIG WIN までの残りを知らせる
     const left = ALLOWANCE.bigWinMissions - stdCount(d);
     if (ALLOWANCE.stdMissions.includes(id) && left > 0) { sfx.coin(); toast(`💰 あと ${left}つで おこづかい +${ALLOWANCE.bigWin}円！`, 2600); }
+    // 「もう おわった」で おした時、きょうの 🔥（5ふん）が まだなら、つぎは タイマーで と 1回だけ しらせる
+    const need = asked === 'done' ? needMin() : 0;
+    if (need) toast(`🔥 きょうの じかんは あと ${need}ふん。つぎの ミッションは「いまから やる」で タイマーを つけてね`, 4200);
+  }
+  // きょうの 🔥（勉強した日・れんぞく）まで あと何分か。ルールが まだの日や、もう とどいた日は 0
+  function needMin() {
+    if (!minRuleOn()) return 0;
+    const left = MIN_SEC - studySec(S.days[todayStr()]);
+    return left > 0 ? Math.ceil(left / 60) : 0;
   }
   async function onCheck(id) {
     const c = TEST_CHECKS.find((x) => x.id === id); if (!c) return;
